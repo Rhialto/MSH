@@ -1,6 +1,9 @@
 /*-
- *  $Id: han.h,v 1.40 91/03/03 17:55:38 Rhialto Rel $
+ *  $Id: han.h,v 1.42 91/06/14 00:09:19 Rhialto Exp $
  *  $Log:	han.h,v $
+ * Revision 1.42  91/06/14  00:09:19  Rhialto
+ * DICE conversion
+ *
  * Revision 1.40  91/03/03  17:55:38  Rhialto
  * Freeze for MAXON
  *
@@ -243,9 +246,9 @@ extern int	MaxCache;	/* Maximum amount of cached buffers */
 extern ulong	BufMemType;
 extern long	CacheBlockSize; /* Size of disk block + overhead */
 extern int	DelayState;
-__stkargs word Get8086Word(byte *Word8086);
-__stkargs word OtherEndianWord(long oew);     /* long should become word */
-__stkargs ulong OtherEndianLong(ulong oel);
+word Get8086Word(byte *Word8086);
+word OtherEndianWord(long oew);     /* long should become word */
+ulong OtherEndianLong(ulong oel);
 void OtherEndianMsd(struct MsDirEntry *msd);
 word ClusterToSector(word cluster);
 word ClusterOffsetToSector(word cluster, word offset);
