@@ -1,5 +1,5 @@
 /*-
- * $Id: die.c,v 1.46 91/10/06 18:51:29 Rhialto Rel $
+ * $Id: die.c,v 1.51 92/04/17 15:39:37 Rhialto Rel $
  *
  *  DIE.C
  *
@@ -7,10 +7,10 @@
  *  May not be used or copied without a licence.
 -*/
 
-#include <amiga.h>
-#include <functions.h>
 #include <stdio.h>
 #include <string.h>
+#include "han.h"
+#include <functions.h>
 
 #ifndef EXEC_TYPES_H
 #include <exec/types.h>
@@ -58,13 +58,13 @@ main(int argc, char **argv)
     long	    id = 0;
 
     if (argc == 3 && stricmp(argv[1], "unshare") == 0) {
-	id = 'Msh\0';
+	id = MSH_MAGIC;
 	flags = 1;
 	argc--;
 	argv++;
     }
     if (argc == 3 && stricmp(argv[1], "unload") == 0) {
-	id = 'Msh\0';
+	id = MSH_MAGIC;
 	flags = 1 | 2;
 	argc--;
 	argv++;
@@ -75,4 +75,6 @@ main(int argc, char **argv)
 	}
     } else
 	puts("Usage: die [unshare|unload] MSH-DEV:");
+
+    return 0;
 }
