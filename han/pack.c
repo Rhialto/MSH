@@ -1,6 +1,9 @@
 /*-
- * $Id$
- * $Log$
+ * $Id: pack.c,v 1.1 89/12/17 19:53:24 Rhialto Exp Locker: Rhialto $
+ * $Log:	pack.c,v $
+ * Revision 1.1  89/12/17  19:53:24  Rhialto
+ * Initial revision
+ *
  *
  *  Originally:
  *
@@ -325,8 +328,15 @@ top:
 		}
 		break;
 	    case ACTION_SET_PROTECT:	/* -,Lock,Name,Mask	   Bool      */
-		/* if (CheckWrite(BTOC(PArg2)))
-		    break; */
+		{
+		    struct FileLock *lock;
+
+		    lock = BTOC(PArg2);
+		    if (CheckWrite(lock))
+			break;
+		    btos(PArg3, buf);
+		    PRes1 = MSSetProtect(lock ? lock->fl_Key : NULL, buf, PArg4);
+		}
 		break;
 	    case ACTION_CREATE_DIR:	/* Lock,Name		Lock	     */
 		{
