@@ -1,6 +1,9 @@
 /*-
- * $Id: hanfile.c,v 1.4 90/01/23 02:32:23 Rhialto Exp Locker: Rhialto $
+ * $Id: hanfile.c,v 1.5 90/01/27 20:26:51 Rhialto Exp $
  * $Log:	hanfile.c,v $
+ * Revision 1.5  90/01/27  20:26:51  Rhialto
+ * Fixed ATTR_ARCHIVED bit in MSWrite()
+ *
  * Revision 1.4  90/01/23  02:32:23  Rhialto
  * Add 16-bit FAT support.
  *
@@ -19,8 +22,8 @@
  *
  * This parts handles files and the File Allocation Table.
  *
- * This code is (C) Copyright 1989 by Olaf Seibert. All rights reserved. May
- * not be used or copied without a licence.
+ * This code is (C) Copyright 1989,1990 by Olaf Seibert. All rights reserved.
+ * May not be used or copied without a licence.
 -*/
 
 #include "han.h"
@@ -129,9 +132,6 @@ SetFatEntry(cluster, value)
 word		cluster;
 word		value;
 {
-
-    debug(("SetFatEntry %d to %d\n", cluster, value));
-
     if (!Fat && !GetFat())
 	return;
 
@@ -222,7 +222,6 @@ register word	cluster;
     register word   nextcluster;
 
     while (cluster != FAT_EOF) {
-	debug(("Freeing cluster %d\n", cluster));
 	nextcluster = NextCluster(cluster);
 	SetFatEntry(cluster, FAT_UNUSED);
 	Disk.nsectsfree += Disk.spc;
@@ -426,6 +425,7 @@ register long	size;
     long	    oldsize;
     struct MSFileLock *fl = fh->msfh_FileLock;
     word	    prevclust = fl->msfl_Msd.msd_Cluster;
+    word	    update = 0;
 
     if (CheckLock(fl))
 	return -1;
@@ -446,7 +446,7 @@ register long	size;
 	    word	    newclust;
 
 	    newclust = ExtendClusterChain(prevclust);
-	    debug(("Extended file with %d\n", newclust));
+	    debug(("Extend with %d\n", newclust));
 	    if (newclust != FAT_EOF) {
 		if (prevclust == 0) {   /* Record first cluster in dir */
 		    fl->msfl_Msd.msd_Cluster = newclust;
@@ -457,7 +457,8 @@ register long	size;
 		error = ERROR_DISK_FULL;
 		goto error;
 	    }
-	} {
+	}
+	{
 	    word	    offset;
 	    word	    sector;
 	    byte	   *diskbuffer;
@@ -487,9 +488,11 @@ register long	size;
 		if (fh->msfh_SeekPos > fl->msfl_Msd.msd_Filesize)
 		    fl->msfl_Msd.msd_Filesize = fh->msfh_SeekPos;
 		fl->msfl_Msd.msd_Attributes |= ATTR_ARCHIVED;
-		UpdateFileLock(fl);
+		update = 1;
 	    } else {		/* Write error. */
 	error:
+		if (update)
+		    UpdateFileLock(fl);
 #if 1
 		return -1;	/* We loose the information about how much
 				 * data we wrote, but the standard file system
@@ -503,6 +506,9 @@ register long	size;
 	    }
 	}
     }
+
+    if (update)
+	UpdateFileLock(fl);
 
     return oldsize;
 #endif
