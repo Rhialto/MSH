@@ -1,8 +1,11 @@
 
 /*
- *  $Id: dos.h,v 1.54 1993/06/24 05:12:49 Rhialto Exp $
+ *  $Id: dos.h,v 1.55 1993/12/30 23:28:00 Rhialto Rel $
  *  $Log: dos.h,v $
- * Revision 1.54  1993/06/24  05:12:49  Rhialto
+ * Revision 1.55  1993/12/30  23:28:00	Rhialto
+ * Freeze for MAXON5.
+ *
+ * Revision 1.54  1993/06/24  05:12:49	Rhialto
  * DICE 2.07.54R.
  *
  * Revision 1.53  92/10/25  02:44:02  Rhialto
@@ -75,32 +78,30 @@ extern struct DosLibrary *DOSBase;
  */
 
 #define ACTION_MORECACHE    18L
-#ifndef ACTION_FLUSH
+#if !defined(ACTION_FLUSH)
 #define ACTION_FLUSH	    27L
 #endif
-#define ACTION_RAWMODE	    994L
-#define ACTION_OPENRW	    1004L
-#define ACTION_OPENOLD	    1005L
-#define ACTION_OPENNEW	    1006L
-#define ACTION_CLOSE	    1007L
-#ifndef ACTION_SEEK
+#if !defined(ACTION_SEEK)
 #define ACTION_SEEK	    1008L
 #endif
+#if !defined(ACTION_DIRECT_READ)
+#define ACTION_DIRECT_READ  1900L
+#endif
+#if !defined(ACTION_GET_DISK_FSSM)
+#define ACTION_GET_DISK_FSSM	4201L
+#define ACTION_FREE_DISK_FSSM	4202L
+#endif
 
-#ifndef FIBB_HIDDEN
+#if !defined(FIBB_HIDDEN)
 #define FIBB_HIDDEN 7L
 #define FIBF_HIDDEN (1L<<FIBB_HIDDEN)
 #endif
 
-#ifndef DE_DOSTYPE
+#if !defined(DE_DOSTYPE)
 #define DE_DOSTYPE	    16L
 #endif
 
-#ifndef ID_MSDOS_DISK
-#define ID_MSDOS_DISK	    0x4D534400L     /* 'MSD\0' */
-#endif
-
-#define CTOB(x)         (((long)(x))>>2)    /*  BCPL conversion */
+#define CTOB(x) 	(((long)(x))>>2)    /*	BCPL conversion */
 #define BTOC(x) (void *)(((long)(x))<<2)
 
 #define bmov(ss,dd,nn) CopyMem(ss,dd,(ulong)(nn))   /* Matt's habit */
