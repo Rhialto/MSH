@@ -1,4 +1,6 @@
 /*
+ * $Id$
+ *
  *  IGNORE.C
  *
  *  Makes it possible to ignore CRC errors.

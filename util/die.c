@@ -1,4 +1,6 @@
 /*-
+ * $Id$
+ *
  *  DIE.C
  *
  *  This code is (C) Copyright 1989 by Olaf Seibert. All rights reserved. May
