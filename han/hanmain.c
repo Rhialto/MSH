@@ -1,6 +1,9 @@
 /*-
- * $Id: hanmain.c,v 1.51 92/04/17 15:36:35 Rhialto Rel $
+ * $Id: hanmain.c,v 1.52 92/09/06 00:19:31 Rhialto Exp $
  * $Log:	hanmain.c,v $
+ * Revision 1.52  92/09/06  00:19:31  Rhialto
+ * Include $VER in version string.
+ *
  * Revision 1.51  92/04/17  15:36:35  Rhialto
  * Freeze for MAXON. removed InitCacheList() from MSDiskInserted().
  *
@@ -40,15 +43,14 @@
  *  not be used or copied without a licence.
 -*/
 
-#include <amiga.h>
 #include <functions.h>
-#include <string.h>
 #include "han.h"
 #include "dos.h"
 #ifdef CONVERSIONS
 #   include "hanconv.h"
 #endif
 
+#include <string.h>
 #ifdef HDEBUG
 #   include "syslog.h"
 #else
@@ -65,9 +67,10 @@ Prototype int MSDiskRemoved(struct LockList **locks);
 Prototype void HanCloseDown(void);
 Prototype int HanOpenUp(void);
 Prototype long MSRelabel(byte *newname);
+Prototype struct PrivateInfo *PrivateInfo(void);
 
 struct Library *IntuitionBase;
-Local const char RCSId[] = "\0$VER: Messydos filing system $Revision: 1.51 $ $Date: 92/04/17 15:36:35 $, by Olaf Seibert";
+Local const char RCSId[] = "\0$VER: Messydos filing system $Revision: 1.52 $ $Date: 92/09/06 00:19:31 $, by Olaf Seibert";
 
 #define CONV_SEP    ';'
 
@@ -210,7 +213,7 @@ struct InfoData *infodata;
 
     if (IDDiskType == ID_DOS_DISK) {
 	infodata->id_NumBlocks = Disk.nsects;
-	infodata->id_NumBlocksUsed = Disk.nsects - Disk.nsectsfree;
+	infodata->id_NumBlocksUsed = Disk.nsects - Disk.freeclusts * Disk.spc;
 	infodata->id_BytesPerBlock = Disk.bps;
     }
 
@@ -504,6 +507,26 @@ byte	       *newname;
     }
     return DOSFALSE;
 #endif
+}
+
+struct PrivateInfo *
+PrivateInfo()
+{
+    static struct PrivateInfo info = {
+	PRIVATE_REVISION,
+	sizeof (struct PrivateInfo),
+	RCSId,
+	&CheckBootBlock,
+	&DefaultConversion,
+	&DiskIOReq,
+#ifdef CONVERSIONS
+	2,	/* == ConvFence - 1 */
+	&Table_FromPC, &Table_ToPC,
+	&Table_FromST, &Table_ToST,
+#endif
+    };
+
+    return &info;
 }
 
 #ifdef HDEBUG
