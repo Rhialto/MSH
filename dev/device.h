@@ -1,6 +1,9 @@
 /*-
- *  $Id: device.h,v 1.53 92/10/25 02:17:40 Rhialto Rel $
- *  $Log:	device.h,v $
+ *  $Id: device.h,v 1.54 1993/06/24 04:56:00 Rhialto Exp $
+ *  $Log: device.h,v $
+ * Revision 1.55  1993/12/30  22:45:10  Rhialto
+ * Variable DMA buffer size for DD/DH disks.
+ *
  * Revision 1.54  1993/06/24  04:56:00	Rhialto
  * DICE 2.07.54R.
  *
@@ -24,7 +27,7 @@
  * Revision 1.34  91/01/24  00:13:57  Rhialto
  * Use TD_RAWWRITE under AmigaOS 2.0.
  *
- *  This code is (C) Copyright 1989,1991 by Olaf Seibert. All rights reserved.
+ * Revision 1.30  90/06/04  23:19:28  Rhialto
  * Release 1 Patch 3
  *
  *  This code is (C) Copyright 1989-1993 by Olaf Seibert. All rights reserved.
@@ -77,7 +80,7 @@ extern struct ExecBase *SysBase;
 #endif
 #define TRACKS(cyls)    ((cyls) * NUMHEADS)
 #define TRK2CYL(track)  ((track) >> 1)
-#define REVISION	14
+#define REVISION	15
 
 #define VERSION 	SYS2_04
 #define REVISION	16
@@ -85,6 +88,7 @@ extern struct ExecBase *SysBase;
 struct MessyDevice {
     struct Device   md_Dev;
     struct MessyUnit *md_Unit[MD_NUMUNITS];
+    long	    md_Seglist;
     long	    md_System_2_04;
     struct SignalSemaphore md_HardwareUse;
     long	    md_RawbufferSize;
@@ -105,7 +109,8 @@ struct MessyUnit {
     struct MsgPort  mu_Port;
     short	    mu_OpenCnt;
     short	    mu_UnitNr;
-    char	    mu_DiskState;
+    byte	    mu_Flags;
+    char	    mu_InitSectorStatus;
     ulong	    mu_ChangeNum;
     ulong	    mu_OpenFlags;
     byte	    mu_DiskState;
@@ -120,9 +125,9 @@ struct MessyUnit {
     struct DiskResourceUnit mu_DRUnit;
     struct MsgPort  mu_DiskReplyPort;
     struct IOExtTD *mu_DiskIOReq;
+    struct IOStdReq *mu_DiskChangeReq;
     struct Interrupt mu_DiskChangeInt;
     struct MinList  mu_ChangeIntList;
-    byte	    mu_TrackBuffer[MS_SPT_MAX * MS_BPS];   /* Must be word aligned */
     byte	   *mu_TrackBuffer;
     char	    mu_SectorStatus[MS_SPT_MAX];
     word	    mu_CrcBuffer[MS_SPT_MAX];
@@ -136,6 +141,7 @@ struct MessyUnit {
 #define UNITF_STOPPED	(1<<2)
 #define UNITF_WAKETASK	(1<<3)
 
+#define STATEF_UNKNOWN	(1<<0)
 #define STATEF_PRESENT	(1<<1)
 #define STATEF_WRITABLE (1<<2)
 #define STATEF_HIGHDENSITY (1<<3)
