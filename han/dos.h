@@ -1,7 +1,10 @@
 
 /*
- *  $Id: dos.h,v 1.46 91/10/06 18:26:32 Rhialto Rel $
+ *  $Id: dos.h,v 1.51 92/04/17 15:38:54 Rhialto Rel $
  *  $Log:	dos.h,v $
+ * Revision 1.51  92/04/17  15:38:54  Rhialto
+ * Freeze for MAXON3.
+ *
  * Revision 1.46  91/10/06  18:26:32  Rhialto
  *
  * Freeze for MAXON
@@ -57,13 +60,17 @@
  */
 
 #define ACTION_MORECACHE    18L
+#ifndef ACTION_FLUSH
 #define ACTION_FLUSH	    27L
+#endif
 #define ACTION_RAWMODE	    994L
 #define ACTION_OPENRW	    1004L
 #define ACTION_OPENOLD	    1005L
 #define ACTION_OPENNEW	    1006L
 #define ACTION_CLOSE	    1007L
+#ifndef ACTION_SEEK
 #define ACTION_SEEK	    1008L
+#endif
 
 #ifndef FIBB_HIDDEN
 #define FIBB_HIDDEN 7L

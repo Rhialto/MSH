@@ -1,6 +1,9 @@
 /*-
- * $Id: date.c,v 1.50 92/02/12 21:24:58 Rhialto Exp $
+ * $Id: date.c,v 1.51 92/04/17 15:38:43 Rhialto Rel $
  * $Log:	date.c,v $
+ * Revision 1.51  92/04/17  15:38:43  Rhialto
+ * Freeze for MAXON3.
+ *
  * Revision 1.50  92/02/12  21:24:58  Rhialto
  * New date-to-days function.
  *
@@ -43,6 +46,9 @@
 
 Prototype void ToDateStamp(struct DateStamp *datestamp, word date, word time);
 Prototype void ToMSDate(word *date, word *time, struct DateStamp *datestamp);
+
+long unixdays(int year, int month, int day);
+void YrMoDa(long intdat, long *yr, long *mo, long *da);
 
 /*
 Article 2344 of alt.sources.d:
@@ -142,7 +148,8 @@ word time;
     }
 
     {
-	int year, month, day;
+	int		year, month, day;
+	int		t;
 
 	if (date < DATE_MIN)
 	    date = DATE_MIN;
@@ -153,8 +160,10 @@ word time;
 	date >>= 4;
 	year = date + 1980;
 
-	if ((unsigned)month > 12 ||
-	    (unsigned)day > (unsigned)daycount[month]) {
+	t = daycount[month - 1];
+	if (month == 2 && LeapYear(year))
+	    t++;
+	if ((unsigned) month > 12 || (unsigned) day > t) {
 	    day = 31;
 	    month = 12;
 	    year = 1979;
@@ -204,6 +213,153 @@ word time;
     }
 }
 
+void YrMoDa(long intdat, long *yr, long *mo, long *da);
+
+/*
+Article 11708 of comp.sys.amiga.programmer:
+Path: wn1.sci.kun.nl!sun4nl!mcsun!uunet!elroy.jpl.nasa.gov!decwrl!public!thad
+From: thad@public.BTR.COM (Thaddeus P. Floryan)
+Newsgroups: comp.sys.amiga.programmer
+Subject: Re: Date Conversion..
+Message-ID: <5396@public.BTR.COM>
+Date: 2 Feb 92 07:43:43 GMT
+References: <3125@seti.UUCP>
+Organization: BTR Public Access UNIX, Mountain View CA
+Lines: 130
+
+In article <3125@seti.UUCP> oudejans@bora.inria.fr (Jeroen Oudejans) writes:
+>
+>Can anybody post me some code which recalculates a 'human readable' date
+>from seconds after 1978 ?
+>Or is there a library available (i am not using OS2, so can't use Amiga2Date())
+
+Enclosed is something I last posted in 1988.  A more-commented version was to
+appear in one of Rob Peck's books but for his untimely death July 2, 1990.
+
+Thad Floryan [ thad@btr.com (OR) {decwrl, mips, fernwood}!btr!thad ]
+
+-------------------- begin enclosure
+
+From: thad@cup.portal.com
+Newsgroups: comp.sys.amiga.tech
+Subject: Re: Decoding a DateStamp
+Message-ID: <5276@cup.portal.com>
+Date: 10 May 88 09:20:41 GMT
+
+The following code may be useful to you.  It's one of several hundreds of
+kwik'n'dirty throwaways I did back in '85 when testing every documented
+feature of the Amiga.  The "basic" code also works fine on DEC-20, Vax,
+AT&T UNIX PC, C64/C128, and every other system I've tried it on.
+
+Originally compiled this with Lattice 3.02; to compile with any recent Manx:
+
+	CLI> cc +L dater
+	CLI> ln dater -lc32
+
+Feel welcome to use this example for your own learning; I'm intending this
+(along with my complete date arithmetic package) to be part of an article
+I intend completing (Real Soon Now :-) along with examples in C, assembler,
+Fortran, AmigaBasiC, Modula-2 and Pascal.  This specific example has worked
+perfectly thru AmigaDOS 1.0, 1.1, and 1.2 (and presumably 1.3 and beyond).
+
+----------cut 'ere----------
+*/
+#if 0
+/* DATER.C     Check out the DateStamp AmigaDOS system function
+ *
+ *    see page 2-15 in the AmigaDOS Developer's Manual for more info
+ */
+
+struct DS {	     /* DateStamp structure */
+   long  NDays;      /* Days from Jan. 1, 1978 (a Sunday) */
+   long  NMinutes;   /* Minutes into the current day */
+   long  NTicks;     /* Clock ticks (1/50 sec = 1 tick) in current second */
+};
+
+static char *wkdays[] =
+{"Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"};
+
+static char *mthnam[] =
+{"","JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"};
+
+main()
+{
+   void DateStamp(), YrMoDa();
+
+   struct DS datime;
+   long month, day, year, hour, minute, second;
+
+   DateStamp(&datime);
+   printf("Days since 1-JAN-78 = %d\n", datime.NDays);
+   printf("Minutes into today  = %d\n", datime.NMinutes);
+   printf("1/50 secs in minute = %d\n", datime.NTicks);
+
+   YrMoDa(datime.NDays, &year, &month, &day);
+
+   printf("\nTherefore today is ");
+   printf("%s ", wkdays[datime.NDays % 7]);
+
+   printf("%d-%s-%d", day, mthnam[month], year);
+
+   hour   = datime.NMinutes / 60;
+   minute = datime.NMinutes % 60;
+   second = datime.NTicks / 50;
+   printf(" %2d:%02d:%02d\n", hour, minute, second);
+
+   exit(0);
+}
+#endif
+/****************************** YrMoDa **********************************
+ *
+ *    Extracts the component month, day and year from an AmigaDOS
+ *    internal `day number' based from Jan.1, 1978.
+ *
+ *    The calculations herein use the following assertions:
+ *
+ *    146097 = number of days in 400 years per 400 * 365.2425 = 146097.00
+ *     36524 = number of days in 100 years per 100 * 365.2425 =  36524.25
+ *	1461 = number of days in   4 years per	 4 * 365.2425 =   1460.97
+ *
+ *    Thad Floryan, 12-NOV-85
+ */
+
+#define DDELTA 722449	/* days from Jan.1,0000 to Jan.1,1978 */
+
+static int mthvec[] =
+   {-1, -1, 30, 58, 89, 119, 150, 180, 211, 242, 272, 303, 333, 364};
+
+void YrMoDa(intdat, yr, mo, da)
+   long intdat;   /* I: AmigaDOS format, days since 1-JAN-78 */
+   long *yr;	  /* O: resultant year in form YYYY */
+   long *mo;	  /* O: resultant month in form MM */
+   long *da;	  /* O: resultant day of month in form DD */
+{
+   register long jdate, day0, day1, day2, day3;
+
+   jdate = intdat + DDELTA;  /* adjust internal date to Julian */
+
+   *yr	 = (jdate / 146097) * 400;
+   day0  = day1 = jdate %= 146097;
+   *yr	+= (jdate / 36524) * 100;
+   day2  = day1 %= 36524;
+   *yr	+= (day2 / 1461) * 4;
+   day3  = day1 %= 1461;
+   *yr	+= day3 / 365;
+   *mo	 = 1 + (day1 %= 365);
+   *da	 = *mo % 30;
+   *mo	/= 30;
+
+   if ( ( day3 >= 59 && day0 < 59 ) ||
+	( day3 <  59 && (day2 >= 59 || day0 < 59) ) )
+      ++day1;
+
+   if (day1 > mthvec[1 + *mo]) ++*mo;
+   *da = day1 - mthvec[*mo];
+}
+/* end of DATER.C */
+
+/*-------------------- end enclosure */
+
 void
 ToMSDate(date, time, datestamp)
 word *date;
@@ -219,6 +375,14 @@ struct DateStamp *datestamp;
 
 	*time = (hours << 11) | (minutes << 5) | (seconds / 2);
     }
+#if 1
+    {
+	long year, month, day;
+
+	YrMoDa(datestamp->ds_Days, &year, &month, &day);
+	*date = ((year - 1980) << 9) | (month << 5) | day;
+    }
+#else
     {
 	register long days, i, t;
 	int year, month, day;
@@ -250,4 +414,5 @@ struct DateStamp *datestamp;
 
 	*date = ((year - 1980) << 9) | (month << 5) | day;
     }
+#endif
 }
