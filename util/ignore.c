@@ -1,5 +1,5 @@
 /*
- * $Id: ignore.c,v 1.54 1993/06/24 05:04:58 Rhialto Exp $
+ * $Id: ignore.c,v 1.56 1996/12/21 23:34:35 Rhialto Rel $
  *
  *  IGNORE.C
  *
@@ -17,7 +17,7 @@
 #include <clib/dos_protos.h>
 #endif
 
-const char	idString[] = "$VER: Ignore $Revision: 1.54 $ $Date: 1993/06/24 05:04:58 $\r\n";
+const char	idString[] = "$""VER: Ignore $Revision: 1.56 $ $Date: 1996/12/21 23:34:35 $\r\n";
 
 Puts(char *string)
 {
@@ -51,7 +51,7 @@ main(int argc, char **argv)
 	yesno = -42;
 
     if (port = CreatePort(NULL, 0L)) {
-	if (tdreq = CreateExtIO(port, (long)sizeof(*tdreq))) {
+	if (tdreq = (struct IOExtTD *)CreateExtIO(port, (long)sizeof(*tdreq))) {
 	    OpenDevice("messydisk.device", unitnr, (struct IORequest *)tdreq,
 		       0L);
 	    if (tdreq->iotd_Req.io_Device) {
