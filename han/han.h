@@ -1,5 +1,5 @@
 /*-
- *  $Id$
+ *  $Id: han.h,v 1.1 89/12/17 20:08:20 Rhialto Exp Locker: Rhialto $
  *
  *  The header file for the MESSYDOS: file system handler
  *
@@ -260,6 +260,7 @@ extern int	MSUnLock();
 extern void	ExamineDirEntry();
 extern int	MSExamine();
 extern int	MSExNext();
+extern long	MSSetProtect();
 extern void	WriteFileLock();
 extern void	UpdateFileLock();
 extern struct LockList *NewLockList();

@@ -1,6 +1,7 @@
 /*-
- * $Id$
- * $Log$
+ * $Id: hanlock.c,v 1.1 89/12/17 20:03:01 Rhialto Exp Locker: Rhialto $
+ * $Log:	hanlock.c,v $
+ * Revision 1.1  89/12/17  20:03:01  Rhialto
  *
  * HANLOCK.C
  *
@@ -530,6 +531,12 @@ register struct FileInfoBlock *fib;
     fib->fib_DirEntryType =
 	(msd->msd_Attributes & ATTR_DIR) ? FILE_DIR : FILE_FILE;
     fib->fib_Protection = 0;
+    if (!(msd->msd_Attributes & ATTR_ARCHIVED))
+	fib->fib_Protection |= FIBF_ARCHIVE;
+    if (msd->msd_Attributes & ATTR_READONLY)
+	fib->fib_Protection |= (FIBF_WRITE | FIBF_DELETE);
+    if (msd->msd_Attributes & (ATTR_HIDDEN|ATTR_SYSTEM))
+	fib->fib_Protection |= FIBF_HIDDEN;
     fib->fib_Size = msd->msd_Filesize;
     fib->fib_NumBlocks = (msd->msd_Filesize + Disk.bps - 1) / Disk.bps;
     ToDateStamp(&fib->fib_Date, msd->msd_Date, msd->msd_Time);
@@ -603,6 +610,42 @@ skip:
 end:
     error = ERROR_NO_MORE_ENTRIES;
     return DOSFALSE;
+}
+
+/*
+ * Convert AmigaDOS protection bits to messy attribute bits.
+ */
+
+long
+MSSetProtect(parentdir, name, mask)
+register struct MSFileLock *parentdir;
+char	   *name;
+long	   mask;
+{
+    register struct MSFileLock *lock;
+
+    if (parentdir == NULL)
+	parentdir = RootLock;
+
+    lock = MSLock(parentdir, name, EXCLUSIVE_LOCK);
+    if (lock) {
+	/* Leave SYSTEM bit as-is */
+	lock->msfl_Msd.msd_Attributes &= ATTR_SYSTEM;
+	/* write or delete protected -> READONLY */
+	if (mask & (FIBF_WRITE|FIBF_DELETE))
+	    lock->msfl_Msd.msd_Attributes |= (ATTR_READONLY);
+	/* hidden -> hidden */
+	if (mask & FIBF_HIDDEN)
+	    lock->msfl_Msd.msd_Attributes |= (ATTR_HIDDEN);
+	/* archived=0 (default) -> archived=1 (default) */
+	if (!(mask & FIBF_ARCHIVE))
+	    lock->msfl_Msd.msd_Attributes |= (ATTR_ARCHIVED);
+	WriteFileLock(lock);
+	MSUnLock(lock);
+	return TRUE;
+    }
+
+    return FALSE;
 }
 
 int
