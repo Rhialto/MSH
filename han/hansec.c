@@ -1,6 +1,9 @@
 /*-
- * $Id: hansec.c,v 1.1 89/12/17 20:02:49 Rhialto Exp Locker: Rhialto $
+ * $Id: hansec.c,v 1.2 90/01/23 02:31:50 Rhialto Exp Locker: Rhialto $
  * $Log:	hansec.c,v $
+ * Revision 1.2  90/01/23  02:31:50  Rhialto
+ * Add 16-bit FAT support.
+ *
  * Revision 1.1  89/12/17  20:02:49  Rhialto
  * Initial revision
  *
@@ -18,6 +21,7 @@
 #include "han.h"
 #include "dos.h"
 
+#undef DEBUG				/**/
 #ifdef DEBUG
 #   define	debug(x)  dbprintf x
 #else
@@ -297,6 +301,33 @@ FreeCacheList()
 }
 
 /*
+ * Do an insertion sort on tosort in the CacheList. Since it changes the
+ * ln_Succ pointer, you must fetch it before calling this routine.
+ */
+
+void
+SortSec(tosort)
+register struct CacheSec *tosort;
+{
+    register struct CacheSec *sec;
+    struct CacheSec *nextsec;
+    register word   secno;
+
+    secno = tosort->sec_Number;
+
+    for (sec = (void *) CacheList.mlh_Head;
+	 nextsec = (void *) sec->sec_Node.mln_Succ; sec = nextsec) {
+	if (sec == tosort)
+	    return;			/* No need to move it away */
+	if (sec->sec_Number > secno)
+	    break;
+    }
+    /* Insert before sec */
+    Remove(tosort);
+    Insert(&CacheList, tosort, sec->sec_Node.mln_Pred);
+}
+
+/*
  * Write all dirty cache buffers to disk. It would be nice to sort them,
  * but currently we don't do that yet.
  */
@@ -315,8 +346,20 @@ int		immediate;
 	WriteFat();
     }
     if (DelayState & DELAY_DIRTY) {
-	for (sec = (void *) CacheList.mlh_TailPred;
-	     nextsec = (void *) sec->sec_Node.mln_Pred; sec = nextsec) {
+	/*
+	 * First sort all dirty sectors on block number
+	 */
+	for (sec = (void *) CacheList.mlh_Head;
+	     nextsec = (void *) sec->sec_Node.mln_Succ; sec = nextsec) {
+	    if (sec->sec_Refcount & SEC_DIRTY) {
+		SortSec(sec);
+	    }
+	}
+	/*
+	 * Then do a second scan to write them out.
+	 */
+	for (sec = (void *) CacheList.mlh_Head;
+	     nextsec = (void *) sec->sec_Node.mln_Succ; sec = nextsec) {
 	    if (sec->sec_Refcount & SEC_DIRTY) {
 		PutSec(sec->sec_Number, sec->sec_Data);
 		sec->sec_Refcount &= ~SEC_DIRTY;
@@ -334,7 +377,7 @@ int		immediate;
 	DelayState &= ~DELAY_RUNNING2;
     } else {			/* DELAY_RUNNING1 */
 #ifndef READONLY
-	while (TDUpdate() != 0 && RetryRwError())
+	while (TDUpdate() != 0 && RetryRwError(DiskIOReq))
 	    ;
 #endif
 	TDMotorOff();
@@ -563,8 +606,8 @@ ReadBootBlock()
 	    Disk.maxclst = (Disk.nsects - Disk.start) / Disk.spc - 1;
 	    Disk.bpc = Disk.bps * Disk.spc;
 	    Disk.vollabel = FakeRootDirEntry;
-	    Disk.fat16bits = (((long)Disk.nsects * Disk.bps) >= 1024L * 1024);
-							    /* 1M disk */
+/*	    Disk.fat16bits = Disk.nsects > 20740;   /* DOS3.2 magic value */
+	    Disk.fat16bits = Disk.maxclst > 0xFF6;  /* DOS3.0 magic value */
 
 	    debug(("%x\tbytes per sector\n", Disk.bps));
 	    debug(("%x\tsectors per cluster\n", Disk.spc));
