@@ -1,5 +1,5 @@
 /*-
- *  $Id: han.h,v 1.2 89/12/17 23:07:26 Rhialto Exp Locker: Rhialto $
+ *  $Id: han.h,v 1.3 90/01/23 02:31:07 Rhialto Exp Locker: Rhialto $
  *
  *  The header file for the MESSYDOS: file system handler
  *
@@ -13,16 +13,16 @@
 #define FILE_FILE   -1
 
 
-#define MS_BPS	    512 	/* Bytes per sector */
+/* #define MS_BPS      512	/* Bytes per sector */
 #define MS_SPC	    2		/* Sectors per cluster */
 #define MS_RES	    1		/* Reserved sectors (boot block) */
 #define MS_NFATS    2		/* Number of FATs */
 #define MS_NDIRS    112 	/* Number of directory entries */
 #define MS_NSECTS   1440	/* total number of sectors */
 #define MS_SPF	    3		/* Sectors per FAT */
-#define MS_SPT	    9		/* Sectors per track */
-#define MS_SPT_MAX  9		/* Max sectors per track */
-#define MS_NSIDES   2		/* Tracks per cylinder */
+/* #define MS_SPT      9	/* Sectors per track */
+/* #define MS_SPT_MAX  9	/* Max sectors per track */
+/* #define MS_NSIDES   2	/* Tracks per cylinder */
 #define MS_ROOTDIR  (MS_RES + MS_SPF * MS_NFATS)
 #define MS_DIRENTSIZE  sizeof(struct MsDirEntry) /* size of a directory entry */
 
