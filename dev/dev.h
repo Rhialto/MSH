@@ -1,9 +1,12 @@
 /*-
- *  $Id: dev.h,v 1.53 92/10/25 02:16:07 Rhialto Rel $
- *  $Log:	dev.h,v $
+ *  $Id: dev.h,v 1.54 1993/06/24 04:56:00 Rhialto Exp $
+ *  $Log: dev.h,v $
+ * Revision 1.54  1993/06/24  04:56:00	Rhialto
+ * DICE 2.07.54R.
+ *
  * Revision 1.53  92/10/25  02:16:07  Rhialto
  * Add repeated #include protection.
- * 
+ *
  * Revision 1.51  92/04/17  15:43:01  Rhialto
  * Freeze for MAXON3. Change cyl+side units to track units.
  *
@@ -60,8 +63,11 @@ typedef unsigned char byte;
 typedef unsigned short word;
 typedef unsigned long ulong;
 
-#define IOMDB_40TRACKS	7
-#define IOMDF_40TRACKS	(1<<7)
+#define IOMDB_40TRACKS	    7			/* in IOReqs and md_IOFlags */
+#define IOMDF_40TRACKS	    (1<<7)
+
+#define IOMDB_FIXFLAGS	    8			/* Fix md_IOFlags permanently */
+#define IOMDF_FIXFLAGS	    (1<<8)
 
 #define DiskResource	    DiscResource	/* Aargh! */
 #define DiskResourceUnit    DiscResourceUnit	/* Aargh! */
@@ -70,9 +76,15 @@ typedef unsigned long ulong;
  * Some default values
  */
 
-#define MS_BPS	    512 	/* Bytes per sector */
-#define MS_SPT	    9		/* Default sectors per track */
-#define MS_SPT_MAX  10		/* Max sectors per track */
-#define MS_NSIDES   2		/* Tracks per cylinder */
+#define MS_BPS		512	/* Bytes per sector */
+#define MS_NSIDES	2	/* Tracks per cylinder */
+
+#define MS_SPT_DD	9	/* Default sectors per track for DD */
+#define MS_SPT_MAX_DD	10	/* Max sectors per track for DD */
+#define MS_SPT_HD	18	/* Default sectors per track for HD */
+#define MS_SPT_MAX_HD	21	/* Max sectors per track for HD */
+
+#define MS_SPT	    MS_SPT_DD	/* Default sectors per track */
+#define MS_SPT_MAX  MS_SPT_MAX_HD /* Max sectors per track */
 
 #endif	/* MESSYDISK_DEV_H */
