@@ -1,6 +1,9 @@
 /*-
- * $Id: pack.c,v 1.2 89/12/17 23:06:54 Rhialto Exp Locker: Rhialto $
+ * $Id: pack.c,v 1.3 90/02/03 17:02:05 Rhialto Rel $
  * $Log:	pack.c,v $
+ * Revision 1.3  90/02/03  17:02:05  Rhialto
+ * Add error checking wrt dosalloc()
+ *
  * Revision 1.2  89/12/17  23:06:54  Rhialto
  * Add ACTION_SET_PROTECT
  *
@@ -34,7 +37,7 @@
 #include "dos.h"
 #include "han.h"
 
-#ifdef DEBUG
+#ifdef HDEBUG
 #   define	debug(x)  dbprintf x
 #else
 #   define	debug(x)
@@ -94,14 +97,14 @@ messydoshandler()
     SysBase = AbsExecBase;
     DOSBase = OpenLibrary("dos.library", 0L);
 
-#ifdef DEBUG
+#ifdef HDEBUG
     /*
      * Initialize debugging code as soon as possible. Only SysBase and
      * DOSBase are required.
      */
 
     dbinit();
-#endif				/* DEBUG */
+#endif				/* HDEBUG */
 
     DosPort = &((struct Process *)FindTask(NULL))->pr_MsgPort;
 
@@ -114,6 +117,7 @@ messydoshandler()
     {
 	struct FileSysStartupMsg *fssm;
 	ulong *environ;
+	ulong Reserved;
 
 	DevName = "messydisk.device";
 	UnitNr = 0;
@@ -125,6 +129,7 @@ messydoshandler()
 	Disk.spt = MS_SPT;
 	Disk.bps = MS_BPS;
 	Disk.lowcyl = 0;
+	Reserved = 0;
 
 	if (fssm = (struct FileSysStartupMsg *)BTOC(DevNode->dn_Startup)) {
 				    /* Same as BTOC(packet->dp_Arg2) */
@@ -135,7 +140,7 @@ messydoshandler()
 
 	    if (environ = BTOC(fssm->fssm_Environ)) {
 		debug(("environ size %ld\n", environ[0]));
-#define get(xx,yy)  if (environ[0] >= yy) xx = environ[yy];
+#define get(xx,yy)  if (environ[DE_TABLESIZE] >= yy) xx = environ[yy];
 
 		get(MaxCache, DE_NUMBUFFERS);
 		get(BufMemType, DE_MEMBUFTYPE);
@@ -145,10 +150,12 @@ messydoshandler()
 		Disk.bps *= 4;
 		debug(("Disk.bps %d\n", Disk.bps));
 		get(Disk.lowcyl, DE_LOWCYL);
+		get(Reserved, DE_RESERVEDBLKS);
 #undef get
 	    }
 	}
 	Disk.lowcyl *= (long)MS_BPS * Disk.spt * Disk.nsides;
+	Disk.lowcyl += (long)MS_BPS * Reserved;
     }
 
     if (DOSBase && HanOpenUp()) {
@@ -504,7 +511,7 @@ top:
 		    debug(("ERR=%d\n", error));
 		    PRes2 = error;
 		}
-#ifdef DEBUG
+#ifdef HDEBUG
 		else {
 		    debug(("RES=%06lx\n", PRes1));
 		}
@@ -512,7 +519,7 @@ top:
 		returnpacket(packet);
 		DosPacket = NULL;
 	    }
-#ifdef DEBUG
+#ifdef HDEBUG
 	    else {
 		debug(("NOREP\n"));
 	    }
@@ -533,10 +540,10 @@ top:
 	}
     } /* end for (;notdone) */
 
-#ifdef DEBUG
+#ifdef HDEBUG
     debug(("Can we remove ourselves? "));
     Delay(50L);                 /* I wanna even see the debug message! */
-#endif				/* DEBUG */
+#endif				/* HDEBUG */
     Forbid();
     if (OpenCount || packetsqueued()) {
 	Permit();
@@ -559,10 +566,10 @@ top:
      * Remove debug window, closedown, fall of the end of the world.
      */
 exit:
-#ifdef DEBUG
+#ifdef HDEBUG
     Delay(100L);                /* This is dangerous! */
     dbuninit();
-#endif				/* DEBUG */
+#endif				/* HDEBUG */
 
 #if 1
     UnLoadSeg(DevNode->dn_SegList);     /* This is real fun. We are still */
@@ -769,11 +776,11 @@ DEVLIST        *volnode;
 	dosfree(BTOC(dl->dl_Name));
 	dosfree(dl);
     }
-#ifdef DEBUG
+#ifdef HDEBUG
     else {
 	debug(("****PANIC: Unable to find volume node\n"));
     }
-#endif				/* DEBUG */
+#endif				/* HDEBUG */
     Permit();
 
     if (volnode == VolNode)
@@ -917,7 +924,7 @@ struct FileLock *lock;
     return error;
 }
 
-#ifdef DEBUG
+#ifdef HDEBUG
 		    /*	DEBUGGING			*/
 PORT *Dbport;	    /*	owned by the debug process	*/
 PORT *Dback;	    /*	owned by the DOS device driver	*/
@@ -1049,4 +1056,4 @@ _debugproc:
 	rts
 #endasm
 
-#endif				/* DEBUG */
+#endif				/* HDEBUG */
