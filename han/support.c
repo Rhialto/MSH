@@ -1,6 +1,9 @@
 /*-
- * $Id: support.c,v 1.40 91/03/03 17:46:02 Rhialto Rel $
+ * $Id: support.c,v 1.42 91/06/13 23:55:51 Rhialto Exp $
  * $Log:	support.c,v $
+ * Revision 1.42  91/06/13  23:55:51  Rhialto
+ * DICE conversion
+ *
  * Revision 1.40  91/03/03  17:46:02  Rhialto
  * Freeze for MAXON
  *
@@ -91,7 +94,8 @@ byte	       *bstr;
 byte	       *buf;
 {
     bstr = BTOC(bstr);
-    bmov(bstr + 1, buf, *bstr);
+    if (*bstr)
+	CopyMem(bstr + 1, buf, (long)*bstr);
     buf[*bstr] = 0;
 }
 
