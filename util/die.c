@@ -1,5 +1,5 @@
 /*-
- * $Id: die.c,v 1.40 91/03/03 17:57:33 Rhialto Rel $
+ * $Id: Die.c,v 1.46 91/10/06 18:23:22 Rhialto Rel $
  *
  *  DIE.C
  *
@@ -10,6 +10,16 @@
 #include <amiga.h>
 #include <functions.h>
 #include <stdio.h>
+
+#ifndef EXEC_TYPES_H
+#include <exec/types.h>
+#endif
+#ifndef EXEC_MEMORY_H
+#include <exec/memory.h>
+#endif
+#ifndef LIBRARIES_DOSEXTENS_H
+#include <libraries/dosextens.h>
+#endif
 
 long
 dos_packet1(struct MsgPort *port, long type, long arg1)
