@@ -1,13 +1,16 @@
 /*-
- *  $Id: dev.h,v 1.46 91/10/06 18:26:48 Rhialto Rel $
+ *  $Id: dev.h,v 1.51 92/04/17 15:43:01 Rhialto Rel $
  *  $Log:	dev.h,v $
+ * Revision 1.51  92/04/17  15:43:01  Rhialto
+ * Freeze for MAXON3. Change cyl+side units to track units.
+ *
  * Revision 1.46  91/10/06  18:26:48  Rhialto
- * 
+ *
  * Freeze for MAXON
- * 
+ *
  * Revision 1.42  91/06/14  00:07:09  Rhialto
  * DICE conversion
- * 
+ *
  * Revision 1.40  91/03/03  17:56:29  Rhialto
  * Freeze for MAXON
  *
@@ -16,6 +19,8 @@
  *
  *  Include file for users of the messydisk.device
 -*/
+#ifndef MESSYDISK_DEV_H
+#define MESSYDISK_DEV_H
 
 #ifndef EXEC_TYPES_H
 #include "exec/types.h"
@@ -66,3 +71,5 @@ typedef unsigned long ulong;
 #define MS_SPT	    9		/* Default sectors per track */
 #define MS_SPT_MAX  10		/* Max sectors per track */
 #define MS_NSIDES   2		/* Tracks per cylinder */
+
+#endif	/* MESSYDISK_DEV_H */
