@@ -1,4 +1,4 @@
-# $Id: Makefile,v 1.4 90/01/27 20:40:15 Rhialto Exp $
+# $Id: Makefile,v 1.5 90/02/10 22:38:29 Rhialto Rel $
 #
 # Makefile for messydos file system handler and -device, for use with the
 # Manx C compiler version 3.6.
@@ -6,13 +6,14 @@
 # This code is (C) Copyright 1989,1990 by Olaf Seibert. All rights reserved.
 # May not be used or copied without a licence.
 
-HOBJ =	pack.o support.o hanmain.o hansec.o hanlock.o hanfile.o hanreq.o date.o
-HSRC =	pack.c support.c hanmain.c hansec.c hanlock.c hanfile.c hanreq.c date.c \
-	dos.h han.h
+HOBJ =	pack.o support.o hanmain.o hansec.o hanlock.o hanfile.o hanreq.o \
+	hancmd.o date.o
+HSRC =	pack.c support.c hanmain.c hansec.c hanlock.c hanfile.c hanreq.c \
+	hancmd.c date.c dos.h han.h
 DOBJ =	device.o devio.o
 DSRC =	device.c devio.c dev.h device.h
 XSRC =	messyfmt.c Makefile
-#DB =	 -DDEBUG
+#DB =	 -DDEBUG -DHDEBUG
 #WACK =  -W
 
 #   Options: large code, large data, no startup code, use A4
@@ -37,7 +38,7 @@ ignore: ignore.c dev.h device.h
 	cc +Iamiga.syms +x3,5 ignore.c
 	ln ignore.o -lcl
 
-messyfmt: messyfmt.c dev.h device.h han.h
+messyfmt:
 	cc +Iamiga.syms +x3,5 messyfmt.c
 	ln messyfmt.o -lcl
 
@@ -53,11 +54,21 @@ ci:
 co:
 	RCS:co -l $(HSRC) $(DSRC) $(XSRC)
 
-device.o: dev.h device.h
-devio.o: dev.h device.h
-hanmain.o: han.h dev.h
-hansec.o: han.h dev.h
-hanlock.o: dos.h han.h dev.h
-hanfile.o: dos.h han.h dev.h
-support.o: dos.h
-pack.o: dos.h han.h dev.h
+# DO NOT DELETE THIS LINE - important for making dependencies!
+#|.c|$*.o|
+#|.h|
+# From this line on, everything has been created by MakeDepend.
+# Anything you add yourself will be deleted automagically.
+
+date.o: dev.h han.h date.c
+devio.o: device.h dev.h devio.c
+hanfile.o: dev.h han.h dos.h hanfile.c
+support.o: dos.h support.c
+device.o: device.h dev.h device.c
+hanlock.o: dev.h han.h dos.h hanlock.c
+hanmain.o: dev.h han.h dos.h hanmain.c
+hansec.o: dev.h han.h dos.h hansec.c
+hanreq.o: dos.h hanreq.c
+messyfmt.o: dev.h han.h messyfmt.c
+pack.o: dev.h han.h dos.h pack.c
+hancmd.o: dev.h han.h hancmd.c
