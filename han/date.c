@@ -1,6 +1,9 @@
 /*-
- * $Id: date.c,v 1.51 92/04/17 15:38:43 Rhialto Rel $
+ * $Id: date.c,v 1.52 92/09/06 00:22:03 Rhialto Exp $
  * $Log:	date.c,v $
+ * Revision 1.52  92/09/06  00:22:03  Rhialto
+ * Didn't believe in leap days and some other days.
+ *
  * Revision 1.51  92/04/17  15:38:43  Rhialto
  * Freeze for MAXON3.
  *
@@ -31,12 +34,11 @@
  * May not be used or copied without a licence.
  */
 
-#include <amiga.h>
 #include <functions.h>
+#include "han.h"
 #ifndef LIBRARIES_DOS_H
 #include <libraries/dos.h>
 #endif
-#include "han.h"
 
 #ifdef HDEBUG
 #   include "syslog.h"

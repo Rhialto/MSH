@@ -1,7 +1,10 @@
 
 /*
- *  $Id: dos.h,v 1.51 92/04/17 15:38:54 Rhialto Rel $
+ *  $Id: dos.h,v 1.52 92/09/06 00:23:30 Rhialto Exp $
  *  $Log:	dos.h,v $
+ * Revision 1.52  92/09/06  00:23:30  Rhialto
+ * Didn't believe in leap days and some other days.
+ *
  * Revision 1.51  92/04/17  15:38:54  Rhialto
  * Freeze for MAXON3.
  *

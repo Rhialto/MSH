@@ -1,6 +1,9 @@
 /*-
- * $Id: hanreq.c,v 1.46 91/10/06 18:25:03 Rhialto Rel $
+ * $Id: hanreq.c,v 1.51 92/04/17 15:38:20 Rhialto Rel $
  * $Log:	hanreq.c,v $
+ * Revision 1.51  92/04/17  15:38:20  Rhialto
+ * Freeze for MAXON.
+ *
  * Revision 1.46  91/10/06  18:25:03  Rhialto
  *
  * Freeze for MAXON
@@ -33,7 +36,6 @@
  *  not be used or copied without a licence.
 -*/
 
-#include <amiga.h>
 #include <functions.h>
 #include "han.h"
 #include "dos.h"

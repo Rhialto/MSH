@@ -1,6 +1,9 @@
 /*-
- * $Id: hanlock.c,v 1.52 92/09/06 01:51:25 Rhialto Exp $
+ * $Id: hanlock.c,v 1.52 92/09/06 01:52:30 Rhialto Exp $
  * $Log:	hanlock.c,v $
+ * Revision 1.52  92/09/06  01:52:30  Rhialto
+ * Handle /parentdir via MSParentDir().
+ *
  * Revision 1.51  92/04/17  15:37:41  Rhialto
  * Freeze for MAXON.
  *
@@ -46,7 +49,6 @@
  * May not be used or copied without a licence.
 -*/
 
-#include <amiga.h>
 #include <functions.h>
 #include <string.h>
 #include "han.h"

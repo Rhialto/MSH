@@ -1,6 +1,9 @@
 /*-
- * $Id: hansec.c,v 1.46 91/10/06 18:25:31 Rhialto Rel $
+ * $Id: hansec.c,v 1.51 92/04/17 15:37:19 Rhialto Rel $
  * $Log:	hansec.c,v $
+ * Revision 1.51  92/04/17  15:37:19  Rhialto
+ * Freeze for MAXON.
+ *
  * Revision 1.46  91/10/06  18:25:31  Rhialto
  *
  * Freeze for MAXON
@@ -40,7 +43,6 @@
  * May not be used or copied without a licence.
 -*/
 
-#include <amiga.h>
 #include <functions.h>
 #include <string.h>
 #include "han.h"

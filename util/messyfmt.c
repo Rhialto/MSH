@@ -1,6 +1,9 @@
 /*
- * $Id: messyfmt.c,v 1.49 91/11/15 23:04:19 Rhialto Exp $
+ * $Id: messyfmt.c,v 1.51 92/04/17 15:39:11 Rhialto Rel $
  * $Log:	messyfmt.c,v $
+ * Revision 1.51  92/04/17  15:39:11  Rhialto
+ * Freeze for MAXON3.
+ *
  * Revision 1.49  91/11/15  23:04:19  Rhialto
  * Now suggest a reasonable FAT size when prompting
  *
@@ -29,13 +32,12 @@
  * May not be used or copied without a licence.
  */
 
-#include <amiga.h>
-#include <functions.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <signal.h>
 #include "han.h"
+#include <functions.h>
 
 const ulong	BootBlock[] = {
     0xEB349049, 0x424D2020, 0x332E3200, 0x02020100,	/* ...IBM  3.2..... */
