@@ -1,5 +1,5 @@
 /*-
- *  $Id: device.h,v 1.1 89/12/17 20:08:06 Rhialto Exp Locker: Rhialto $
+ *  $Id: device.h,v 1.2 90/01/27 20:39:10 Rhialto Rel $
  *
  *  This code is (C) Copyright 1989 by Olaf Seibert. All rights reserved. May
  *  not be used or copied without a licence.

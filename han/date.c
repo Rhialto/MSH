@@ -1,6 +1,9 @@
 /*-
- * $Id: date.c,v 1.1 89/12/17 20:03:37 Rhialto Exp Locker: Rhialto $
+ * $Id: date.c,v 1.2 90/02/03 17:00:25 Rhialto Rel $
  * $Log:	date.c,v $
+ * Revision 1.2  90/02/03  17:00:25  Rhialto
+ * 0x21 -> DATE_MIN
+ * 
  * Revision 1.1  89/12/17  20:03:37  Rhialto
  * Initial revision
  *

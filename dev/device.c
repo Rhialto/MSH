@@ -1,6 +1,9 @@
 /*-
- * $Id: device.c,v 1.4 90/01/23 00:24:50 Rhialto Exp Locker: Rhialto $
+ * $Id: device.c,v 1.5 90/01/27 20:34:43 Rhialto Rel $
  * $Log:	device.c,v $
+ * Revision 1.5  90/01/27  20:34:43  Rhialto
+ * Commented out #undef DEBUG
+ *
  * Revision 1.4  90/01/23  00:24:50  Rhialto
  * io_Error=0 for immediate commands
  *
@@ -63,7 +66,7 @@ _RomTag:
 /* INDENT ON */
 
 char		DevName[] = "messydisk.device";
-char		idString[] = "messydisk.device $Revision: 1.4 $ $Date: 90/01/23 00:24:50 $\r\n";
+char		idString[] = "messydisk.device $Revision: 1.5 $ $Date: 90/01/27 20:34:43 $\r\n";
 
 /*
  * -30-6*X  Library vectors:
