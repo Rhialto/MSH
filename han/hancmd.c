@@ -1,6 +1,9 @@
 /*-
- * $Id: hancmd.c,v 1.40 91/03/03 17:55:08 Rhialto Rel $
+ * $Id: hancmd.c,v 1.42 91/06/13 23:44:47 Rhialto Exp $
  * $Log:	hancmd.c,v $
+ * Revision 1.42  91/06/13  23:44:47  Rhialto
+ * DICE conversion
+ *
  * Revision 1.40  91/03/03  17:55:08  Rhialto
  * Freeze for MAXON
  *
@@ -26,10 +29,7 @@
 #include "han.h"
 
 #ifdef HDEBUG
-#   define	debug(x)  syslog x
-    void initsyslog(void);
-    void syslog(char *, ...);
-    void uninitsyslog(void);
+#   include "syslog.h"
 #else
 #   define	debug(x)
 #endif
