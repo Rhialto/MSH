@@ -1,6 +1,9 @@
 /*-
- * $Id: hancmd.c,v 1.46 91/10/06 18:25:10 Rhialto Rel $
+ * $Id: hancmd.c,v 1.51 92/04/17 15:38:30 Rhialto Rel $
  * $Log:	hancmd.c,v $
+ * Revision 1.51  92/04/17  15:38:30  Rhialto
+ * Freeze for MAXON3.
+ *
  * Revision 1.46  91/10/06  18:25:10  Rhialto
  *
  * Freeze for MAXON
@@ -29,14 +32,16 @@
  *
  * Special commands through MSH::something file names.
  *
- * This code is (C) Copyright 1990,1991 by Olaf Seibert. All rights reserved.
+ * This code is (C) Copyright 1990-1992 by Olaf Seibert. All rights reserved.
  * May not be used or copied without a licence.
 -*/
 
-#include <amiga.h>
 #include <functions.h>
 #include <stdlib.h>
 #include "han.h"
+#ifdef CONVERSIONS
+#include "hanconv.h"
+#endif /* CONVERSIONS */
 
 #ifdef HDEBUG
 #   include "syslog.h"
@@ -71,10 +76,6 @@ void
 HandleCommand(cmd)
 char	       *cmd;
 {
-#ifdef HDEBUG
-    if (cmd[1] == 'D') {
-    } else
-#endif
     if (cmd[1] == 'B') {
 	CheckBootBlock = atoi(&cmd[2]);
 	if (DoMessages) {
@@ -83,6 +84,18 @@ char	       *cmd;
 	    ltoa(CheckBootBlock, msg + 9);
 	    DisplayMessage(msg);
 	}
+#ifdef CONVERSIONS
+    } else if (cmd[1] == 'C') {
+	DefaultConversion = cmd[2] & 31;
+	if (DefaultConversion >= ConvFence)
+	    DefaultConversion = ConvNone;
+	if (DoMessages) {
+	    static char msg[] = "Conversion: x";
+
+	    msg[12] = '@' + DefaultConversion;
+	    DisplayMessage(msg);
+	}
+#endif /* CONVERSIONS */
     } else if (cmd[1] == 'F') {
 	if (cmd[2] == '+') {
 	    DiskIOReq->iotd_Req.io_Flags |= IOMDF_40TRACKS;
@@ -104,7 +117,6 @@ char	       *cmd;
 	    }
 	}
     } else if (cmd[1] == 'M') {
-	DoMessages = atoi(&cmd[2]);
+	DoMessages = (cmd[2] == '+')? 1 : atoi(&cmd[2]);
     }
 }
-
