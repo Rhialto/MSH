@@ -1,6 +1,9 @@
 /*-
- * $Id: hanmain.c,v 1.46 91/10/06 18:27:36 Rhialto Rel $
+ * $Id: hanmain.c,v 1.51 92/04/17 15:36:35 Rhialto Rel $
  * $Log:	hanmain.c,v $
+ * Revision 1.51  92/04/17  15:36:35  Rhialto
+ * Freeze for MAXON. removed InitCacheList() from MSDiskInserted().
+ *
  * Revision 1.46  91/10/06  18:27:36  Rhialto
  *
  * Freeze for MAXON
@@ -64,7 +67,7 @@ Prototype int HanOpenUp(void);
 Prototype long MSRelabel(byte *newname);
 
 struct Library *IntuitionBase;
-Local const char RCSId[] = "Messydos filing system $Revision: 1.46 $ $Date: 91/10/06 18:27:36 $, by Olaf Seibert";
+Local const char RCSId[] = "\0$VER: Messydos filing system $Revision: 1.51 $ $Date: 92/04/17 15:36:35 $, by Olaf Seibert";
 
 #define CONV_SEP    ';'
 
