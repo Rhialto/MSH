@@ -1,13 +1,15 @@
 /*-
- * $Id$
- * $Log$
+ * $Id: date.c,v 1.1 89/12/17 20:03:37 Rhialto Exp Locker: Rhialto $
+ * $Log:	date.c,v $
+ * Revision 1.1  89/12/17  20:03:37  Rhialto
+ * Initial revision
  *
- *  DATE.C
+ * DATE.C
  *
- *  Two date conversion routines: DateStamp <-> MSDOS date/time.
+ * Two date conversion routines: DateStamp <-> MSDOS date/time.
  *
- *  This code is (C) Copyright 1989 by Olaf Seibert. All rights reserved. May
- *  not be used or copied without a licence.
+ * This code is (C) Copyright 1989 by Olaf Seibert. All rights reserved. May
+ * not be used or copied without a licence.
  */
 
 #include <libraries/dos.h>
@@ -56,8 +58,8 @@ word time;
 	ulong i, j, t;
 	int year, month, day;
 
-	if (date < 0x21)
-	    date = 0x21;
+	if (date < DATE_MIN)
+	    date = DATE_MIN;
 
 	day = date & 31;
 	date >>= 5;
