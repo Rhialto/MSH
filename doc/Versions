@@ -1,0 +1,134 @@
+*******************************************************************************
+    MSH is (C) Copyright 1989-1996 by Olaf Seibert. All rights reserved.
+    Freely distributable, except that it may not be distributed for profit
+    without permission from the author. Hereby, Fred Fish explicitly gets
+    permission to include MSH in his library of freely distributable Amiga
+    software.
+*******************************************************************************
+
+Reminder:
+    If you like the program, feel free to send me some $$, or even $$$ if
+    you feel like it. Please don't send any cheques not written in Dutch
+    guilders (standard abbreviation: nlg or hfl), since they cost a lot of
+    money (at least nlg 12.50; more than US$ 7) to cash.
+
+    All shareware resellers (and especially those in Germany) are reminded
+    that they are NOT allowed to make any profit off my work. Resellers are
+    considered to make an illegal profit if they charge more for a disk
+    than Fred Fish does. Those resellers do NOT have a licence to use or
+    copy MSH. Also, if you distribute MSH:, you must distribute it in its
+    entirety: you are not allowed to leave parts out. This also includes
+    the source!
+
+Preferred options on checkin:
+ci -f (force) -u<VERSION> -n<SYMBOLIC NAME> -s<STATE>
+
+1.5     release 1
+1.30    release 1 patch 3
+1.31    release 1 patch 3a
+        Turn *.INF into *.info (for Workbench icons)
+1.32    prepare for syslog
+
+From here on everything may be #ifndeffed NONCOMM
+
+1.33    MSH: fix directory extension bug
+        [directories that were extended were not cleared first]
+1.34    device: use TD_RAWWRITE when appropriate [if you have >= 2.04]
+1.35    MSH: improved caching by separate sorted list
+1.40    Offered to MAXON for commercial distribution (MAXON1)
+1.41    Fixed bug in MSSetProtect that changed everything into plain files
+        [protect msh:dir turned msh:dir into a file]
+1.42    Cache bug and DICE conversion
+1.43    Fix bug with assigns (hanlock.c); Change to newer syslog stuff.
+        [assign x: msh:some/file worked as if it was assign x: msh:]
+1.44    Fix bug that sectors numbered 0 crashed the device
+        [usually doesn't occur - except with a certain sampler]
+1.45    Add in-situ character conversions; ::-confirmation requesters
+        [conversion of letters with umlaut and ß]
+1.46    Freeze for MAXON (MAXON2)
+1.47    Device: only set WORDSYNC on read, reload Custom in intr code
+1.48    messyfmt: ASK, QUICK, BOOT; hanconv: swap pc/st condes for ss.
+        [messyfmt get more user-friendly]
+1.49    messyfmt: now suggests a reasonable FAT size
+1.50    date.c: new function for date-to-days conversion
+1.51    hanmain.c: removed InitCacheList() from MSDiskInserted(); ARGH!
+	    Moved prototypes around (makeproto introduced);
+	    Add const and __shared qualifiers for pure code;
+	    No more DosType=1 but Interleave=65536;
+	    Fixed superfluous uninhibits (Workbench caused problems);
+        Device: changed cyl+side units into track units.
+        (MAXON3)
+1.52    hanmain.c, device2.c: Version string now contains \0$VER:
+        date.c: was too conservative - didn't believe in leap days and others
+        device2.c: fix off-by-one bug checking valid command number
+        hanlock.c: handling of parentdir via MSParentDir()
+1.53    hanconv.c: idiotic typo in initialisation of ToPc/ToST tables
+        han2.c: incorporated and now works.
+        hancmd.c/hanfile.c: default conversion settable.
+        hanmain.c: expose private parts if asked politely.
+        loadconv.c: created, as are makeconv.rexx, makepc.rexx, makest.rexx.
+	    Its file format just happens to be identical to that of
+	    CrossDos... purely by accident of course.
+        device: add TD_EJECT, TD_GETGEOMETRY; bump ver/rev to 37.13.
+        hanfile.c: OFFSET_END seeks were done in the wrong direction ARGH!
+            Protect seek pos from being past EOF (due to SetFileSize).
+            Count free clusters instead of free sectors.
+        new: setmain.c/setwind.c, fmtmain.c/fmtwind.c.
+        (MAXON4)
+1.54    devio2.c: split read and write functions; always use RAWREAD/RAWWRITE
+        under 2.04+.
+        hanfile.c: MSCreateDir gave you an exclusive lock contrary to our
+            liberal policy.
+        hansec.c: try heuristics for the cache.
+        fmtmain.c: changing SPT,NSIDES,NCYLS didn't update SPF.
+        device1.a,device2.c: switch to RTF_AUTOINIT, saves a few bytes.
+        New version of DICE: 2.07.54R. New version of RCS: 5.6 (hwgrcs).
+        ignore.c: return 5 if errors are ignored, 10 if error occurs.
+        Makefiles: added -mi (inline library calls)
+1.55    Add compile option (LONGNAMES) for modified file system with
+            long and mixed case filenames. Note that this is NOT compatible
+	    with either normal FAT or Losedows-95 VFAT systems! It is an
+	    entirely private format.
+        hanfile.c: Fix MSWrite() to check disk full conditions in advance.
+	     Optionally, update time of file on creation only.
+        device: add support for HD floppies.
+        han2.c: implement ACTION_FORMAT. As a side effect, more use is made
+            of the mountlist info (as default layout and for format); the
+            spt is updated as the disk format changes (for DiskCopy).
+        msh-set/msh-format: use GadToolsBox 2.0C and be font-sensitive.
+        hanfile.c: (optional) record creation time only, not modification.
+        device: do units 4..11, and IO flags at open time
+        pack.c: Use DOS 2.04+ calls to add/remove volume node.
+            Fix ACT_SAME_LOCK - the AmigaDOS manual was wrong again wrt
+            the results. This fixes wb: it will open drawers now.
+        (MAXON5)
+1.56*
+        pack.c: set disk type to 'BUSY' when inhibited. (cf. Guru book)
+            Fixed superfluous uninhibits better (no spurious DiskChange()
+            calls anymore).
+        hansec.c: check BPB values more strictly to avoid divide by 0.
+	    MSUpdate(): Don't write FAT twice when writing low->high.
+	    ReadBootBlock() Cancel would be left set when no disk
+            is inserted. This caused disk change detection to fail.
+        Small adaptations for DICE 3.0. Add BeginIO() stub because DICE's
+            one is wrong for register arguments.
+        Eliminate most #ifdefs (replaced by #if)
+        devio2.c: Additionally, CMD_Write had a bug where an expression
+            like (a <= b || c = d) was not recognised by DICE as incorrect.
+            The code generated was for ((a <= b), d).
+            This bug has been here since 1.53->1.54 (thanks for RCS!).
+            This also caused disk change detection to fail.
+        most files: removed register from declarations.
+	hanlock.c: make MSSetProtect() return DOSTRUE.
+	hanfile.c: MSWrite(): always mark MSFileLock as dirty when writing
+	    to the file, not just when !CREATIONDATE_ONLY.
+
+TODO:
+
+-	Sometimes does not write out a last update until the disk is
+	ejected, then it demands the disk back.
+-	Seems not to work with DynamiCache.
+-	Still some race conditions when you attempt an operation while
+	the disk is still being inserted or has just been inserted but
+	not identified yet.
+-	BeOS formatted diskettes somehow still manage to crash MSH.

@@ -1,0 +1,99 @@
+/*
+ *  This Mountlist is just an example. Edit the locations of
+ *  messydisk.device and MessyFileSystem appropriately.
+ */
+/*
+ *  Messy file system on messy blocks:
+ */
+MSH:	FileSystem = L:MessyFileSystem /* or messydos:l/MessyFileSystem */
+	Device = messydisk.device      /* or messydos:devs/messydisk.device */
+	Unit = 1
+	Flags = 0
+/*
+ *  HighCyl is ignored, LowCyl, Surfaces, BlocksPerTrack
+ *  and Reserved are used once to find the bootblock.
+ *  Further parameters are found there.
+ */
+	LowCyl = 0 ; HighCyl = 79
+	Reserved = 0
+	Surfaces = 2
+	BlocksPerTrack = 9
+/*
+ *  Initially the disk cache will be 5 sectors.
+ */
+	Buffers = 5
+/*
+ *  Our type of filesystem is 'MSD\0'.
+ */
+	DosType = 0x4D534400
+/*
+ *  If Interleave is set to 65536, MSH: will wait for DFx:
+ *  (where x depends on the Unit parameter above) to recognize
+ *  inserted disks (or not).
+ */
+	Interleave = 65536
+/*
+ *  Use BufMemType = 3 [for MEMF_CHIP | MEMF_PUBLIC] if you
+ *  use MSH: on the trackdisk.device.
+ */
+	BufMemType = 1	/* messydisk needs no chip mem */
+	BootPri = 0
+	Stacksize = 3072
+	Priority = 9
+	GlobVec  = -1
+/*
+ *  Immediately load and start the MessyFileSystem
+ *  when mounted.
+ */
+	Mount = 1
+#
+MS2:	FileSystem = L:MessyFileSystem /* or messydos:l/MessyFileSystem */
+	Device = messydisk.device      /* or messydos:devs/messydisk.device */
+	Unit = 2
+	Flags = 0
+	LowCyl = 0 ; HighCyl = 79
+	Reserved = 0
+	Surfaces = 2
+	BlocksPerTrack = 9
+	Buffers = 5
+	BufMemType = 1	/* messydisk needs no chip mem */
+	BootPri = 0
+	Stacksize = 3072
+	Priority = 9
+	GlobVec  = -1
+	DosType = 0x4D534400
+	Interleave = 65536
+	Mount = 1
+#
+/* Weird example: Amiga Old filing system on messy blocks: */
+MF1:	Device = messydisk.device      /* or messydos:devs/messydisk.device */
+	Unit = 1
+	Flags = 0
+	Priority = 4
+	LowCyl = 0 ; HighCyl = 79
+	Reserved = 2
+	Surfaces = 2
+	BlocksPerTrack = 9
+	Buffers = 5
+	BufMemType = 1
+	BootPri = 0
+#
+/* Weird example: Messy file system on Amiga blocks: */
+DS1:	FileSystem = L:MessyFileSystem /* or messydos:l/MessyFileSystem */
+	Device = trackdisk.device
+	Unit = 1
+	Flags = 0
+	LowCyl = 0 ; HighCyl = 79
+	Reserved = 0
+	Surfaces = 2
+	BlocksPerTrack = 11
+	Buffers = 5
+	BufMemType = 3	/* trackdisk needs CHIP mem */
+	BootPri = 0
+	Stacksize = 3072
+	Priority = 9
+	GlobVec  = -1
+	DosType = 0x4D534400
+	Interleave = 65536
+	Mount = 1
+#

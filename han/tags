@@ -1,0 +1,148 @@
+void hanconv.h /^typedef void (
+NewVolNode hanproto.h /^Prototype struct DeviceList *NewVolNode(
+OtherEndianMsd han.h /^void  OtherEndianMsd(
+Get8086Word hansec.c /^Prototype word	Get8086Word(
+OtherEndianWord hansec.c /^OtherEndianWord(
+OtherEndianLong hansec.c /^OtherEndianLong(
+OtherEndianMsd hansec.c /^OtherEndianMsd(
+ClusterToSector hansec.c /^ClusterToSector(
+ClusterOffsetToSector hansec.c /^ClusterOffsetToSector(
+DirClusterToSector hansec.c /^DirClusterToSector(
+SectorToCluster hansec.c /^SectorToCluster(
+NextCluster hansec.c /^NextCluster(
+NextClusteredSector hansec.c /^NextClusteredSector(
+FindFreeSector hansec.c /^FindFreeSector(
+FindSecByNumber hansec.c /^FindSecByNumber(
+FindSecByBuffer hansec.c /^FindSecByBuffer(
+NewCacheSector hansec.c /^NewCacheSector(
+FreeCacheSector hansec.c /^FreeCacheSector(
+InitCacheList hansec.c /^InitCacheList(
+FreeCacheList hansec.c /^FreeCacheList(
+MSUpdate hansec.c /^MSUpdate(
+StartTimer hansec.c /^StartTimer(
+ReadSec hansec.c /^ReadSec(
+EmptySec hansec.c /^EmptySec(
+WriteSec hansec.c /^WriteSec(
+MayWriteTrack hansec.c /^MayWriteTrack(
+FreeSec hansec.c /^FreeSec(
+MarkSecDirty hansec.c /^MarkSecDirty(
+WriteFat hansec.c /^WriteFat(
+dos_packet1 hansec.c /^dos_packet1(
+AwaitDFx hansec.c /^AwaitDFx(
+ReadBootBlock hansec.c /^ReadBootBlock(
+IdentifyDisk hansec.c /^IdentifyDisk(
+TDRemChangeInt hansec.c /^TDRemChangeInt(
+TDAddChangeInt hansec.c /^TDAddChangeInt(
+TDChangeNum hansec.c /^TDChangeNum(
+TDProtStatus hansec.c /^TDProtStatus(
+TDMotorOff hansec.c /^TDMotorOff(
+TDClear hansec.c /^TDClear(
+TDUpdate hansec.c /^TDUpdate(
+MyDoIO hansec.c /^MyDoIO(
+InitTable hanconv.c /^unsigned char  *InitTable(
+rdwr_CopyMem hanconv.c /^rdwr_CopyMem(
+rd_FromPC hanconv.c /^rd_FromPC(
+rd_FromST hanconv.c /^rd_FromST(
+wr_ToPC hanconv.c /^wr_ToPC(
+wr_ToST hanconv.c /^wr_ToST(
+ConvCleanUp hanconv.c /^ConvCleanUp(
+returnpacket support.c /^Prototype void returnpacket(
+packetsqueued support.c /^packetsqueued(
+dosalloc support.c /^dosalloc(
+dosfree support.c /^dosfree(
+btos support.c /^btos(
+NextNode support.c /^Prototype void * NextNode(
+GetHead support.c /^GetHead(
+GetTail support.c /^GetTail(
+typetostr support.c /^typetostr(
+GetFat hanfile.c /^Prototype int GetFat(
+FreeFat hanfile.c /^FreeFat(
+GetFatEntry hanfile.c /^GetFatEntry(
+SetFatEntry hanfile.c /^SetFatEntry(
+FindFreeCluster hanfile.c /^FindFreeCluster(
+ExtendClusterChain hanfile.c /^ExtendClusterChain(
+FreeClusterChain hanfile.c /^FreeClusterChain(
+MakeMSFileHandle hanfile.c /^MakeMSFileHandle(
+MSOpen hanfile.c /^MSOpen(
+MSClose hanfile.c /^MSClose(
+FilePos hanfile.c /^FilePos(
+AdjustSeekPos hanfile.c /^AdjustSeekPos(
+MSSeek hanfile.c /^MSSeek(
+MSRead hanfile.c /^MSRead(
+MSWrite hanfile.c /^MSWrite(
+MSDeleteFile hanfile.c /^MSDeleteFile(
+MSSetDate hanfile.c /^MSSetDate(
+MSCreateDir hanfile.c /^MSCreateDir(
+MSRename hanfile.c /^MSRename(
+CompareNames hanlock.c /^Prototype int CompareNames(
+CompareNames hanlock.c /^CompareNames(
+NextDirEntry hanlock.c /^NextDirEntry(
+FindNext hanlock.c /^FindNext(
+PrintDirEntry hanlock.c /^void PrintDirEntry(
+MakeLock hanlock.c /^MakeLock(
+MSLock hanlock.c /^MSLock(
+MSDupLock hanlock.c /^MSDupLock(
+MSParentDir hanlock.c /^MSParentDir(
+MSUnLock hanlock.c /^MSUnLock(
+ExamineDirEntry hanlock.c /^ExamineDirEntry(
+MSExamine hanlock.c /^MSExamine(
+MSExNext hanlock.c /^MSExNext(
+MSSetProtect hanlock.c /^MSSetProtect(
+CheckLock hanlock.c /^CheckLock(
+WriteFileLock hanlock.c /^WriteFileLock(
+UpdateFileLock hanlock.c /^UpdateFileLock(
+NewLockList hanlock.c /^NewLockList(
+FreeLockList hanlock.c /^FreeLockList(
+NewVolNode pack.c /^Prototype struct DeviceList *NewVolNode(
+ChangeIntHand pack.c /^ChangeIntHand(
+NewFileLock pack.c /^NewFileLock(
+FreeFileLock pack.c /^FreeFileLock(
+MakeFileLock pack.c /^MakeFileLock(
+NewVolNode pack.c /^NewVolNode(
+NewVolNodeName pack.c /^NewVolNodeName(
+FreeVolNode pack.c /^FreeVolNode(
+MayFreeVolNode pack.c /^MayFreeVolNode(
+RedirectLocks pack.c /^void RedirectLocks(
+DiskRemoved pack.c /^DiskRemoved(
+DiskInserted pack.c /^DiskInserted(
+CheckDriveType pack.c /^CheckDriveType(
+WhichDiskInserted pack.c /^WhichDiskInserted(
+DiskChange pack.c /^DiskChange(
+CheckRead pack.c /^CheckRead(
+CheckWrite pack.c /^CheckWrite(
+MSSameLock han2.c /^Prototype long	MSSameLock(
+MSOpenFromLock han2.c /^MSOpenFromLock(
+MSDupLockFromFH han2.c /^MSDupLockFromFH(
+MSParentOfFH han2.c /^MSParentOfFH(
+MSExamineFH han2.c /^MSExamineFH(
+MSSetFileSize han2.c /^MSSetFileSize(
+MSChangeModeLock han2.c /^MSChangeModeLock(
+MSChangeModeFH han2.c /^MSChangeModeFH(
+MSExAll han2.c /^MSExAll(
+PutWord han2.c /^PutWord(
+MSFormat han2.c /^MSFormat(
+ToDateStamp date.c /^Prototype void ToDateStamp(
+ToDateStamp date.c /^ToDateStamp(
+YrMoDa date.c /^void YrMoDa(
+YrMoDa date.c /^void YrMoDa(
+ToMSDate date.c /^ToMSDate(
+HandleCommand hancmd.c /^Prototype void HandleCommand(
+HandleCommand hancmd.c /^HandleCommand(
+RetryRwError hanreq.c /^Prototype long	RetryRwError(
+Getpr_WindowPtr hanreq.c /^Getpr_WindowPtr(
+RetryRwError hanreq.c /^RetryRwError(
+DisplayMessage hanreq.c /^DisplayMessage(
+ToUpper hanmain.c /^Prototype byte ToUpper(
+lmin hanmain.c /^lmin(
+ZapSpaces hanmain.c /^ZapSpaces(
+ToMSName hanmain.c /^ToMSName(
+MSDiskInfo hanmain.c /^MSDiskInfo(
+MSDiskInserted hanmain.c /^MSDiskInserted(
+MSDiskRemoved hanmain.c /^MSDiskRemoved(
+InputDiskInserted hanmain.c /^InputDiskInserted(
+InputDiskRemoved hanmain.c /^InputDiskRemoved(
+HanCloseDown hanmain.c /^HanCloseDown(
+HanOpenUp hanmain.c /^HanOpenUp(
+MSRelabel hanmain.c /^MSRelabel(
+PrivateInfo hanmain.c /^PrivateInfo(
+_abort hanmain.c /^_abort(

@@ -1,0 +1,119 @@
+.nr v 51
+.so /doc/an
+.TH MountShare "1l" "Amiga Programmer's Manual" "Rhialto, KosmoSoft"
+.SH USAGE
+.nf
+usage: MountShare {{[+-][lchdf]} {<devicename>}}
+ +l: load Handler/FileSystem file
+ +c: create FileSysEntry
+ -h: don't compare Handler/FileSystem filenames
+ -d: don't compare DosType values
+ +f: search FileSysEntries
+The option opposite to default is shown.
+.fi
+
+The use of MountShare is as follows. Suppose you have some filesystem or
+other handler that you wish to mount multiple times. For example, you might
+have the following in your mountlist:
+
+.nf
+PIP:	 Handler = L:ConHandler
+	 StackSize = 600
+	 Priority = 5
+	 GlobVec = 0
+#
+CNC:	 Handler = L:ConHandler
+	 StackSize = 600
+	 Priority = 5
+	 GlobVec = 0
+#
+.fi
+
+If you mount and use both of PIP: and CNC:, the result will be that the
+handler L:ConHandler is loaded twice. This is clearly a waste of memory,
+since many handlers are PURE code.
+.sp;.ul 1
+Note: MountShare should ONLY be used with respect to PURE handlers.
+Examples of pure handlers are: L:ConHandler (ConMan), L:FastFileSystem,
+newer versions of MessyFileSystem (1.51 and higher), L:Port-Handler (PRT:,
+SER: and PAR:).
+
+MountShare will allow you to re-use the loaded code from one device for
+other devices that are applicable. Using MountShare you specify a
+"master" device whose handler will be re-used by other devices.
+(The word "device" in this document is used for an AmigaDOS device, not for
+an Exec .device.)
+
+This is done in the following way:
+
+-@ Optionally, the master handler is loaded if necessary. Otherwise sharing
+it would not have any effect.
+
+-@ Optionally, the handler is made available on the FileSystem.resource
+list. This can only be done if the master has a proper DosType value.
+
+-@ If the other device specifies the same filename for the handler, the
+master code is shared. Otherwise,
+
+-@ if the other device has the same DosType value specified in the
+Mountlist information, the master code is shared. Otherwise,
+
+-@ optionally, if the other device has a DosType for which a
+FileSystem.resource handler is available, that code is shared.
+
+Another application of MountShare is when you have a harddisk
+with the FastFileSystem, and later you want to mount more partitions (or
+floppies) using the FFS. Since all FFS devices are identified by the line
+.nf
+
+    DosType = 0x444F5301
+
+.fi
+you can mount all these devices, then use MountShare to share the FFS code
+between all of them. If your harddisk does not automount you may want to
+specify the +l option.
+.SH EXAMPLES
+The second example assumes you installed ConMan. ConMan changes the CON:
+device as if it had the same mountlist as given for PIP: and CNC: above.
+
+.nf
+1> MountShare +l ser
+L:PORT-HANDLER loaded.
+SER and PRT share handler L:PORT-HANDLER: SegList copied.
+SER and PAR share handler L:PORT-HANDLER: SegList copied.
+
+1> Mount PIP: CNC:
+1> MountShare CON
+CON and CNC share handler L:ConHandler: SegList copied.
+CON and PIP share handler L:ConHandler: SegList copied.
+.fi
+.SH CAVEATS
+.ul 1
+MountShare should ONLY be used with respect to PURE handlers.
+
+Of course, you should use MountShare before using the device, because
+otherwise the handler will be loaded by AmigaDOS and there won't be much to
+share.
+
+Similarly, you should not have the line
+.nf
+
+    Mount = 1
+
+.fi
+in your mountlist entry, since the Mount command will load the handler
+unconditionally in this case.
+
+If you decide to share a file system handler, or add it to the
+FileSystem.resource, the handler should never be unloaded again. If the
+handler has the ability to unload itself, this should not be used.
+.SH FUTURE COMPATIBILITY
+Everything that MountShare does should be done by a smart Mount command.
+Perhaps this will be implemented by Commodore in a future version.
+.SH BUGS
+Other processes should not change the device list or FileSystem.resource
+list while we are running.
+.SH AUTHOR
+Copyright 1992 by Olaf
+.I Rhialto
+Seibert. All rights reserved.

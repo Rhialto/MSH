@@ -1,0 +1,79 @@
+From comp.sys.amiga.programmer Wed Nov  2 15:42:56 1994
+Xref: sci.kun.nl comp.sys.amiga.applications:29744 comp.sys.amiga.hardware:95124 comp.sys.amiga.programmer:56980 comp.sys.ibm.pc.hardware.misc:13914 comp.os.msdos.programmer:45082
+Newsgroups: comp.sys.amiga.applications,comp.sys.amiga.hardware,comp.sys.amiga.programmer,comp.sys.ibm.pc.hardware.misc,comp.os.msdos.programmer
+Path: sci.kun.nl!sun4nl!EU.net!uunet!newsfeed.pitt.edu!dsinc!scala!news
+From: dave.haynie@scala.com (Dave Haynie)
+Subject: Re: Can IBM-PC read/write floppies for Amiga?
+Sender: news@scala.scala.com (Usenet administrator)
+Message-ID: <1994Nov2.083426.18892@scala.scala.com>
+Date: Wed, 2 Nov 1994 08:34:26 GMT
+Lines: 62
+Reply-To: dave.haynie@scala.com (Dave Haynie)
+References: <CxuMz8.DrK@world.std.com> <380pj2$hab@dsm6.dsmnet.com> <Cxvv8w.9xD@eskimo.com> <38qvh2$h0g@gabriel.keele.ac.uk>
+Nntp-Posting-Host: gator
+Organization: Scala Inc., US Research & Development
+
+In <38qvh2$h0g@gabriel.keele.ac.uk>, u3f38@cc.keele.ac.uk (DG Coombes) writes:
+>Billy Laughlin (kerhop@eskimo.com) wrote:
+>: The Skeleton (mikebockert@dsm1.dsmnet.com) wrote:
+
+>: : Amiga's can read/write both mac and ibm disks.. however ibm's can't read
+>: : anything except for ibm..  on Amiga we use crossdos (part of Amiga OS) to read
+>: : ibm disks and copy files to the amgia with it.. we use any util we want since
+>: : the amiga can access the ibm drive fine.. 
+
+There are two issues here -- the low-level format and the file system
+format. An Amiga can read IBM disks because it can be programmed to
+handle both of these. An IBM can't read an Amiga disk because the
+generic PC floppy controller can't read the Amiga's low-level format.
+
+Which is the same reason the Amiga gets more data on a disk. A PC
+reads and writes individual sectors on a disk individually. Since
+there's some slop in the positioning of the heads when this is done,
+it's standard practice to leave some space between sectors. The
+standard PC disk format puts 9 sectors on each track in 1MB mode, 18
+sectors on each track in 2MB mode.  The Amiga always reads and writes
+full tracks. So while it can deal with physically sectored disks like
+those of the PC, the native Amiga format uses logical sectors; there's
+no gap between sectors. This allows the Amiga to format 11 sectors per
+track in 1MB mode, 22 sectors per track in 2MB mode (using the slow
+drive, since the Paula chip itself can't handle HD data rates).
+
+>: this is mostly true, although I have a program for IBM called
+>: Mac'n'Dos that allows the IBM to read/write/format Macintosh
+>: high density disks in a standard high density IBM drive.
+>: (no special hardware required)
+
+>Really?  As far as I know the Macs unique in it's disks 'coz it changes the
+>motor speed so the inside tracks are read at the same speed as the outer
+>tracks.  
+
+The Mac "high density" mode, first implemented in one of the Mac IIs
+(I forget just when that appeared), dispensed with the old Mac floppy
+controller. The old Mac floppy controller, used in the 68000-based
+Macs, managed to store 800K per disk by varying disk speed. It still
+used physical sectors, but since the linear density on a disk's outer
+tracks is less at a constant angular velocity than on the inner
+tracks, you can fit more on a disk by approximating a constant linear
+velocity. Only CD's really use a constant linear velocity, since
+real sectors are much more efficient. But many computers have done
+this kind of thing in the past, including the PET and C64/C128 drives
+(though they electronically varied the bit density, rather than
+mechanically varying the angular velocity of the disk).  It's pretty
+common on hard disk drives too -- if you're using a modern drive,
+"track", "head", and "sector" numbers are just supplied to make you
+comfortable; all modern PC drives are intelligent, and deal with sector
+addresses independent of physical form.
+
+Anyway, Apple got rid of that entirely on their high-density
+format. At the low level, it's compatible with the PClone format,
+though of course you need a Mac file system running on the PC (or
+Amiga with HD disk drive) to read the HD Mac format.
+
+Dave Haynie          | ex-Commodore Engineering |  See my first film
+Sr. Systems Engineer |      Class of '94        | "The Deathbed Vigil"
+Scala Inc., US R&D   | C= Failure n. See: Greed |     info@iam.com
+
+			"I don't sleep, I dream" - R.E.M.
+
+

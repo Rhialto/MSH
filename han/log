@@ -1,0 +1,136 @@
+075cce30 start (Proc MSH)
+075cce30: taskwait...
+075cce30: taskwait: done
+075cce30: Environ size 18
+075cce30: DefaultDisk.bps 512
+075cce30: offset 0, spt_dd 9, spt_hd 18
+075cce30: DiskReplyPort = 0x0757ab48
+075cce30: HanOpenUp() done.
+075cce30: Returning startup packet 7579960
+075cce30: Sending TD_ADDCHANGEINT
+075cce30: Done sending TD_ADDCHANGEINT
+075cce30: Awaiting first real dos packet
+075cce30: taskwait...
+075cce30: taskwait: done
+075cce30: got it: 75d8b0c
+075cce30: CheckDriveType()
+075cce30: HD floppy
+075cce30: IdentifyDisk
+075cce30: ReadBootBlock
+075cce30: FreeFat()
+075cce30: AwaitDFx
+075cce30: AwaitDFx 10
+075cce30: AwaitDFx 42555359
+075cce30: Changenumber = 2
+075cce30: ************ ReadSec(0) ***************
+075cce30: FindSecByNumber 0 075cce30: sec = 75e08b2, pred = 75e08ae; 075cce30: NewCacheSector
+075cce30: NewCacheSector: 75cdb80
+075cce30: ReadSec 0
+075cce30: StartTimer(2) sent TimeIOReq
+075cce30: ************ FreeSec(0) ***************
+075cce30: 200	bytes per sector
+075cce30: 1	sectors per cluster
+075cce30: 1	reserved blocks
+075cce30: 2	fats
+075cce30: e0	directory entries
+075cce30: b40	sectors
+075cce30: f0	media byte
+075cce30: 9	sectors per FAT
+075cce30: 12	sectors per track
+075cce30: 2	sides
+075cce30: 0	hidden sectors
+075cce30: e	directory sectors
+075cce30: 13	root dir block
+075cce30: 1f	block for (imaginary) cluster 0
+075cce30: 21	first data block
+075cce30: b20	clusters total
+075cce30: 200	bytes per cluster
+075cce30: 0	16-bits FAT?
+075cce30: FindSecByNumber 1 075cce30: cache 0 75cdb80; 075cce30: sec = 75e08b2, pred = 75cdb80; 075cce30: NewCacheSector
+075cce30: NewCacheSector: 75e66b0
+075cce30: ReadSec 1
+075cce30: FindSecByNumber 2 075cce30: cache 1 75e66b0; 075cce30: sec = 75e08b2, pred = 75e66b0; 075cce30: NewCacheSector
+075cce30: NewCacheSector: 75e6930
+075cce30: ReadSec 2
+075cce30: FindSecByNumber 3 075cce30: cache 2 75e6930; 075cce30: sec = 75e08b2, pred = 75e6930; 075cce30: NewCacheSector
+075cce30: NewCacheSector: 75e6bb0
+075cce30: ReadSec 3
+075cce30: StartTimer(2) sent TimeIOReq
+075cce30: FindSecByNumber 4 075cce30: cache 3 75e6bb0; 075cce30: sec = 75e08b2, pred = 75e6bb0; 075cce30: NewCacheSector
+075cce30: NewCacheSector: 75e72a8
+075cce30: ReadSec 4
+075cce30: FindSecByNumber 5 075cce30: cache 4 75e72a8; 075cce30: sec = 75e08b2, pred = 75e72a8; 075cce30: NewCacheSector
+075cce30: NewCacheSector: re-use clean sec 0
+075cce30: NewCacheSector: 75cdb80
+075cce30: ReadSec 5
+075cce30: FindSecByNumber 6 075cce30: cache 5 75cdb80; 075cce30: sec = 75e08b2, pred = 75cdb80; 075cce30: NewCacheSector
+075cce30: NewCacheSector: re-use clean sec 1
+075cce30: NewCacheSector: 75e66b0
+075cce30: ReadSec 6
+075cce30: FindSecByNumber 7 075cce30: cache 6 75e66b0; 075cce30: sec = 75e08b2, pred = 75e66b0; 075cce30: NewCacheSector
+075cce30: NewCacheSector: re-use clean sec 2
+075cce30: NewCacheSector: 75e6930
+075cce30: ReadSec 7
+075cce30: FindSecByNumber 8 075cce30: cache 7 75e6930; 075cce30: sec = 75e08b2, pred = 75e6930; 075cce30: NewCacheSector
+075cce30: NewCacheSector: re-use clean sec 3
+075cce30: NewCacheSector: 75e6bb0
+075cce30: ReadSec 8
+075cce30: FindSecByNumber 9 075cce30: cache 8 75e6bb0; 075cce30: sec = 75e08b2, pred = 75e6bb0; 075cce30: NewCacheSector
+075cce30: NewCacheSector: re-use clean sec 4
+075cce30: NewCacheSector: 75e72a8
+075cce30: ReadSec 9
+075cce30: counting free clusters
+075cce30: FindSecByNumber 19 075cce30: cache 9 75e72a8; 075cce30: sec = 75e08b2, pred = 75e72a8; 075cce30: NewCacheSector
+075cce30: NewCacheSector: re-use clean sec 5
+075cce30: NewCacheSector: 75cdb80
+075cce30: ReadSec 19
+075cce30: StartTimer(2) sent TimeIOReq
+075cce30: Disk is called '55097806203'
+075cce30: WhichDiskInserted() done
+075cce30: DiskInserted 07585f4c
+075cce30: MSDiskInserted 07585f4c
+075cce30: MakeLock: 075cce30: 19,32 075cce30: 55097806.203 attr:8 time:1ed2 date:1ed2 start:0 size:0
+075cce30: IECLASS_DISKINSERTED 0
+075cce30: Packet: 1027 00000000 00000000 00000000 ACTION_IS_FILESYSTEM
+075cce30: RES=ffffffff, ERR=0
+075cce30: taskwait...
+075cce30: taskwait: done
+075cce30: Packet:    8 00000000 01d2945e fffffffe ACTION_LOCATE_OBJECT
+075cce30: name == 75cd9e4 ":"
+075cce30: Parentdir == NULL
+075cce30: pdir 07586b48: 075cce30: 19,32 075cce30: 55097806.203 attr:8 time:1ed2 date:1ed2 start:0 size:0
+075cce30: MakeLock: 075cce30: 19,32 075cce30: 55097806.203 attr:8 time:1ed2 date:1ed2 start:0 size:0
+075cce30: > 075cce30: 19,32 075cce30: 55097806.203 attr:8 time:1ed2 date:1ed2 start:0 size:0
+075cce30: MSUnLock 07586b48: 075cce30: 19,32 075cce30: 55097806.203 attr:8 time:1ed2 date:1ed2 start:0 size:0
+075cce30: volnode 0->7585f4c
+075cce30: RES=1d621d3, ERR=0
+075cce30: taskwait...
+075cce30: taskwait: done
+075cce30: Packet:    8 00000000 01d762e0 fffffffe ACTION_LOCATE_OBJECT
+075cce30: name == 75cd9e4 "msh:"
+075cce30: Parentdir == NULL
+075cce30: pdir 07586b48: 075cce30: 19,32 075cce30: 55097806.203 attr:8 time:1ed2 date:1ed2 start:0 size:0
+075cce30: MakeLock: 075cce30: 19,32 075cce30: 55097806.203 attr:8 time:1ed2 date:1ed2 start:0 size:0
+075cce30: > 075cce30: 19,32 075cce30: 55097806.203 attr:8 time:1ed2 date:1ed2 start:0 size:0
+075cce30: MSUnLock 07586b48: 075cce30: 19,32 075cce30: 55097806.203 attr:8 time:1ed2 date:1ed2 start:0 size:0
+075cce30: volnode 0->7585f4c
+075cce30: RES=1d621f3, ERR=0
+075cce30: taskwait...
+075cce30: taskwait: done
+075cce30: Packet:   26 01d621d3 01d61b5a 00f97210 ACTION_INFO
+075cce30: DiskInfo: state 82, type 444f5300
+075cce30: RES=ffffffff, ERR=0
+075cce30: taskwait...
+075cce30: taskwait: done
+075cce30: Packet:   23 01d621f3 01d6ae93 00f97210 ACTION_EXAMINE OBJ
+075cce30: + 075cce30: 19,32 075cce30: 55097806.203 attr:8 time:1ed2 date:1ed2 start:0 size:0
+075cce30: RES=ffffffff, ERR=0
+075cce30: taskwait...
+075cce30: taskwait: done
+075cce30: Packet:    8 01d621d3 01d2f695 fffffffe ACTION_LOCATE_OBJECT
+075cce30: pdir 07586b48: 075cce30: 19,32 075cce30: 55097806.203 attr:8 time:1ed2 date:1ed2 start:0 size:0
+075cce30: Component: 'DISK       '
+075cce30: FindSecByNumber 19 075cce30:  (0) 75cdb80
+075cce30: FindSecByNumber 19 075cce30:  (0) 75cdb80
+075cce30: FindSecByNumber 19 075cce30:  (0) 75cdb80
+075cce30: FindSecByNumber 19 075cce30:  (0) 75cdb80

@@ -1,0 +1,68 @@
+Article 32868 of comp.sys.amiga.tech:
+Path: sci.kun.nl!hp4nl!mcsun!uunet!cbmvax!daveh
+From: daveh@cbmvax.commodore.com (Dave Haynie)
+Newsgroups: comp.sys.amiga.tech
+Subject: Re: Read & Write from/to Amiga disks on a MS-DOS machine
+Message-ID: <17123@cbmvax.commodore.com>
+Date: 4 Jan 91 22:19:19 GMT
+References: <1991Jan4.143703.18573@computing-maths.cardiff.ac.uk>
+Reply-To: daveh@cbmvax.commodore.com (Dave Haynie)
+Organization: Commodore, West Chester, PA
+Lines: 54
+
+In article <1991Jan4.143703.18573@computing-maths.cardiff.ac.uk> rhl@computing-maths.cardiff.ac.uk (Robert Hartill) writes:
+>Is there an equivalent program to MSH to use Amiga disks on a MS-DOS machine ?
+
+>What I want to do is use kermit on a PC to transfer Amiga PD from our 
+>vax. My Amiga is not 'on-site' so it has to be via a PC. 
+
+No.  There are two good reasons for this.  First of all, most, if not all,
+PClones, are incapable of reading Amiga disks at the hardware level.  While
+they use compatible low-level MFM formats, the Amiga always does full track
+read/write, while the standard PC is sector based.  The Amiga can easily
+create equivalent sectors in software (yielding 9 physical sectors/track), 
+rather than going sectorless (yielding 11 logical sectors/track).  The PC
+can't deal with the lack of sectors.  While it's possible that some PC 
+somewhere does full track buffering and might allow Amiga disks to be read, 
+I doubt it -- the whole PC industry tends to pick a single hardware level
+chip definition, whether for keyboard controller, floppy, hard disk, video,
+etc. and stick with it, clone it, etc.  
+
+Which brings us to the second problem, that of device independence.  All 
+Amiga DOS level devices (DF0:, RAM:, etc.) are fully device independent.  You
+can have a lower-level device driver and use the same file system over a
+large number of devices (like FFS does), or you can have a filesystem that's
+specific to a particular subsystem (like RAM:).  MS-DOS, on the other hand,
+doesn't support true device independence.  To read an Amiga disk as easily
+on an MS-DOS machine as MSH: does on an Amiga, you would need two new pieces
+of software.  First of all, you'd need a device driver which makes your floppy
+disk drive read Amiga formatted disks, rather than MS-DOS disks.  That's the
+analog of MSH's "messydisk.device".  Then you would need a mountable filesystem
+for the Amiga disk format, the analog of "messyfilesystem".  Far as I know,
+you could do this under OS/2, but not under MS-DOS, hardware permitting (which,
+as I mentioned above, is impossible on the average PC, if not all of them).
+
+If the underlying hardware supported it, you could possibly make like the
+"PCUtilities" under AmigaDOS, the Apple File Exchange thingy under MAC OS,
+or some of the "DOS2DOS" kind of things available for the Amiga, and write a 
+dedicated program, rather than the more flexible device/filesystem, to read
+Amiga disks at the program, rather than OS, level.  Unfortunately, the PC
+hardware is going to make this impossible.  It may be possible to read Amiga
+disks with the emerging SCSI-based floppy drives.  I don't know for sure, but
+it's typical of SCSI devices to do full track buffering, so if the programming
+model for these devices allows you to decode 11 sectors rather than 9, it
+should be possible.  However, SCSI itself is very rare on MS-DOS machines these
+days, SCSI floppies are practically unheard of.
+
+>::     Robert Hartill, Dept Of Computing Mathematics, UWCC, Cardiff, UK.     ::
+>::                       e-mail : rhl@cm.cf.ac.uk                            ::
+
+
+
+-- 
+Dave Haynie Commodore-Amiga (Amiga 3000) "The Crew That Never Rests"
+   {uunet|pyramid|rutgers}!cbmvax!daveh      PLINK: hazy     BIX: hazy
+	"Don't worry, 'bout a thing. 'Cause every little thing, 
+	 gonna be alright"		-Bob Marley
+
+

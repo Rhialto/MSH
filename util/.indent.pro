@@ -1,0 +1,8 @@
+-bap
+-bad
+-bc
+-bs
+-i4 -nip
+-psl
+-l75
+-v

@@ -1,0 +1,129 @@
+/*-
+ * $Id: syslog.c,v 1.1 1994/10/24 20:36:30 Rhialto Exp $
+ *
+ * $Log: syslog.c,v $
+ * Revision 1.1  1994/10/24  20:36:30  Rhialto
+ * Initial revision
+ *
+ * DEBUGGING OUTPUT ROUTINES FOR SYSLOG
+-*/
+
+#ifdef __STDC__
+#   include <stdarg.h>
+#   include <clib/exec_protos.h>
+#endif
+#ifndef EXEC_PORTS_H
+#   include <exec/ports.h>
+#endif
+#include "syslog_private.h"
+#ifdef __DICE_INLINE
+static struct ExecBase *SysBase;
+#endif
+
+#ifdef __STDC__
+Local void putgetmsg(struct LogMsg *msg);
+Prototype void initsyslog(void);
+Prototype void uninitsyslog(void);
+Prototype void syslog(char *format, ...);
+#define DOTS ...
+#else
+#define DOTS dots
+typedef void *va_list;
+#define va_arg(valist,typename) ((valist = (void *)((char *)valist + sizeof(typename))), (*(typename *)((char *)(valist) - sizeof(typename))))
+#define va_start(valist,right)	(valist = (void*)((char *)&right + sizeof(right)))
+#define va_end(valist)
+#endif
+
+#ifdef _DCC
+#define INTERFACE_JUNK	__stkargs /*__regargs*/
+#define VARIABLE_JUNK	const
+#endif
+
+#define DISABLE     /* Disable(); */
+#define ENABLE	    /* Enable(); */
+
+VARIABLE_JUNK struct LogPort *LogPort;	/* owned by the logging process */
+VARIABLE_JUNK const char PortName[] = "syslog";
+
+/*
+ * You cannot use DOS functions from within TASKS or in DOS file system
+ * handlers or the like. Therefore we send a message to an other
+ * PROCESS that does the work for us.
+ *
+ * In case someone else uses the same signal, we try to restore the
+ * signal to what it would have been without our interference.
+ */
+
+
+static void
+putgetmsg(msg)
+struct LogMsg *msg;
+{
+    long	    OldSignal;
+
+    msg->lm_Msg.mn_ReplyPort = (void *)FindTask(NULL);
+    /* Get original state of the signal, and clear it */
+    DISABLE();
+    OldSignal = SetSignal(0L, DEBUGSIGMASK);
+    ENABLE();
+    PutMsg(&LogPort->lp_MsgPort, &msg->lm_Msg);
+    for (;;) {
+	Wait(DEBUGSIGMASK);
+	if (msg->lm_Msg.mn_Node.ln_Type == NT_REPLYMSG)
+	    break;
+	/* The signal was not for us, so set it when we're finished */
+	OldSignal = DEBUGSIGMASK;
+    }
+    /* Restore would-have-been state of the signal */
+    SetSignal(OldSignal, DEBUGSIGMASK);
+}
+
+INTERFACE_JUNK
+void
+initsyslog()
+{
+#ifdef __DICE_INLINE
+    SysBase = *(struct ExecBase **)4;
+#endif
+    Forbid();
+    *(struct MsgPort **)&LogPort = FindPort(PortName);
+    if (LogPort) {
+	struct LogMsg	logmsg;
+
+	logmsg.lm_Msg.mn_Length = SYSLOG_START;
+	putgetmsg(&logmsg);
+    }
+    Permit();
+}
+
+INTERFACE_JUNK
+void
+uninitsyslog()
+{
+    if (LogPort) {
+	struct LogMsg	logmsg;
+
+	logmsg.lm_Msg.mn_Length = SYSLOG_END;
+	putgetmsg(&logmsg);
+	LogPort = NULL;
+    }
+}
+
+INTERFACE_JUNK
+void
+syslog0(format, DOTS)
+char	       *format;
+{
+    if (LogPort) {
+	va_list 	valist;
+	struct LogMsg	logmsg;
+
+	va_start(valist, format);
+	logmsg.lm_Msg.mn_Length = SYSLOG_PRINT;
+	logmsg.lm_Format = format;
+	logmsg.lm_Args = valist;
+
+	putgetmsg(&logmsg);
+	va_end(valist);
+    }
+}

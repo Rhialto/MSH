@@ -1,0 +1,160 @@
+Release 1.56:
+
+total 26
+drwxr-xr-x  11 rhialto  wheel  512 May 12 15:14 ./
+drwxr-xr-x   3 rhialto  wheel  512 May 12 15:13 ../
+-rw-r--r--   1 rhialto  wheel    0 May 12 15:14 00DATES
+-rw-r--r--   1 rhialto  wheel  519 Dec 22  1996 Contents
+-rw-r--r--   1 rhialto  wheel  632 Aug  1  1992 Devs.info
+drwxr-xr-x   2 rhialto  wheel  512 May 12 15:13 c/
+drwxr-xr-x   2 rhialto  wheel  512 May 12 15:13 dev/
+drwxr-xr-x   2 rhialto  wheel  512 May 12 15:13 devs/
+drwxr-xr-x   2 rhialto  wheel  512 May 12 15:13 doc/
+drwxr-xr-x   2 rhialto  wheel  512 May 12 15:13 han/
+drwxr-xr-x   2 rhialto  wheel  512 May 12 15:13 l/
+drwxr-xr-x   2 rhialto  wheel  512 May 12 15:13 mountshare/
+drwxr-xr-x   2 rhialto  wheel  512 May 12 15:13 syslog/
+drwxr-xr-x   2 rhialto  wheel  512 May 12 15:13 util/
+
+./c:
+total 94
+drwxr-xr-x   2 rhialto  wheel    512 May 12 15:13 ./
+drwxr-xr-x  11 rhialto  wheel    512 May 12 15:14 ../
+-rw-r--r--   1 rhialto  wheel   5404 Dec 22  1996 Die
+-rw-r--r--   1 rhialto  wheel   4128 Dec 22  1996 Ignore
+-rw-r--r--   1 rhialto  wheel   5488 Dec 22  1996 Inhibit
+-rw-r--r--   1 rhialto  wheel   5528 Dec 22  1996 LoadConv
+-rw-r--r--   1 rhialto  wheel  16452 Dec 22  1996 MSH-Format
+-rw-r--r--   1 rhialto  wheel    454 Oct 31  1993 MSH-Format.info
+-rw-r--r--   1 rhialto  wheel  13160 Dec 22  1996 MSH-Set
+-rw-r--r--   1 rhialto  wheel    544 Oct 31  1993 MSH-Set.info
+-rw-r--r--   1 rhialto  wheel  12888 Dec 22  1996 MessyFmt
+-rw-r--r--   1 rhialto  wheel   7820 Feb 16  1992 MountShare
+-rw-r--r--   1 rhialto  wheel   1341 Oct  5  1992 makeconv.rexx
+-rw-r--r--   1 rhialto  wheel    288 Oct  5  1992 makepc.rexx
+-rw-r--r--   1 rhialto  wheel    288 Oct  5  1992 makest.rexx
+-rw-r--r--   1 rhialto  wheel    512 Jul 17  1994 test
+
+./dev:
+total 136
+drwxr-xr-x   2 rhialto  wheel    512 May 12 15:13 ./
+drwxr-xr-x  11 rhialto  wheel    512 May 12 15:14 ../
+-rw-r--r--   1 rhialto  wheel   1694 Dec 22  1996 Makefile
+-rw-r--r--   1 rhialto  wheel  10192 Dec 22  1996 Mkci
+-rw-r--r--   1 rhialto  wheel     23 Oct 16  1994 RCS_Link
+-rw-r--r--   1 rhialto  wheel   1008 Dec 22  1996 c.i
+-rw-r--r--   1 rhialto  wheel   2371 Dec 22  1996 dev.h
+-rw-r--r--   1 rhialto  wheel   5800 Dec 22  1996 device.h
+-rw-r--r--   1 rhialto  wheel   4674 Dec 22  1996 device1.a
+-rw-r--r--   1 rhialto  wheel  14572 Dec 22  1996 device2.c
+-rw-r--r--   1 rhialto  wheel  19988 Dec 22  1996 devio1.a
+-rw-r--r--   1 rhialto  wheel  41384 Dec 22  1996 devio2.c
+-rw-r--r--   1 rhialto  wheel    450 May 13  1992 devio2.c.info
+-rw-r--r--   1 rhialto  wheel   3113 Dec 22  1996 devproto.h
+-rw-r--r--   1 rhialto  wheel   6316 Dec 22  1996 gap
+-rw-r--r--   1 rhialto  wheel    746 Dec 22  1996 gap.c
+-rw-r--r--   1 rhialto  wheel   1457 Dec 22  1996 layout.h
+-rw-r--r--   1 rhialto  wheel   3824 Dec 22  1996 mkci.c
+
+./devs:
+total 22
+drwxr-xr-x   2 rhialto  wheel   512 May 12 15:13 ./
+drwxr-xr-x  11 rhialto  wheel   512 May 12 15:14 ../
+-rw-r--r--   1 rhialto  wheel  1051 Aug  1  1992 MSH
+-rw-r--r--   1 rhialto  wheel   492 Aug  1  1992 MSH.info
+-rw-r--r--   1 rhialto  wheel  2323 Aug  1  1992 Mountlist
+-rw-r--r--   1 rhialto  wheel  8808 Dec 22  1996 messydisk.device
+
+./doc:
+total 94
+drwxr-xr-x   2 rhialto  wheel    512 May 12 15:13 ./
+drwxr-xr-x  11 rhialto  wheel    512 May 12 15:14 ../
+-rw-r--r--   1 rhialto  wheel   3813 Mar  8  1991 Haynie
+-rw-r--r--   1 rhialto  wheel   4384 Nov  5  1994 Haynie2
+-rw-r--r--   1 rhialto  wheel   6170 Dec 22  1996 RELEASE-NOTES
+-rw-r--r--   1 rhialto  wheel   7242 Dec 22  1996 Versions
+-rw-r--r--   1 rhialto  wheel  14526 Dec 22  1996 dev.man
+-rw-r--r--   1 rhialto  wheel  45051 Dec 22  1996 msh.guide
+-rw-r--r--   1 rhialto  wheel   3044 Jun  5  1990 rx50notes
+
+./han:
+total 250
+drwxr-xr-x   2 rhialto  wheel    512 May 12 15:13 ./
+drwxr-xr-x  11 rhialto  wheel    512 May 12 15:14 ../
+-rw-r--r--   1 rhialto  wheel   5345 Dec 22  1996 Makefile
+-rw-r--r--   1 rhialto  wheel     23 Oct 16  1994 RCS_Link
+-rw-r--r--   1 rhialto  wheel  11497 Dec 22  1996 date.c
+-rw-r--r--   1 rhialto  wheel   3261 Dec 22  1996 dos.h
+-rw-r--r--   1 rhialto  wheel   8348 Dec 22  1996 han.h
+-rw-r--r--   1 rhialto  wheel  13603 Dec 22  1996 han2.c
+-rw-r--r--   1 rhialto  wheel   2902 Dec 22  1996 hancmd.c
+-rw-r--r--   1 rhialto  wheel   5378 Dec 22  1996 hanconv.c
+-rw-r--r--   1 rhialto  wheel   1010 Dec 22  1996 hanconv.h
+-rw-r--r--   1 rhialto  wheel   9157 Dec 22  1996 hancrtso.a
+-rw-r--r--   1 rhialto  wheel  24998 Dec 22  1996 hanfile.c
+-rw-r--r--   1 rhialto  wheel  23543 Dec 22  1996 hanlock.c
+-rw-r--r--   1 rhialto  wheel  15769 Dec 22  1996 hanmain.c
+-rw-r--r--   1 rhialto  wheel   8819 Dec 22  1996 hanproto.h
+-rw-r--r--   1 rhialto  wheel   5269 Dec 22  1996 hanreq.c
+-rw-r--r--   1 rhialto  wheel  33030 Dec 22  1996 hansec.c
+-rw-r--r--   1 rhialto  wheel   6157 Oct  2  1995 log
+-rw-r--r--   1 rhialto  wheel  35550 Dec 22  1996 pack.c
+-rw-r--r--   1 rhialto  wheel   8564 Dec 22  1996 support.c
+-rw-r--r--   1 rhialto  wheel   5567 Sep 11  1994 tags
+
+./l:
+total 28
+drwxr-xr-x   2 rhialto  wheel    512 May 12 15:13 ./
+drwxr-xr-x  11 rhialto  wheel    512 May 12 15:14 ../
+-rw-r--r--   1 rhialto  wheel  22888 Dec 22  1996 MessyFileSystem
+
+./mountshare:
+total 24
+drwxr-xr-x   2 rhialto  wheel   512 May 12 15:13 ./
+drwxr-xr-x  11 rhialto  wheel   512 May 12 15:14 ../
+-rw-r--r--   1 rhialto  wheel  9956 Feb 16  1992 mountshare.c
+-rw-r--r--   1 rhialto  wheel  5535 Feb 16  1992 mountshare.man
+-rw-r--r--   1 rhialto  wheel  3931 Feb 16  1992 mountshare.n
+
+./syslog:
+total 56
+drwxr-xr-x   2 rhialto  wheel   512 May 12 15:13 ./
+drwxr-xr-x  11 rhialto  wheel   512 May 12 15:14 ../
+-rw-r--r--   1 rhialto  wheel   779 Oct 24  1994 Makefile
+-rw-r--r--   1 rhialto  wheel    45 Oct 24  1994 RCS_link
+-rw-r--r--   1 rhialto  wheel  3268 Oct 24  1994 log
+-rw-r--r--   1 rhialto  wheel   325 Oct 24  1994 log.c
+-rw-r--r--   1 rhialto  wheel   232 Oct 24  1994 log.o
+-rw-r--r--   1 rhialto  wheel  2880 Oct 24  1994 syslog.c
+-rw-r--r--   1 rhialto  wheel   425 Oct 24  1994 syslog.h
+-rw-r--r--   1 rhialto  wheel   924 Nov  5  1994 syslog.o
+-rw-r--r--   1 rhialto  wheel   814 Oct 24  1994 syslog_private.h
+-rw-r--r--   1 rhialto  wheel  8728 Oct 24  1994 syslogd
+-rw-r--r--   1 rhialto  wheel  9125 Oct 24  1994 syslogd.c
+-rw-r--r--   1 rhialto  wheel  3352 Oct 24  1994 syslogd.o
+-rw-r--r--   1 rhialto  wheel   512 Oct 24  1994 syslogi.o
+-rw-r--r--   1 rhialto  wheel   576 Oct 24  1994 syslogil.o
+-rw-r--r--   1 rhialto  wheel   672 Oct 24  1994 syslogl.o
+
+./util:
+total 116
+drwxr-xr-x   2 rhialto  wheel    512 May 12 15:13 ./
+drwxr-xr-x  11 rhialto  wheel    512 May 12 15:14 ../
+-rw-r--r--   1 rhialto  wheel     40 Jan  1  1980 .indent.pro
+-rw-r--r--   1 rhialto  wheel     24 Oct 16  1994 RCS_Link
+-rw-r--r--   1 rhialto  wheel   1838 Dec 22  1996 die.c
+-rw-r--r--   1 rhialto  wheel  21820 Dec 22  1996 fmtmain.c
+-rw-r--r--   1 rhialto  wheel   9774 Oct 14  1993 fmtwindow.c
+-rw-r--r--   1 rhialto  wheel   6594 Apr 17  1993 fmtwindow.gui
+-rw-r--r--   1 rhialto  wheel    983 Oct 31  1993 fmtwindow.gui.info
+-rw-r--r--   1 rhialto  wheel   3818 Oct 14  1993 fmtwindow.h
+-rw-r--r--   1 rhialto  wheel     26 Feb  3  1993 hanproto.h
+-rw-r--r--   1 rhialto  wheel   1860 Dec 22  1996 ignore.c
+-rw-r--r--   1 rhialto  wheel   2043 Dec 22  1996 inhibit.c
+-rw-r--r--   1 rhialto  wheel   3036 Dec 22  1996 loadconv.c
+-rw-r--r--   1 rhialto  wheel  12573 Dec 22  1996 messyfmt.c
+-rw-r--r--   1 rhialto  wheel  16670 Dec 22  1996 setmain.c
+-rw-r--r--   1 rhialto  wheel   6785 Dec 30  1993 setwindow.c
+-rw-r--r--   1 rhialto  wheel   3918 Oct 14  1993 setwindow.gui
+-rw-r--r--   1 rhialto  wheel    983 Oct 31  1993 setwindow.gui.info
+-rw-r--r--   1 rhialto  wheel   2335 Oct 14  1993 setwindow.h
