@@ -1,6 +1,9 @@
 /*-
- * $Id: hanlock.c,v 1.5 90/03/11 17:46:19 Rhialto Rel $
+ * $Id: hanlock.c,v 1.30a $
  * $Log:	hanlock.c,v $
+ * Revision 1.30  90/06/04  23:17:18  Rhialto
+ * Release 1 Patch 3
+ *
  * HANLOCK.C
  *
  * The code for the messydos file system handler
@@ -32,6 +35,8 @@ struct DirEntry FakeRootDirEntry = {
 	"Unnamed ",             /* msd_Name */
 	"   ",                  /* msd_Ext */
 	ATTR_VOLUMELABEL,	/* msd_Attributes */
+	0,			/* msd_CreationTime */
+	DATE_MIN,		/* msd_CreationDate, 1/1/80 */
 	{0},			/* msd_Pad1 */
 	0,			/* msd_Time */
 	DATE_MIN,		/* msd_Date, 1/1/80 */
@@ -39,7 +44,7 @@ struct DirEntry FakeRootDirEntry = {
 	0			/* msd_Filesize */
     },
     ROOT_SEC,			/* de_Sector */
-    0				/* de_Offset */
+    -2				/* de_Offset */
 };
 byte		DotDot[1 + 8 + 3] = "..          ";
 
@@ -519,7 +524,7 @@ register struct FileInfoBlock *fib;
     /*
      * Special treatment when we examine the root directory
      */
-    if (fib->fib_DiskKey == (long)ROOT_SEC << 16) {
+    if (msd->msd_Attributes & ATTR_VOLUMELABEL) {
 	strncpy(&fib->fib_FileName[1], msd->msd_Name, 8 + 3);
 	(void) ZapSpaces(&fib->fib_FileName[2], &fib->fib_FileName[1 + 8 + 3]);
     } else {
@@ -529,12 +534,16 @@ register struct FileInfoBlock *fib;
 	strncpy(&fib->fib_FileName[1], msd->msd_Name, 8);
 	/* Keep at least one character, even a space, before the dot */
 	dot = ZapSpaces(&fib->fib_FileName[2], &fib->fib_FileName[1 + 8]);
-	dot[0] = ' ';
-	strncpy(dot + 1, msd->msd_Ext, 3);
-	dot[4] = '\0';
-	end = ZapSpaces(dot, dot + 4);
-	if (end > dot)
-	    dot[0] = '.';
+	if (strncmp(msd->msd_Ext, "INF", 3) == 0) {
+	    strcpy(dot, ".info");
+	} else {
+	    dot[0] = ' ';
+	    strncpy(dot + 1, msd->msd_Ext, 3);
+	    dot[4] = '\0';
+	    end = ZapSpaces(dot, dot + 4);
+	    if (end > dot)
+		dot[0] = '.';
+	}
     }
     fib->fib_FileName[0] = strlen(&fib->fib_FileName[1]);
 
@@ -690,7 +699,7 @@ register struct MSFileLock *fl;
 {
     debug(("WriteFileLock %08lx\n", fl));
 
-    if (fl) {
+    if (fl && (int) fl->msfl_DirOffset >= 0) {
 	register byte  *block = GetSec(fl->msfl_DirSector);
 
 	if (block) {
@@ -707,13 +716,15 @@ void
 UpdateFileLock(fl)
 register struct MSFileLock *fl;
 {
-    struct DateStamp dateStamp;
-
     debug(("UpdateFileLock %08lx\n", fl));
 
-    DateStamp(&dateStamp);
-    ToMSDate(&fl->msfl_Msd.msd_Date, &fl->msfl_Msd.msd_Time, &dateStamp);
-    WriteFileLock(fl);
+    if (fl) {
+	struct DateStamp dateStamp;
+
+	DateStamp(&dateStamp);
+	ToMSDate(&fl->msfl_Msd.msd_Date, &fl->msfl_Msd.msd_Time, &dateStamp);
+	WriteFileLock(fl);
+    }
 }
 
 #endif
