@@ -1,6 +1,9 @@
 /*-
- * $Id: device2.c,v 1.53 92/10/25 02:10:25 Rhialto Rel $
- * $Log:	device2.c,v $
+ * $Id: device2.c,v 1.54 1993/06/24 04:56:00 Rhialto Exp $
+ * $Log: device2.c,v $
+ * Revision 1.54  1993/06/24  04:56:00	Rhialto
+ * Switch to RTF_AUTOINIT, saves a few bytes. DICE 2.07.54R.
+ *
  * Revision 1.53  92/10/25  02:10:25  Rhialto
  * Add TD_Getgeometry, TD_Eject.
  *
@@ -65,21 +68,8 @@ Prototype const char DevName[];
 Prototype const char idString[];
 
 const char	DevName[] = "messydisk.device";
-const char	idString[] = "$VER: messydisk.device $Revision: 1.53 $ $Date: 92/10/25 02:10:25 $\r\n";
+const char	idString[] = "$VER: messydisk.device $Revision: 1.54 $ $Date: 1993/06/24 04:56:00 $\r\n";
 
-/*
- * Data initialisation:
- */
-/*
-const UWORD	InitTable[] = {
-    INITBYTE(OFFSET(MessyDevice, dev_Node.ln_Type), NT_DEVICE),
-    INITLONG(OFFSET(MessyDevice, dev_Node.ln_Name), (long)DevName),
-    INITBYTE(OFFSET(MessyDevice, dev_Flags), LIBF_CHANGED | LIBF_SUMUSED),
-    INITBYTE(OFFSET(MessyDevice, dev_Version), VERSION),
-    INITBYTE(OFFSET(MessyDevice, dev_Revision), REVISION),
-    INITLONG(OFFSET(MessyDevice, dev_IdString), (long)idString)
-};
-*/
 /*
  * Device commands:
  */
@@ -137,25 +127,45 @@ __A1 struct IOStdReq *ioreq;
 __A6 DEV       *dev;
 {
     UNIT	   *unit;
+    int 	    nrflags;
 
     debug(("OpenDevice unit %ld, flags %lx\n", unitno, flags));
+    ++dev->dev_OpenCnt;
+
+    if (nrflags = unitno / MD_NUMUNITS) {
+	/* Units 4..7 are fixed 40-tracks */
+	/* Units 8..11 are fixed non-40-tracks */
+	switch (nrflags) {
+	case 1:
+	    flags |= IOMDF_40TRACKS | IOMDF_FIXFLAGS;
+	    unitno -= MD_NUMUNITS;
+	    break;
+	case 2:
+	    flags &= ~IOMDF_40TRACKS;
+	    flags |= IOMDF_FIXFLAGS;
+	    unitno -= 2 * MD_NUMUNITS;
+	    break;
+	}
+    }
     if (unitno >= MD_NUMUNITS)
 	goto error;
 
     if ((unit = dev->md_Unit[unitno]) == NULL) {
-	if ((unit = UnitInit(dev, unitno)) == NULL)
+	if ((unit = UnitInit(dev, unitno, flags)) == NULL)
 	    goto error;
 	dev->md_Unit[unitno] = unit;
     }
     ioreq->io_Unit = (struct Unit *) unit;
 
     ++unit->mu_OpenCnt;
-    ++dev->dev_OpenCnt;
     dev->dev_Flags &= ~LIBF_DELEXP;
+    ioreq->io_Error = 0;
+    ioreq->io_Flags = flags;
 
     return;
 
 error:
+    --dev->dev_OpenCnt;
     ioreq->io_Error = IOERR_OPENFAIL;
 }
 
@@ -187,7 +197,7 @@ __A6 DEV       *dev;
 
     if (unit->mu_OpenCnt && --unit->mu_OpenCnt == 0) {
 	dev->md_Unit[unit->mu_UnitNr] = NULL;
-	UnitCloseDown(ioreq, dev, unit);
+	UnitCloseDown(dev, unit);
     }
     /*
      * Make sure the ioreq is not used again.
