@@ -1,7 +1,10 @@
 ;;;;
 ;
-; $Id: devio1.a,v 1.53 92/10/25 02:11:43 Rhialto Rel $
+; $Id: devio1.a,v 1.54 1993/06/24 04:56:00 Rhialto Exp $
 ; $Log: devio1.a,v $
+; Revision 1.54  1993/06/24  04:56:00  Rhialto
+; DICE 2.07.54R.
+;
 ; Revision 1.53  92/10/25  02:11:43  Rhialto
 ; No change.
 ;
@@ -31,34 +34,6 @@
 
 	section     text,code
 	include     "c.i"
-
-; Some hardware data:
-
-INDEXSYNC	equ $5224	; special sync for index
-SYNC		equ $4489	; normal sector sync
-TLEN		equ 12500	; 2 miscrosecs/bit, 200 ms/track -> 100000 bits
-
-;;;;
-;
-;   The following lengths are all in unencoded bytes (or encoded words)
-
-INDEXGAP	equ 40
-INDXGAP 	equ 12
-INDXSYNC	equ  3
-INDXMARK	equ  1
-INDEXGAP2	equ 40
-
-IDGAP2		equ 12
-IDSYNC		equ  3
-IDMARK		equ  1
-IDDATA		equ  4
-IDCRC		equ  2
-
-DATAGAP1	equ 22
-DATAGAP2	equ 12
-DATASYNC	equ  3
-DATAMARK	equ  1
-DATACRC 	equ  2
 
 ; Some hardware addresses:
 
@@ -107,7 +82,6 @@ _SafeEnableICR: 		    ; the argument is passed as a long for now
 ;
 ;   Disk index interrupt code.
 ;   is_Data (A1) is the value to stuff into the DSKLEN register.
-;   A0 points to the custom chips already.
 ;   It then enables the disk block interrupt and disables the
 ;   index interrupt.
 
@@ -274,7 +248,7 @@ maxsec	    set     -20
 	move.l	a1,rawend(a5)           ; rawend =
 
 ; byte	*trackbuf = unit->mu_TrackBuffer;
-	lea	mu_TrackBuffer(a0),a1
+	move.l	mu_TrackBuffer(a0),a1
 	move.l	a1,trackbuf(a5)
 
 ; word *oldcrc = unit->mu_CrcBuffer;
@@ -318,7 +292,7 @@ fid_endsync:
 	ble.s	nomax
 	move.w	d0,maxsec(a5)       ; record the highest sector number
 nomax:
-	subq.w	#1,d0		    ; normalize sector number
+	subq.w	#1,d0		    ; normalise sector number
 	move.l	d0,sector(a5)
 
 find_data:			    ; Then find the data block.
