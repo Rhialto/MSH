@@ -1,5 +1,8 @@
-; $Id: device1.a,v 1.46 91/10/06 18:25:18 Rhialto Rel $
+; $Id: device1.a,v 1.51 92/04/17 15:41:30 Rhialto Rel $
 ; $Log: device1.a,v $
+; Revision 1.51  92/04/17  15:41:30  Rhialto
+; Freeze for MAXON3.
+;
 ; Revision 1.46  91/10/06  18:25:18  Rhialto
 ;
 ; Freeze for MAXON
@@ -118,7 +121,7 @@ __LibNull:
 
 
 ;#ifdef HANDLE_IO_QUICK
-	ifne	0
+	ifne	HANDLE_IO_QUICK
 ;;;;
 ;
 ;   C interface to the atomic set bit and test old value instruction.
@@ -132,7 +135,7 @@ __LibNull:
 _BSET_ACTIVE:
 	move.l	4(sp),a0
 @BSET_ACTIVE:
-	bset	#0,(a0)         ; UNITB_ACTIVE
+	bset	#UNITB_ACTIVE,(a0)         ; 0 UNITB_ACTIVE
 	sne	d0
 	rts
 	endc
