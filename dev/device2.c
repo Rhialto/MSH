@@ -1,6 +1,9 @@
 /*-
- * $Id: device.c,v 1.40 91/03/03 17:55:48 Rhialto Rel $
- * $Log:	device.c,v $
+ * $Id: device2.c,v 1.42 91/06/13 23:45:09 Rhialto Exp $
+ * $Log:	device2.c,v $
+ * Revision 1.42  91/06/13  23:45:09  Rhialto
+ * DICE conversion
+ *
  * Revision 1.40  91/03/03  17:55:48  Rhialto
  * Freeze for MAXON
  *
@@ -26,10 +29,7 @@
 
 /*#undef DEBUG			/**/
 #ifdef DEBUG
-#   define	debug(x)  syslog x
-    void initsyslog(void);
-    void syslog(char *, ...);
-    void uninitsyslog(void);
+#   include "syslog.h"
 #else
 #   define	debug(x)
 #endif
@@ -37,7 +37,7 @@
 
 
 char		DevName[] = "messydisk.device";
-char		idString[] = "messydisk.device $Revision: 1.40 $ $Date: 91/03/03 17:55:48 $\r\n";
+char		idString[] = "messydisk.device $Revision: 1.42 $ $Date: 91/06/13 23:45:09 $\r\n";
 
 /*
  * -30-6*X  Library vectors:
