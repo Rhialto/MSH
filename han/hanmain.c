@@ -1,6 +1,12 @@
 /*-
- * $Id: hanmain.c,v 1.54 1993/06/24 05:12:49 Rhialto Exp $
+ * $Id: hanmain.c,v 1.55 1993/12/30 23:02:45 Rhialto Rel $
  * $Log: hanmain.c,v $
+ * Revision 1.55  1993/12/30  23:02:45	Rhialto
+ * New LONGNAMES filesystem, changes throughout the handler.
+ * Optional (compile-time) broadcast IECLASS_DISKINSERTED messages.
+ * Don't fail Info() if there is no disk in drive.
+ * Freeze for MAXON5.
+ *
  * Revision 1.54  1993/06/24  05:12:49	Rhialto
  * DICE 2.07.54R.
  *
@@ -45,22 +51,23 @@
  *  Some start/stop stuff that is not really part of the
  *  file system itself but that must be done anyway.
  *
- *  This code is (C) Copyright 1989 by Olaf Seibert. All rights reserved. May
- *  not be used or copied without a licence.
+ *  This code is (C) Copyright 1989-1994 by Olaf Seibert. All rights reserved.
+ *  May not be used or copied without a licence.
 -*/
 
 #include "han.h"
 #include "dos.h"
-#ifdef CONVERSIONS
+#if CONVERSIONS
 #   include "hanconv.h"
 #endif
-#ifdef INPUTDEV
+#if INPUTDEV
 #include <devices/input.h>
 #include <devices/inputevent.h>
+#include <clib/intuition_protos.h>
 #endif
 
 #include <string.h>
-#ifdef HDEBUG
+#if HDEBUG
 #   include "syslog.h"
 #else
 #   define	debug(x)
@@ -81,10 +88,10 @@ Prototype long MSRelabel(byte *newname);
 Prototype struct PrivateInfo *PrivateInfo(void);
 
 struct Library *IntuitionBase;
-#ifdef INPUTDEV
+#if INPUTDEV
 struct IOStdReq *InputIOReq;
 #endif
-Local const char RCSId[] = "\0$VER: Messydos filing system $Revision: 1.54 $ $Date: 1993/06/24 05:12:49 $, by Olaf Seibert";
+Local const char RCSId[] = "\0$\VER: Messydos filing system $Revision: 1.55 $ $Date: 1993/12/30 23:02:45 $, by Olaf Seibert";
 
 #define CONV_SEP    ';'
 
@@ -112,6 +119,8 @@ ZapSpaces(begin, end)
 byte	       *begin,
 	       *end;
 {
+    *end = '\0';                /* Make sure the string is 0-terminated */
+
     while (end > begin && end[-1] == ' ')
 	*--end = '\0';
 
@@ -155,7 +164,7 @@ byte	       *source;
 	int		c;
 
 	source++;
-#ifdef CONVERSIONS
+#if CONVERSIONS
 	c = source[0] & 31;
 	if (c >= ConvFence)
 	    c = ConvNone;
@@ -222,7 +231,7 @@ byte	       *source;
 	int		c;
 
 	slashp++;
-#ifdef CONVERSIONS
+#if CONVERSIONS
 	c = slashp[0] & 31;
 	if (c >= ConvFence)
 	    c = ConvNone;
@@ -244,7 +253,7 @@ long
 MSDiskInfo(infodata)
 struct InfoData *infodata;
 {
-    setmem(infodata, sizeof (*infodata), 0);
+    setmem(infodata, sizeof(*infodata), 0);
 
     infodata->id_DiskState = IDDiskState;
     infodata->id_DiskType = IDDiskType;
@@ -303,9 +312,12 @@ int
 MSDiskRemoved(locks)
 struct LockList **locks;
 {
-#ifndef READONLY
-    if (FatDirty || CacheDirty)
-	MSUpdate(1);            /* Force a requester */
+    debug(("MSDiskRemoved(), FatDirty=%d, CacheDirty=%d\n",
+	    FatDirty, CacheDirty));
+#if !READONLY
+    if (FatDirty || CacheDirty) {
+	MSUpdate(1);		/* Force a requester */
+    }
 #endif
 
     FreeFat();
@@ -319,7 +331,7 @@ struct LockList **locks;
 	debug(("MSDiskRemoved with no RootLock\n"));
 	return 1;
     }
-#ifdef HDEBUG
+#if HDEBUG
     if (RootLock != GetTail(&LockList->ll_List)) {
 	debug(("RootLock not at end of LockList!\n"));
 	/* Get the lock on the root dir at the tail of the List */
@@ -333,7 +345,7 @@ struct LockList **locks;
      * information about it.
      */
 
-    MSUnLock(RootLock);         /* may call FreeLockList and free VolNode
+    MSUnLock(RootLock); 	/* may call FreeLockList and free VolNode
 				 * (!) */
     RootLock = NULL;
 
@@ -346,7 +358,7 @@ struct LockList **locks;
     }
 }
 
-#ifdef INPUTDEV
+#if INPUTDEV
 void
 InputDiskInserted(void)
 {
@@ -354,6 +366,13 @@ InputDiskInserted(void)
 
     memset(&ie, 0, sizeof(ie));
     ie.ie_Class = IECLASS_DISKINSERTED;
+    ie.ie_Qualifier = IEQUALIFIER_MULTIBROADCAST;
+    /*
+     * Use Intuition to get the current time.
+     * If we were a 2.04+ only application, we could use
+     * timer.device/GetSysTime().
+     */
+    CurrentTime(&ie.ie_TimeStamp.tv_secs, &ie.ie_TimeStamp.tv_micro);
 
     InputIOReq->io_Command = IND_WRITEEVENT;
     InputIOReq->io_Data = &ie;
@@ -369,6 +388,9 @@ InputDiskRemoved(void)
 
     memset(&ie, 0, sizeof(ie));
     ie.ie_Class = IECLASS_DISKREMOVED;
+    ie.ie_Qualifier = IEQUALIFIER_MULTIBROADCAST;
+    /* Use Intuition to get the current time */
+    CurrentTime(&ie.ie_TimeStamp.tv_secs, &ie.ie_TimeStamp.tv_micro);
 
     InputIOReq->io_Command = IND_WRITEEVENT;
     InputIOReq->io_Data = &ie;
@@ -381,19 +403,19 @@ InputDiskRemoved(void)
 void
 HanCloseDown()
 {
-#ifdef HDEBUG
+#if HDEBUG
     struct MSFileLock *fl;
 
     while (LockList && (fl = (struct MSFileLock *) GetHead(&LockList->ll_List))) {
 	debug(("UNLOCKING %08lx: ", fl));
 	PrintDirEntry((struct DirEntry *)&fl->msfl_Msd);
-	MSUnLock(fl);           /* Remove()s it from this List */
+	MSUnLock(fl);		/* Remove()s it from this List */
     }
 #endif
-#ifdef CONVERSIONS
+#if CONVERSIONS
     ConvCleanUp();
 #endif
-#ifdef INPUTDEV
+#if INPUTDEV
 
     if (InputIOReq) {
 	if (InputIOReq->io_Unit) {
@@ -444,7 +466,7 @@ HanOpenUp()
 
     TimeIOReq = NULL;
 
-#ifdef HDEBUG
+#if HDEBUG
     if (!(DiskReplyPort = CreatePort("MSH:disk.replyport", -1L)))
 	goto abort;
 #else
@@ -454,7 +476,8 @@ HanOpenUp()
 
     debug(("DiskReplyPort = 0x%08lx\n", DiskReplyPort));
 
-    if (!(DiskIOReq = CreateExtIO(DiskReplyPort, (long) sizeof (*DiskIOReq)))) {
+    if (!(DiskIOReq = (struct IOExtTD *)
+		      CreateExtIO(DiskReplyPort, (long) sizeof(*DiskIOReq)))) {
 	debug(("Failed to CreateExtIO\n"));
 	goto abort;
     }
@@ -464,15 +487,15 @@ HanOpenUp()
 	goto abort;
     }
     TimeIOReq = (struct timerequest *) CreateExtIO(DiskReplyPort,
-					     (long) sizeof (*TimeIOReq));
+					     (long) sizeof(*TimeIOReq));
 
     if (TimeIOReq == NULL || OpenDevice(TIMERNAME, UNIT_VBLANK,
 					(struct IORequest *)TimeIOReq, 0L))
 	goto abort;
     TimeIOReq->tr_node.io_Flags = IOF_QUICK;	/* For the first WaitIO() */
 
-#ifdef INPUTDEV
-    if (!(InputIOReq = CreateExtIO(DiskReplyPort, (long) sizeof (*InputIOReq)))) {
+#if INPUTDEV
+    if (!(InputIOReq = (struct IOStdReq *)CreateExtIO(DiskReplyPort, (long) sizeof(*InputIOReq)))) {
 	debug(("Failed to CreateExtIO for input.device\n"));
 	goto abort;
     }
@@ -483,6 +506,7 @@ HanOpenUp()
 #endif
 
     IntuitionBase = OpenLibrary("intuition.library", 0L);
+    debug(("HanOpenUp() done.\n"));
     return DOSTRUE;
 
 abort:
@@ -498,7 +522,7 @@ long
 MSRelabel(newname)
 byte	       *newname;
 {
-#ifdef READONLY
+#if READONLY
     return DOSFALSE;
 #else
     /*
@@ -565,7 +589,7 @@ byte	       *newname;
 		    }
 		}
 		CopyMem((byte *)dir, tosec + new->msfl_DirOffset,
-			(long) sizeof (struct MsDirEntry));
+			(long) sizeof(struct MsDirEntry));
 		MarkSecDirty(tosec);
 		RootLock->msfl_DirSector = Disk.rootdir;
 		RootLock->msfl_DirOffset = (byte *) dir - fromsec;
@@ -618,22 +642,22 @@ PrivateInfo()
 {
     static struct PrivateInfo info = {
 	PRIVATE_REVISION,
-	sizeof (struct PrivateInfo),
+	sizeof(struct PrivateInfo),
 	RCSId,
 	&CheckBootBlock,
 	&DefaultConversion,
-	&DiskIOReq,
-#ifdef CONVERSIONS
-	2,	/* == ConvFence - 1 */
+	&DiskIOReq
+#if CONVERSIONS
+	,2,	/* == ConvFence - 1 */
 	&Table_FromPC, &Table_ToPC,
-	&Table_FromST, &Table_ToST,
+	&Table_FromST, &Table_ToST
 #endif
     };
 
     return &info;
 }
 
-#ifdef HDEBUG
+#if HDEBUG
 
 _abort()
 {
