@@ -1,6 +1,9 @@
 /*-
- * $Id: hanfile.c,v 1.46 91/10/06 18:24:36 Rhialto Rel $
+ * $Id: hanfile.c,v 1.51 92/04/17 15:37:53 Rhialto Rel $
  * $Log:	hanfile.c,v $
+ * Revision 1.51  92/04/17  15:37:53  Rhialto
+ * Freeze for MAXON.
+ *
  * Revision 1.46  91/10/06  18:24:36  Rhialto
  *
  * Freeze for MAXON
@@ -36,7 +39,6 @@
  * May not be used or copied without a licence.
 -*/
 
-#include <amiga.h>
 #include <functions.h>
 #include <string.h>
 #include "han.h"
@@ -61,6 +63,7 @@ Prototype struct MSFileHandle *MakeMSFileHandle(struct MSFileLock *fl, long mode
 Prototype struct MSFileHandle *MSOpen(struct MSFileLock *parentdir, char *name, long mode);
 Prototype long MSClose(struct MSFileHandle *fh);
 Prototype long FilePos(struct MSFileHandle *fh, long position, long mode);
+Prototype void AdjustSeekPos(struct MSFileHandle *fh);
 Prototype long MSSeek(struct MSFileHandle *fh, long position, long mode);
 Prototype long MSRead(struct MSFileHandle *fh, byte *userbuffer, long size);
 Prototype long MSWrite(struct MSFileHandle *fh, byte *userbuffer, long size);
@@ -96,10 +99,10 @@ GetFat()
 
     debug(("counting free clusters\n"));
 
-    Disk.nsectsfree = 0;
+    Disk.freeclusts = 0;
     for (i = MS_FIRSTCLUST; i <= Disk.maxclst; i++) {
 	if (GetFatEntry((word) i) == FAT_UNUSED)
-	    Disk.nsectsfree += Disk.spc;
+	    Disk.freeclusts++;
     }
 
     return 1;
@@ -204,7 +207,7 @@ word		prev;
     if (prev == 0 || prev == FAT_EOF)
 	prev = MS_FIRSTCLUST - 1;
 
-    if (Disk.nsectsfree >= Disk.spc) {
+    if (Disk.freeclusts > 0) {
 	for (i = prev + 1; i != prev; i++) {
 	    if (i > Disk.maxclst)       /* Wrap around */
 		i = MS_FIRSTCLUST;
@@ -212,7 +215,7 @@ word		prev;
 		SetFatEntry(i, FAT_EOF);
 		if (prev >= MS_FIRSTCLUST)
 		    SetFatEntry(prev, i);
-		Disk.nsectsfree -= Disk.spc;
+		Disk.freeclusts--;
 		return i;
 	    }
 	}
@@ -235,10 +238,11 @@ register word	cluster;
      * Find the end of the cluster chain to tack the new cluster on to.
      * Then FindFreeCluster will (or won't) extend the chain for us.
      */
-    if (cluster != 0)
+    if (cluster != 0) {
 	while ((nextcluster = NextCluster(cluster)) != FAT_EOF) {
 	    cluster = nextcluster;
 	}
+    }
 
     return FindFreeCluster(cluster);
 }
@@ -256,7 +260,7 @@ register word	cluster;
     while (cluster != FAT_EOF) {
 	nextcluster = NextCluster(cluster);
 	SetFatEntry(cluster, FAT_UNUSED);
-	Disk.nsectsfree += Disk.spc;
+	Disk.freeclusts++;
 	cluster = nextcluster;
     }
 }
@@ -321,7 +325,7 @@ long		mode;
     }
 
 #ifdef CONVERSIONS
-    ConversionImbeddedInFileName = ConvNone;
+    ConversionImbeddedInFileName = DefaultConversion;
 #endif
     if (fl = MSLock(parentdir, name, lockmode)) {
 makefh:
@@ -386,9 +390,22 @@ long		mode;
 	return fh->msfh_SeekPos + position;
 	break;
     case OFFSET_END:
-	return fh->msfh_FileLock->msfl_Msd.msd_Filesize - position;
+	return fh->msfh_FileLock->msfl_Msd.msd_Filesize + position;
     }
 }
+
+#ifdef ACTION_SET_FILE_SIZE
+void
+AdjustSeekPos(fh)
+struct MSFileHandle *fh;
+{
+    if (fh->msfh_SeekPos > fh->msfh_FileLock->msfl_Msd.msd_Filesize) {
+	/* fh->msfh_Cluster needs to be fully recalculated */
+	MSSeek(fh, 0, OFFSET_BEGINNING);
+	MSSeek(fh, 0, OFFSET_END);
+    }
+}
+#endif
 
 long
 MSSeek(fh, position, mode)
@@ -396,13 +413,19 @@ struct MSFileHandle *fh;
 long		position;
 long		mode;
 {
-    long	    oldpos = fh->msfh_SeekPos;
+    long	    oldpos;
     long	    newpos;
     long	    filesize = fh->msfh_FileLock->msfl_Msd.msd_Filesize;
     word	    cluster = fh->msfh_Cluster;
     word	    oldcluster;
     word	    newcluster;
 
+#ifdef ACTION_SET_FILE_SIZE
+    if (fh->msfh_SeekPos > fh->msfh_FileLock->msfl_Msd.msd_Filesize) {
+	fh->msfh_SeekPos = fh->msfh_FileLock->msfl_Msd.msd_Filesize;
+    }
+#endif
+    oldpos = fh->msfh_SeekPos;
     newpos = FilePos(fh, position, mode);
 
     if (newpos < 0 || newpos > filesize) {
@@ -441,6 +464,9 @@ register long	size;
     if (CheckLock(fh->msfh_FileLock))
 	return -1;
 
+#ifdef ACTION_SET_FILE_SIZE
+    AdjustSeekPos(fh);
+#endif
     if (fh->msfh_SeekPos + size > fh->msfh_FileLock->msfl_Msd.msd_Filesize)
 	size = fh->msfh_FileLock->msfl_Msd.msd_Filesize - fh->msfh_SeekPos;
 
@@ -506,6 +532,9 @@ register long	size;
 	return -1;
     }
 
+#ifdef ACTION_SET_FILE_SIZE
+    AdjustSeekPos(fh);
+#endif
     oldsize = size;
 
     while (size > 0) {
