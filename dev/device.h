@@ -1,6 +1,9 @@
 /*-
- *  $Id: device.h,v 1.30 90/06/04 23:19:28 Rhialto Rel $
+ *  $Id: device.h,v 1.34 91/01/24 00:13:57 Rhialto Exp $
  *  $Log:	device.h,v $
+ * Revision 1.40  91/03/03  17:56:47  Rhialto
+ * Freeze for MAXON
+ * 
  * Revision 1.34  91/01/24  00:13:57  Rhialto
  * Use TD_RAWWRITE under AmigaOS 2.0.
  *

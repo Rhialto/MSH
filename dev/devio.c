@@ -1,6 +1,9 @@
 /*-
- * $Id: devio.c,v 1.32 90/11/23 23:55:22 Rhialto Exp $
+ * $Id: devio.c,v 1.34 91/01/24 00:15:39 Rhialto Exp $
  * $Log:	devio.c,v $
+ * Revision 1.34  91/01/24  00:15:39  Rhialto
+ * Use TD_RAWWRITE under AmigaOS 2.0.
+ * 
  * Revision 1.32  90/11/23  23:55:22  Rhialto
  * Prepare for syslog
  *

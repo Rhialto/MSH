@@ -1,6 +1,10 @@
 /*-
- * $Id: hanlock.c,v 1.32 90/11/23 23:54:18 Rhialto Exp $
+ * $Id: hanlock.c,v 1.33 91/01/24 00:08:27 Rhialto Exp $
  * $Log:	hanlock.c,v $
+ * Revision 1.33  91/01/24  00:08:27  Rhialto
+ * Fix directory-extension bug (only first sector of new cluster
+ * was zeroed)
+ * 
  * Revision 1.32  90/11/23  23:54:18  Rhialto
  * Prepare for syslog
  *

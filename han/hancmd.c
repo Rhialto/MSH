@@ -1,6 +1,9 @@
 /*-
- * $Id: hancmd.c,v 1.30 90/06/04 23:18:03 Rhialto Rel $
+ * $Id: hancmd.c,v 1.32 90/11/23 23:50:53 Rhialto Exp $
  * $Log:	hancmd.c,v $
+ * Revision 1.32  90/11/23  23:50:53  Rhialto
+ * Prepare for syslog
+ * 
  * Revision 1.30  90/06/04  23:18:03  Rhialto
  * Release 1 Patch 3
  *

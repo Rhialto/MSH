@@ -1,6 +1,9 @@
 /*-
- *  $Id: han.h,v 1.31 90/11/10 02:50:47 Rhialto Exp $
+ *  $Id: han.h,v 1.35 91/03/03 17:43:39 Rhialto Exp $
  *  $Log:	han.h,v $
+ * Revision 1.35  91/03/03  17:43:39  Rhialto
+ * Cache list is now two lists: LRU and sorted by sector.
+ * 
  * Revision 1.31  90/11/10  02:50:47  Rhialto
  * Patch 3a. Introduce disk volume date.
  *

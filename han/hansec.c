@@ -1,6 +1,9 @@
 /*-
- * $Id: hansec.c,v 1.33 91/01/24 00:09:38 Rhialto Exp $
+ * $Id: hansec.c,v 1.35 91/03/03 17:42:19 Rhialto Exp $
  * $Log:	hansec.c,v $
+ * Revision 1.35  91/03/03  17:42:19  Rhialto
+ * Cache list is now two lists: LRU and sorted by sector.
+ *
  * Revision 1.33  91/01/24  00:09:38  Rhialto
  * Constrain behaviour of FindFreeSector.
  *

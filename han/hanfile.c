@@ -1,6 +1,9 @@
 /*-
- * $Id: hanfile.c,v 1.31 90/11/10 02:50:04 Rhialto Exp $
+ * $Id: hanfile.c,v 1.32 90/11/23 23:54:57 Rhialto Exp $
  * $Log:	hanfile.c,v $
+ * Revision 1.32  90/11/23  23:54:57  Rhialto
+ * Prepare for syslog
+ *
  * Revision 1.31  90/11/10  02:50:04  Rhialto
  * Patch 3a. Update modification time of directories.
  *

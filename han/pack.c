@@ -1,6 +1,9 @@
 /*-
- * $Id: pack.c,v 1.31 90/11/10 02:42:38 Rhialto Exp $
+ * $Id: pack.c,v 1.32 90/11/23 23:53:22 Rhialto Exp $
  * $Log:	pack.c,v $
+ * Revision 1.32  90/11/23  23:53:22  Rhialto
+ * Prepare for syslog
+ * 
  * Revision 1.31  90/11/10  02:42:38  Rhialto
  * Patch 3a.
  *

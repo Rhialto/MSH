@@ -1,6 +1,9 @@
 /*-
- * $Id: support.c,v 1.3 90/03/11 17:44:51 Rhialto Rel $
+ * $Id: support.c,v 1.30 90/06/04 23:16:41 Rhialto Rel $
  * $Log:	support.c,v $
+ * Revision 1.30  90/06/04  23:16:41  Rhialto
+ * Release 1 Patch 3
+ *
 -*/
 
 #include "dos.h"

@@ -1,7 +1,10 @@
 
 /*
- *  $Id: dos.h,v 1.3 90/03/11 17:45:55 Rhialto Rel $
- *  $Log$
+ *  $Id: dos.h,v 1.30 90/06/04 23:18:20 Rhialto Rel $
+ *  $Log:	dos.h,v $
+ * Revision 1.30  90/06/04  23:18:20  Rhialto
+ * Release 1 Patch 3
+ * 
  */
 
 #ifndef EXEC_TYPES_H

@@ -1,6 +1,9 @@
 /*
- * $Id$
- * $Log$
+ * $Id: messyfmt.c,v 1.30 90/06/04 23:20:13 Rhialto Rel $
+ * $Log:	messyfmt.c,v $
+ * Revision 1.30  90/06/04  23:20:13  Rhialto
+ * Release 1 Patch 3
+ * 
  * MESSYFMT.C
  *
  * Formats a disk. Low-level formatting can also be done by mounting a file

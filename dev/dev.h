@@ -1,6 +1,9 @@
 /*-
- *  $Id: dev.h,v 1.3 90/03/11 17:46:47 Rhialto Rel $
- *  $Log$
+ *  $Id: dev.h,v 1.30 90/06/04 23:19:21 Rhialto Rel $
+ *  $Log:	dev.h,v $
+ * Revision 1.30  90/06/04  23:19:21  Rhialto
+ * Release 1 Patch 3
+ * 
  *  Include file for users of the messydisk.device
 -*/
 

@@ -1,5 +1,5 @@
 /*-
- * $Id$
+ * $Id: die.c,v 1.31 90/11/10 02:46:19 Rhialto Exp $
  *
  *  DIE.C
  *

@@ -1,6 +1,9 @@
 /*-
- * $Id: date.c,v 1.30 90/06/04 23:18:11 Rhialto Rel $
+ * $Id: date.c,v 1.32 90/11/23 23:55:51 Rhialto Exp $
  * $Log:	date.c,v $
+ * Revision 1.32  90/11/23  23:55:51  Rhialto
+ * Prepare for syslog
+ * 
  * Revision 1.30  90/06/04  23:18:11  Rhialto
  * Release 1 Patch 3
  *

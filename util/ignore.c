@@ -1,5 +1,5 @@
 /*
- * $Id$
+ * $Id: ignore.c,v 1.31 90/11/10 02:42:14 Rhialto Exp $
  *
  *  IGNORE.C
  *

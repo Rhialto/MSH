@@ -1,6 +1,9 @@
 /*-
- * $Id: hanmain.c,v 1.31 90/11/10 02:46:35 Rhialto Exp $
+ * $Id: hanmain.c,v 1.32 90/11/23 23:54:07 Rhialto Exp $
  * $Log:	hanmain.c,v $
+ * Revision 1.32  90/11/23  23:54:07  Rhialto
+ * Prepare for syslog
+ * 
  * Revision 1.31  90/11/10  02:46:35  Rhialto
  * Patch 3a. Changes location of disk volume date.
  *
@@ -30,7 +33,7 @@
 extern int	CheckBootBlock;
 extern char	DotDot[1 + 8 + 3];
 struct Library *IntuitionBase;
-static char RCSId[] = "Messydos filing system $Revision: 1.31 $ $Date: 90/11/10 02:46:35 $, by Olaf Seibert";
+static char RCSId[] = "Messydos filing system $Revision: 1.32 $ $Date: 90/11/23 23:54:07 $, by Olaf Seibert";
 
 byte
 ToUpper(ch)

@@ -1,6 +1,9 @@
 /*-
- * $Id: hanreq.c,v 1.30 90/06/04 23:17:48 Rhialto Rel $
+ * $Id: hanreq.c,v 1.32 90/11/23 23:53:42 Rhialto Exp $
  * $Log:	hanreq.c,v $
+ * Revision 1.32  90/11/23  23:53:42  Rhialto
+ * Prepare for syslog
+ * 
  * Revision 1.30  90/06/04  23:17:48  Rhialto
  * Release 1 Patch 3
  *

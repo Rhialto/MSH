@@ -1,6 +1,9 @@
 /*-
- * $Id: device.c,v 1.30 90/06/04 23:18:39 Rhialto Rel $
+ * $Id: device.c,v 1.32 90/11/23 23:54:36 Rhialto Exp $
  * $Log:	device.c,v $
+ * Revision 1.32  90/11/23  23:54:36  Rhialto
+ * Prepare for syslog
+ * 
  * Revision 1.30  90/06/04  23:18:39  Rhialto
  * Release 1 Patch 3
  *
@@ -60,7 +63,7 @@ _RomTag:
 /* INDENT ON */
 
 char		DevName[] = "messydisk.device";
-char		idString[] = "messydisk.device $Revision: 1.30 $ $Date: 90/06/04 23:18:39 $\r\n";
+char		idString[] = "messydisk.device $Revision: 1.32 $ $Date: 90/11/23 23:54:36 $\r\n";
 
 /*
  * -30-6*X  Library vectors:
