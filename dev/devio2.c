@@ -1,6 +1,9 @@
 /*-
- * $Id: devio2.c,v 1.47 91/11/03 00:49:17 Rhialto Exp $
+ * $Id: devio2.c,v 1.51 92/04/17 15:42:39 Rhialto Rel $
  * $Log:	devio2.c,v $
+ * Revision 1.51  92/04/17  15:42:39  Rhialto
+ * Freeze for MAXON3. Change cyl+side units to track units.
+ *
  * Revision 1.47  91/11/03  00:49:17  Rhialto
  * Only set WORDSYNC when we want to write, not on read.
  *
@@ -34,10 +37,8 @@
  * May not be used or copied without a licence.
 -*/
 
-#include <amiga.h>
-#include <functions.h>
-#include "dev.h"
 #include "device.h"
+#include <functions.h>
 
 /*#undef DEBUG			/**/
 #ifdef DEBUG
@@ -55,8 +56,9 @@ Prototype void CMD_Update(struct IOStdReq *ioreq, UNIT *unit);
 Prototype void CMD_Clear(struct IOStdReq *ioreq, UNIT *unit);
 Prototype void TD_Seek(struct IOStdReq *ioreq, UNIT *unit);
 Prototype void TD_Changenum(struct IOStdReq *ioreq, UNIT *unit);
-Prototype void TD_Addchangeint(struct IOStdReq *ioreq);
-Prototype void TD_Remchangeint(struct IOStdReq *ioreq);
+Prototype void TD_Addchangeint(struct IOStdReq *ioreq, UNIT *unit);
+Prototype void TD_Remchangeint(struct IOStdReq *ioreq, UNIT *unit);
+Prototype void TD_Getgeometry(struct IOStdReq *ioreq, UNIT *unit);
 Prototype int DevInit(DEV *dev);
 Prototype void InitDecoding(byte  *decode);
 Prototype long MyDoIO(struct IORequest *req);
@@ -685,6 +687,7 @@ REGISTER UNIT  *unit;
     long	    offset;
     byte	   *diskbuf;
     int 	    retrycount;
+    int 	    error;
 
     debug(("CMD_Read "));
     userbuf = (byte *) ioreq->io_Data;
@@ -697,6 +700,7 @@ REGISTER UNIT  *unit;
     debug(("Tr=%ld Si=%ld Se=%ld\n", (long)track / MS_NSIDES, (long)track % MS_NSIDES, (long)sector));
 
     ioreq->io_Actual = 0;
+    error = TDERR_NoError;
 
     if (length <= 0 || CheckRequest((struct IOExtTD *)ioreq, unit))
 	goto end;
@@ -704,9 +708,9 @@ REGISTER UNIT  *unit;
     retrycount = 0;
     diskbuf = unit->mu_TrackBuffer + MS_BPS * sector;
 gettrack:
-    GetTrack(ioreq, track);
+    error = GetTrack(ioreq, track);
 
-    for (;;) {
+    while (error == TDERR_NoError) {
 	/*
 	 * Have we ever checked this CRC?
 	 */
@@ -725,7 +729,7 @@ gettrack:
 		unit->mu_CurrentTrack = -1;
 		goto gettrack;
 	    }
-	    ioreq->io_Error = unit->mu_SectorStatus[sector];
+	    error = unit->mu_SectorStatus[sector];
 	    goto end;	    /* Don't use this sector anymore... */
 	}
 	retrycount = 0;
@@ -742,11 +746,12 @@ gettrack:
 		/* ioreq->io_Error = IOERR_BADLENGTH; */
 		goto end;
 	    }
-	    GetTrack(ioreq, track);
+	    error = GetTrack(ioreq, track);
 	}
     }
 
 end:
+    ioreq->io_Error = error;
     TermIO(ioreq);
 }
 
@@ -1020,12 +1025,10 @@ REGISTER UNIT  *unit;
  */
 
 void
-TD_Addchangeint(ioreq)
+TD_Addchangeint(ioreq, unit)
 REGISTER struct IOStdReq *ioreq;
+REGISTER UNIT  *unit;
 {
-    REGISTER UNIT  *unit;
-
-    unit = (UNIT *) ioreq->io_Unit;
     Disable();
     AddTail((struct List *)&unit->mu_ChangeIntList, &ioreq->io_Message.mn_Node);
     Enable();
@@ -1035,8 +1038,9 @@ REGISTER struct IOStdReq *ioreq;
 }
 
 void
-TD_Remchangeint(ioreq)
+TD_Remchangeint(ioreq, unit)
 REGISTER struct IOStdReq *ioreq;
+REGISTER UNIT  *unit;
 {
     REGISTER struct IOStdReq *intreq;
 
@@ -1064,6 +1068,41 @@ __A1 UNIT      *unit;
 	 ioreq = next) {
 	Cause((struct Interrupt *) ioreq->io_Data);
     }
+}
+
+void
+TD_Getgeometry(ioreq, unit)
+REGISTER struct IOStdReq *ioreq;
+REGISTER UNIT  *unit;
+{
+#ifdef TD_GETGEOMETRY
+    struct DriveGeometry *dg;
+    short numtracks;
+
+    dg = (struct DriveGeometry *)ioreq->io_Data;
+
+    numtracks = unit->mu_NumTracks;
+    if ((ioreq->io_Flags & IOMDF_40TRACKS) &&
+	(numtracks == TRACKS(80))) {
+	numtracks = TRACKS(40);
+    }
+
+    dg->dg_SectorSize = MS_BPS;
+
+    dg->dg_TotalSectors = unit->mu_CurrentSectors * numtracks;
+
+    dg->dg_Cylinders = TRK2CYL(numtracks);
+    dg->dg_CylSectors = unit->mu_CurrentSectors * NUMHEADS;
+
+    dg->dg_Heads = NUMHEADS;
+    dg->dg_TrackSectors = unit->mu_CurrentSectors;
+
+    dg->dg_BufMemType = MEMF_PUBLIC;
+    dg->dg_DeviceType = DG_DIRECT_ACCESS;
+    dg->dg_Flags = DGF_REMOVABLE;
+#else
+    ioreq->io_Error = IOERR_NOCMD;
+#endif
 }
 
 #ifndef READONLY
@@ -1128,6 +1167,7 @@ UNIT	       *unit;
     long	    length;
     long	    offset;
     word	    spt;
+    int 	    error;
 
     debug(("CMD_Write "));
     userbuf = (byte *) ioreq->io_Data;
@@ -1145,8 +1185,8 @@ UNIT	       *unit;
     if (length <= 0 || CheckRequest((struct IOExtTD *)ioreq, unit))
 	goto end;
 
-    GetTrack(ioreq, track);
-    for (;;) {
+    error = GetTrack(ioreq, track);
+    while (error == TDERR_NoError) {
 	CopyMem(userbuf, unit->mu_TrackBuffer + MS_BPS * sector, (long) MS_BPS);
 	unit->mu_TrackChanged = 1;
 	unit->mu_SectorStatus[sector] = CRC_CHANGED;
@@ -1160,16 +1200,16 @@ UNIT	       *unit;
 	 */
 	if (++sector >= spt) {
 	    sector = 0;
-	    if (++track >= unit->mu_NumTracks)
+	    if (++track >= unit->mu_NumTracks) {
+		error = IOERR_BADLENGTH;
 		goto end;
-	    GetTrack(ioreq, track);
+	    }
+	    error = GetTrack(ioreq, track);
 	}
     }
 
-    if (length)
-	ioreq->io_Error = TDERR_NotSpecified;
-
 end:
+    ioreq->io_Error = error;
     TermIO(ioreq);
 }
 
