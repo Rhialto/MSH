@@ -1,5 +1,8 @@
-; $Id: device1.a,v 1.51 92/04/17 15:41:30 Rhialto Rel $
+; $Id: device1.a,v 1.53 92/10/25 02:08:55 Rhialto Rel $
 ; $Log: device1.a,v $
+; Revision 1.53  92/10/25  02:08:55  Rhialto
+; Import UNITB_ACTIVE and HANDLE_IO_QUICK.
+;
 ; Revision 1.51  92/04/17  15:41:30  Rhialto
 ; Freeze for MAXON3.
 ;
@@ -36,19 +39,77 @@ RTPRI	    equ 	0
 ;
 	xref	_DevName
 	xref	_idString
-	xref	@Init
 	xdef	_RomTag
 _RomTag:
-	dc.w	$4AFC		; RTC_MATCHWORD
+	dc.w	RTC_MATCHWORD
 	dc.l	_RomTag 	; rt_MatchTag
 	dc.l	EndCode 	; rt_EndSkip
-	dc.b	0		; rt_Flags (no RTF_AUTOINIT)
+	dc.b	RTF_AUTOINIT	; rt_Flags
 	dc.b	VERSION 	; rt_Version
-	dc.b	3		; rt_Type  NT_DEVICE
+	dc.b	NT_DEVICE	; rt_Type
 	dc.b	RTPRI		; rt_Pri
 	dc.l	_DevName	; rt_Name
 	dc.l	_idString	; rt_IdString
-	dc.l	@Init		; rt_Init
+	dc.l	Init		; rt_Init
+
+	xref	_InitTable
+	xref	@Init
+Init:
+	dc.l	md_SIZEOF	; size of data portion of Device
+	dc.l	LibVectors	; pointer to function initialisers
+	dc.l	InitTable	; pointer to data initialisers
+	dc.l	@Init		; routine to run (d0: dev ptr, a0: seglist)
+
+	xref	 @DevOpen,@DevClose,@DevExpunge
+	xref	 @DevBeginIO
+	xref	 @DevAbortIO
+LibVectors:
+	dc.l	@DevOpen,@DevClose,@DevExpunge,LibNull
+	dc.l	@DevBeginIO
+	dc.l	@DevAbortIO
+	dc.l	-1
+
+INITBYTE	MACRO	; &offset,&value
+		IFLE	(\1)-255        ;If offset <=255
+		DC.B	$a0,\1		;use byte offset
+		DC.B	\2,0
+		MEXIT			;exit early
+		ENDC
+		DC.B	$e0,0
+		DC.W	\1
+		DC.B	\2,0
+		ENDM
+
+INITWORD	MACRO	; &offset,&value
+		IFLE	(\1)-255        ;If offset <=255
+		DC.B	$90,\1		;use byte offset
+		DC.W	\2
+		MEXIT			;exit early
+		ENDC
+		DC.B	$d0,0
+		DC.W	\1
+		DC.W	\2
+		ENDM
+
+INITLONG	MACRO	; &offset,&value
+		IFLE	(\1)-255        ;If offset <=255
+		DC.B	$80,\1		;use byte offset
+		DC.L	\2
+		MEXIT			;exit early
+		ENDC
+		DC.B	$c0,0
+		DC.W	\1
+		DC.L	\2
+		ENDM
+
+InitTable:
+	INITBYTE ln_Type,NT_DEVICE
+	INITLONG ln_Name,_DevName
+	INITBYTE dev_Flags,LIBF_CHANGED!LIBF_SUMUSED,
+	INITWORD dev_Version,VERSION
+	INITWORD dev_Revision,REVISION
+	INITLONG dev_IdString,_idString
+	dc.w	0
 
 ;;;;
 ;
@@ -64,63 +125,59 @@ _RomTag:
 ; the C routines expect the arguments on the stack (i.e. __stkargs)
 
 	ifne	0
-	xdef	__Init
+	xdef	Init
 	xref	_Init
-__Init: 			;a0=segment list
+Init:				;a0=segment list
 	move.l	A0,-(sp)
 	jsr	_Init
 	addq	#4,sp
 	rts
 
-	xdef	__DevOpen
+	xdef	DevOpen
 	xref	_DevOpen
-__DevOpen:			;d0=unitnum,d1=flags,a1=ioreq,a6=device
+DevOpen:			;d0=unitnum,d1=flags,a1=ioreq,a6=device
 	movem.l D0-D1/A1/A6,-(sp)
 	jsr	_DevOpen
 	lea	16(sp),sp
 	rts
 
-	xdef	__DevClose
+	xdef	DevClose
 	xref	_DevClose
-__DevClose:			;a1=ioreq,a6=device
+DevClose:			;a1=ioreq,a6=device
 	movem.l A1/A6,-(sp)
 	jsr	_DevClose
 	addq	#8,sp
 	rts
 
-	xdef	__DevExpunge
+	xdef	DevExpunge
 	xref	_DevExpunge
-__DevExpunge:			;a6=device
+DevExpunge:			;a6=device
 	movem.l A6,-(sp)
 	jsr	_DevExpunge
 	addq	#4,sp
 	rts
 
-	xdef	__DevBeginIO
+	xdef	DevBeginIO
 	xref	_DevBeginIO
-__DevBeginIO:			;a1=ioreq,a6=device
+DevBeginIO:			;a1=ioreq,a6=device
 	movem.l A1/A6,-(sp)
 	jsr	_DevBeginIO
 	addq	#8,sp
 	rts
 
-	xdef	__DevAbortIO
+	xdef	DevAbortIO
 	xref	_DevAbortIO
-__DevAbortIO:			;a1=ioreq,a6=device
+DevAbortIO:			;a1=ioreq,a6=device
 	movem.l A1/A6,-(sp)
 	jsr	_DevAbortIO
 	addq	#8,sp
 	rts
 	endc
 
-	xdef	__LibNull
-	xref	_LibNull
-__LibNull:
+LibNull:
 	clr.l	d0
 	rts
 
-
-;#ifdef HANDLE_IO_QUICK
 	ifne	HANDLE_IO_QUICK
 ;;;;
 ;
@@ -138,7 +195,7 @@ _BSET_ACTIVE:
 	bset	#UNITB_ACTIVE,(a0)         ; 0 UNITB_ACTIVE
 	sne	d0
 	rts
-	endc
+	endc	; HANDLE_IO_QUICK
 
 EndCode
 	end

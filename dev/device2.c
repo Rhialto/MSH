@@ -1,6 +1,9 @@
 /*-
- * $Id: device2.c,v 1.52 92/09/06 00:04:07 Rhialto Exp $
+ * $Id: device2.c,v 1.53 92/10/25 02:10:25 Rhialto Rel $
  * $Log:	device2.c,v $
+ * Revision 1.53  92/10/25  02:10:25  Rhialto
+ * Add TD_Getgeometry, TD_Eject.
+ *
  * Revision 1.52  92/09/06  00:04:07  Rhialto
  * Include $VER in version string.
  *
@@ -27,14 +30,14 @@
  * The messydisk.device code that makes it a real Exec .device.
  * Mostly based on the 1.1 RKM example and Matt Dillon's library code.
  *
- * This code is (C) Copyright 1989-1992 by Olaf Seibert. All rights reserved.
+ * This code is (C) Copyright 1989-1993 by Olaf Seibert. All rights reserved.
  * May not be used or copied without a licence.
 -*/
 
+#include <exec/initializers.h>
 #include "device.h"
-#include <functions.h>
 
-/*#undef DEBUG			/**/
+/*#undef DEBUG			*/
 #ifdef DEBUG
 #   include "syslog.h"
 #else
@@ -42,11 +45,7 @@
 #endif
 /* INDENT ON */
 
-/* Prototypes for assembler glue routines: */
-Prototype void _Init(), _DevOpen(), _DevClose(), _DevExpunge(), _LibNull();
-Prototype void _DevBeginIO(), _DevAbortIO();
-
-Prototype __geta4 DEV *Init(__A0 long segment);
+Prototype __geta4 DEV *Init(__A0 long segment, __D0 struct MessyDevice *dev, __A6 struct ExecBase *execbase);
 Prototype __geta4 void DevOpen(__D0 ulong unitno, __D1 ulong flags, __A1 struct IOStdReq *ioreq, __A6 DEV *dev);
 Prototype __geta4 long DevClose(__A1 struct IOStdReq *ioreq, __A6 DEV *dev);
 Prototype __geta4 long DevExpunge(__A6 DEV *dev);
@@ -66,21 +65,21 @@ Prototype const char DevName[];
 Prototype const char idString[];
 
 const char	DevName[] = "messydisk.device";
-const char	idString[] = "\0$VER: messydisk.device $Revision: 1.52 $ $Date: 92/09/06 00:04:07 $\r\n";
+const char	idString[] = "$VER: messydisk.device $Revision: 1.53 $ $Date: 92/10/25 02:10:25 $\r\n";
 
 /*
- * -30-6*X  Library vectors:
+ * Data initialisation:
  */
-
-const void	(*LibVectors[]) () =
-{
-    DevOpen, DevClose, DevExpunge, _LibNull,
-
-    DevBeginIO,
-    DevAbortIO,
-    (void (*) ()) -1
+/*
+const UWORD	InitTable[] = {
+    INITBYTE(OFFSET(MessyDevice, dev_Node.ln_Type), NT_DEVICE),
+    INITLONG(OFFSET(MessyDevice, dev_Node.ln_Name), (long)DevName),
+    INITBYTE(OFFSET(MessyDevice, dev_Flags), LIBF_CHANGED | LIBF_SUMUSED),
+    INITBYTE(OFFSET(MessyDevice, dev_Version), VERSION),
+    INITBYTE(OFFSET(MessyDevice, dev_Revision), REVISION),
+    INITLONG(OFFSET(MessyDevice, dev_IdString), (long)idString)
 };
-
+*/
 /*
  * Device commands:
  */
@@ -98,36 +97,26 @@ const void	(*funcTable[]) (struct IOStdReq *, UNIT *) = {
 long		SysBase;	/* Argh! A global variable! */
 
 /*
- * The Initialization routine is given only a seglist pointer.	Since we
- * are NOT AUTOINIT we must construct and add the device ourselves and
- * return either NULL or the device pointer.  Exec has Forbid() for us
- * during the call.
- *
- * If you have an extended device structure you must specify the size of the
- * extended structure in MakeLibrary().
+ * The Initialization routine is given a seglist pointer, the device
+ * base pointer, and the Exec base pointer. We are being called from
+ * InitResident. Exec has Forbid() for us during the call.
  */
 
 
 __geta4 DEV    *
-Init(segment)
+Init(segment, dev, execbase)
 __A0 long	segment;
+__D0 DEV       *dev;
+__A6 struct ExecBase *execbase;
 {
-    DEV 	   *dev;
-
     SysBase = *(long *) 4;
 #ifdef DEBUG
     initsyslog();
+    debug(("seg %lx, dev %lx, sys %lx\n", segment, dev, execbase));
 #endif
-    dev = MakeLibrary(LibVectors, NULL, NULL, (long) sizeof (DEV), NULL);
     if (DevInit(dev)) {
-	dev->dev_Node.ln_Type = NT_DEVICE;
-	dev->dev_Node.ln_Name = DevName;
-	dev->dev_Flags = LIBF_CHANGED | LIBF_SUMUSED;
-	dev->dev_Version = VERSION;
-	dev->dev_Revision = REVISION;
-	dev->dev_IdString = (APTR) idString;
 	dev->md_Seglist = segment;
-	AddDevice(&dev->md_Dev);
+	debug(("init done.\n"));
 	return dev;
     }
     FreeMem((char *) dev - dev->dev_NegSize, dev->dev_NegSize + dev->dev_PosSize);
