@@ -1,10 +1,13 @@
 /*-
- * $Id: hanlock.c,v 1.33 91/01/24 00:08:27 Rhialto Exp $
+ * $Id: hanlock.c,v 1.40 91/03/03 17:53:35 Rhialto Rel $
  * $Log:	hanlock.c,v $
+ * Revision 1.40  91/03/03  17:53:35  Rhialto
+ * Freeze for MAXON
+ *
  * Revision 1.33  91/01/24  00:08:27  Rhialto
  * Fix directory-extension bug (only first sector of new cluster
  * was zeroed)
- * 
+ *
  * Revision 1.32  90/11/23  23:54:18  Rhialto
  * Prepare for syslog
  *
@@ -26,11 +29,17 @@
  * not be used or copied without a licence.
 -*/
 
-#include "dos.h"
+#include <amiga.h>
+#include <functions.h>
+#include <string.h>
 #include "han.h"
+#include "dos.h"
 
 #ifdef HDEBUG
 #   define	debug(x)  syslog x
+    void initsyslog(void);
+    void syslog(char *, ...);
+    void uninitsyslog(void);
 #else
 #   define	debug(x)
 #endif
@@ -153,7 +162,7 @@ int		createit;
 	}
 #endif
     } else if (sector = GetSec(previous->de_Sector)) {
-	CopyMem(sector + previous->de_Offset, &previous->de_Msd,
+	CopyMem(sector + previous->de_Offset, (char *)&previous->de_Msd,
 		(long) MS_DIRENTSIZE);
 	OtherEndianMsd(&previous->de_Msd);
 	FreeSec(sector);
@@ -164,6 +173,8 @@ int		createit;
 }
 
 #ifdef HDEBUG
+
+void PrintDirEntry(struct DirEntry *de);
 
 void
 PrintDirEntry(de)
@@ -219,7 +230,7 @@ ulong		mode;
 	 fl = nextfl) {
 #ifdef HDEBUG
 	debug(("> "));
-	PrintDirEntry(&fl->msfl_Msd);
+	PrintDirEntry((struct DirEntry *)&fl->msfl_Msd);
 #endif
 	if ((fl->msfl_DirSector == dir->de_Sector &&
 	     fl->msfl_DirOffset == dir->de_Offset) ||
@@ -242,14 +253,15 @@ ulong		mode;
 	error = ERROR_NO_FREE_STORE;
 	return NULL;
     }
-    fl->msfl_Parent = parentdir ? MSDupLock(parentdir) : NULL;
+    fl->msfl_Parent = (parentdir != NULL) ? MSDupLock(parentdir) :
+					    (struct MSFileLock *) NULL;
 
     fl->msfl_Refcount = (mode == EXCLUSIVE_LOCK) ? -1 : 1;
     fl->msfl_DirSector = dir->de_Sector;
     fl->msfl_DirOffset = dir->de_Offset;
     fl->msfl_Msd = dir->de_Msd;
 
-    AddHead(&LockList->ll_List, fl);
+    AddHead((struct List *)&LockList->ll_List, (struct Node *)fl);
 
     return fl;
 }
@@ -288,7 +300,7 @@ ulong		mode;
     {
 	register byte  *colon;
 
-	if (colon = index(name, ':')) {
+	if (colon = strchr(name, ':')) {
 	    name = colon + 1;
 	    parentdir = RootLock;
 	    /*
@@ -319,14 +331,14 @@ ulong		mode;
     sde.de_Offset = parentdir->msfl_DirOffset;
 #ifdef HDEBUG
     debug(("pdir %08lx: ", parentdir));
-    PrintDirEntry(&parentdir->msfl_Msd);
+    PrintDirEntry((struct DirEntry *)&parentdir->msfl_Msd);
 #endif
 
 newdir:
     freesec = SEC_EOF;		/* Means none found yet */
 
     nextpart = ToMSName(component, name);
-    debug(("Component: '%11s'\n", component));
+    debug(("Component: '%.11s'\n", component));
     if (nextpart[0] != '/') {
 	nextpart = NULL;
 #ifndef READONLY
@@ -361,9 +373,9 @@ newdir:
     sde.de_Offset = 0;
 
     if ((sector = GetSec(sde.de_Sector)) == NULL)
-	goto error;
+	goto some_error;
 
-    CopyMem(sector, &sde.de_Msd, (long) sizeof (struct MsDirEntry));
+    CopyMem(sector, (char *)&sde.de_Msd, (long) sizeof (struct MsDirEntry));
     OtherEndianMsd(&sde.de_Msd);
     FreeSec(sector);
 
@@ -440,7 +452,7 @@ exit:
 #endif
     }
 
-error:
+some_error:
     MSUnLock(parentdir);
 
     return newlock;
@@ -475,8 +487,10 @@ struct MSFileLock *
 MSParentDir(fl)
 register struct MSFileLock *fl;
 {
-    if (fl == NULL || fl == RootLock) {
+    if (fl == NULL) {
 	error = ERROR_OBJECT_NOT_FOUND;
+    } else if (fl == RootLock) {
+	/* Do nothing: return NULL */
     } else if (fl->msfl_Parent)
 	return MSDupLock(fl->msfl_Parent);
 
@@ -493,7 +507,7 @@ struct MSFileLock *fl;
 {
 #ifdef HDEBUG
     debug(("MSUnLock %08lx: ", fl));
-    PrintDirEntry(&fl->msfl_Msd);
+    PrintDirEntry((struct DirEntry *)&fl->msfl_Msd);
 #endif
 
     if (fl) {
@@ -501,7 +515,7 @@ struct MSFileLock *fl;
 	    struct LockList *list;
 
 	    list = (struct LockList *) fl->msfl_Node.mln_Pred;
-	    Remove(fl);
+	    Remove((struct Node *)fl);
 	    debug(("Remove()d %08lx\n", fl));
 
 	    /*
@@ -541,7 +555,7 @@ register struct FileInfoBlock *fib;
 {
 #ifdef HDEBUG
     debug(("+ "));
-    PrintDirEntry(msd);
+    PrintDirEntry((struct DirEntry *)msd);
 #endif
     /*
      * Special treatment when we examine the root directory
@@ -679,17 +693,18 @@ long	   mask;
 
     lock = MSLock(parentdir, name, EXCLUSIVE_LOCK);
     if (lock) {
-	/* Leave SYSTEM bit as-is */
-	lock->msfl_Msd.msd_Attributes &= ATTR_SYSTEM;
+	/* Leave other bits as they are */
+	lock->msfl_Msd.msd_Attributes &=
+	    ~(ATTR_READONLY | ATTR_HIDDEN | ATTR_ARCHIVED);
 	/* write or delete protected -> READONLY */
 	if (mask & (FIBF_WRITE|FIBF_DELETE))
-	    lock->msfl_Msd.msd_Attributes |= (ATTR_READONLY);
+	    lock->msfl_Msd.msd_Attributes |= ATTR_READONLY;
 	/* hidden -> hidden */
 	if (mask & FIBF_HIDDEN)
-	    lock->msfl_Msd.msd_Attributes |= (ATTR_HIDDEN);
+	    lock->msfl_Msd.msd_Attributes |= ATTR_HIDDEN;
 	/* archived=0 (default) -> archived=1 (default) */
 	if (!(mask & FIBF_ARCHIVE))
-	    lock->msfl_Msd.msd_Attributes |= (ATTR_ARCHIVED);
+	    lock->msfl_Msd.msd_Attributes |= ATTR_ARCHIVED;
 	WriteFileLock(lock);
 	MSUnLock(lock);
 	return TRUE;
@@ -721,13 +736,13 @@ register struct MSFileLock *fl;
 {
     debug(("WriteFileLock %08lx\n", fl));
 
-    if (fl && (int) fl->msfl_DirOffset >= 0) {
+    if (fl && (short) fl->msfl_DirOffset >= 0) {
 	register byte  *block = GetSec(fl->msfl_DirSector);
 
 	if (block) {
-	    CopyMem(&fl->msfl_Msd, block + fl->msfl_DirOffset,
+	    CopyMem((char *)&fl->msfl_Msd, (char *)block + fl->msfl_DirOffset,
 		    (long) sizeof (fl->msfl_Msd));
-	    OtherEndianMsd(block + fl->msfl_DirOffset);
+	    OtherEndianMsd((struct MSDirEntry *)(block + fl->msfl_DirOffset));
 	    MarkSecDirty(block);
 	    FreeSec(block);
 	}
@@ -758,7 +773,7 @@ void	       *cookie;
     struct LockList *ll;
 
     if (ll = AllocMem((long) sizeof (*ll), MEMF_PUBLIC)) {
-	NewList(&ll->ll_List);
+	NewList((struct List *)&ll->ll_List);
 	ll->ll_Cookie = cookie;
     } else
 	error = ERROR_NO_FREE_STORE;
