@@ -1,6 +1,9 @@
 /*-
- * $Id: device2.c,v 1.51 92/04/17 15:41:55 Rhialto Rel $
+ * $Id: device2.c,v 1.52 92/09/06 00:04:07 Rhialto Exp $
  * $Log:	device2.c,v $
+ * Revision 1.52  92/09/06  00:04:07  Rhialto
+ * Include $VER in version string.
+ *
  * Revision 1.51  92/04/17  15:41:55  Rhialto
  * Freeze for MAXON3. Change cyl+side units to track units.
  *
@@ -28,10 +31,8 @@
  * May not be used or copied without a licence.
 -*/
 
-#include <amiga.h>
-#include <functions.h>
-#include "dev.h"
 #include "device.h"
+#include <functions.h>
 
 /*#undef DEBUG			/**/
 #ifdef DEBUG
@@ -65,7 +66,7 @@ Prototype const char DevName[];
 Prototype const char idString[];
 
 const char	DevName[] = "messydisk.device";
-const char	idString[] = "\0$VER: messydisk.device $Revision: 1.51 $ $Date: 92/04/17 15:41:55 $\r\n";
+const char	idString[] = "\0$VER: messydisk.device $Revision: 1.52 $ $Date: 92/09/06 00:04:07 $\r\n";
 
 /*
  * -30-6*X  Library vectors:
@@ -89,10 +90,10 @@ const void	(*funcTable[]) (struct IOStdReq *, UNIT *) = {
     CMD_Stop, CMD_Start, CMD_Flush, TD_Motor, TD_Seek, TD_Format,
     TD_Remove, TD_Changenum, TD_Changestate, TD_Protstatus, TD_Rawread,
     TD_Rawwrite, TD_Getdrivetype, TD_Getnumtracks, TD_Addchangeint,
-    TD_Remchangeint,
+    TD_Remchangeint, TD_Getgeometry, TD_Eject,
 };
 
-#define LAST_TD_COMM	    TD_REMCHANGEINT
+#define LAST_TD_COMM	    TD_EJECT
 
 long		SysBase;	/* Argh! A global variable! */
 
