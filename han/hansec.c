@@ -1,6 +1,10 @@
 /*-
- * $Id: hansec.c,v 1.43 91/09/28 01:38:43 Rhialto Exp $
+ * $Id: hansec.c,v 1.46 91/10/06 18:25:31 Rhialto Rel $
  * $Log:	hansec.c,v $
+ * Revision 1.46  91/10/06  18:25:31  Rhialto
+ *
+ * Freeze for MAXON
+ *
  * Revision 1.43  91/09/28  01:38:43  Rhialto
  * Changed to newer syslog stuff.
  *
@@ -32,7 +36,7 @@
  * Sector-level stuff: read, write, cache, unit conversion.
  * Other interactions (via MyDoIO) with messydisk.device.
  *
- * This code is (C) Copyright 1989-1991 by Olaf Seibert. All rights reserved.
+ * This code is (C) Copyright 1989-1992 by Olaf Seibert. All rights reserved.
  * May not be used or copied without a licence.
 -*/
 
@@ -48,11 +52,62 @@
 #   define	debug(x)
 #endif
 
+Prototype struct MsgPort *DiskReplyPort;
+Prototype struct IOExtTD *DiskIOReq;
+Prototype struct IOStdReq *DiskChangeReq;
+Prototype struct DiskParam Disk;
+Prototype byte *Fat;
+Prototype short FatDirty;
+Prototype short error;
+Prototype long	IDDiskState;
+Prototype long	IDDiskType;
+Prototype struct timerequest *TimeIOReq;
+Prototype int	MaxCache;
+Prototype ulong BufMemType;
+Prototype int	DelayState;
+Prototype short CheckBootBlock;
+Prototype word	Get8086Word(byte *Word8086);
+Prototype word	OtherEndianWord(long oew);     /* long should become word */
+Prototype ulong OtherEndianLong(ulong oel);
+Prototype void	OtherEndianMsd(struct MsDirEntry *msd);
+Prototype word	ClusterToSector(word cluster);
+Prototype word	ClusterOffsetToSector(word cluster, word offset);
+Prototype word	DirClusterToSector(word cluster);
+Prototype word	SectorToCluster(word sector);
+Prototype word	NextCluster(word cluster);
+Prototype word	NextClusteredSector(word sector);
+Prototype word	FindFreeSector(word prev);
+Prototype struct CacheSec *FindSecByNumber(int number);
+Prototype struct CacheSec *FindSecByBuffer(byte *buffer);
+Prototype struct CacheSec *NewCacheSector(struct MinNode *pred);
+Prototype void	FreeCacheSector(struct CacheSec *sec);
+Prototype void	InitCacheList(void);
+Prototype void	FreeCacheList(void);
+Prototype void	MSUpdate(int immediate);
+Prototype void	StartTimer(void);
+Prototype byte *GetSec(int sector);
+Prototype byte *EmptySec(int sector);
+Prototype void	PutSec(int sector, byte *data);
+Prototype void	FreeSec(byte *buffer);
+Prototype void	MarkSecDirty(byte *buffer);
+Prototype void	WriteFat(void);
+Prototype int	AwaitDFx(void);
+Prototype int	ReadBootBlock(void);
+Prototype int	IdentifyDisk(char *name, struct DateStamp *date);
+Prototype void	TDRemChangeInt(void);
+Prototype int	TDAddChangeInt(struct Interrupt *interrupt);
+Prototype int	TDChangeNum(void);
+Prototype int	TDProtStatus(void);
+Prototype int	TDMotorOff(void);
+Prototype int	TDClear(void);
+Prototype int	TDUpdate(void);
+Prototype int	MyDoIO(struct IOStdReq *ioreq);
+
 struct MsgPort *DiskReplyPort;
 struct IOExtTD *DiskIOReq;
 struct IOStdReq *DiskChangeReq;
 
-struct DiskParam DefaultDisk = {
+const struct DiskParam DefaultDisk = {
     MS_BPS,
     MS_SPC,
     MS_RES,
@@ -703,7 +758,7 @@ int
 AwaitDFx()
 {
     debug(("AwaitDFx\n"));
-    if (DosType) {
+    if (Interleave & NICE_TO_DFx) {
 	static char	dfx[] = "DFx:";
 	void	       *dfxProc;
 	char		xinfodata[sizeof(struct InfoData) + 3];

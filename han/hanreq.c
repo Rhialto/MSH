@@ -1,9 +1,13 @@
 /*-
- * $Id: hanreq.c,v 1.45 91/10/04 00:12:06 Rhialto Exp $
+ * $Id: hanreq.c,v 1.46 91/10/06 18:25:03 Rhialto Rel $
  * $Log:	hanreq.c,v $
+ * Revision 1.46  91/10/06  18:25:03  Rhialto
+ *
+ * Freeze for MAXON
+ *
  * Revision 1.45  91/10/04  00:12:06  Rhialto
  * Add general information requester
- * 
+ *
  * Revision 1.43  91/09/28  01:37:13  Rhialto
  * Changed to newer syslog stuff.
  *
@@ -43,30 +47,38 @@
 #   define	debug(x)
 #endif
 
-extern struct DeviceNode *DevNode;
-static struct Window *Getpr_WindowPtr(void);
+Prototype short Cancel; 	/* Cancel all R/W errors */
+Prototype long	RetryRwError(struct IOExtTD *req);
+Prototype void	DisplayMessage(char *msg);
+Local	  struct Window *Getpr_WindowPtr(void);
 
 short		Cancel = 0;	/* Cancel all R/W errors */
 
-static struct IntuiText Positive = {
+static const UBYTE retry[] = "Retry";
+static const UBYTE cancel[] = "Cancel";
+
+static const struct IntuiText Positive = {
     AUTOFRONTPEN, AUTOBACKPEN, AUTODRAWMODE,
     AUTOLEFTEDGE, AUTOTOPEDGE, AUTOITEXTFONT,
-    (UBYTE *)"Retry",
+    retry,
     AUTONEXTTEXT
 };
 
-static struct IntuiText Negative = {
+static const struct IntuiText Negative = {
     AUTOFRONTPEN, AUTOBACKPEN, AUTODRAWMODE,
     AUTOLEFTEDGE, AUTOTOPEDGE, AUTOITEXTFONT,
-    (UBYTE *)"Cancel",
+    cancel,
     AUTONEXTTEXT
 };
+
+static const UBYTE volume[] = "Messydos volume";
+static const UBYTE hasrwerr[] = "has a Read or Write error";
 
 static struct IntuiText RwError[] = {
     {
 	AUTOFRONTPEN, AUTOBACKPEN, AUTODRAWMODE,
 	16,	      5,	   AUTOITEXTFONT,
-	(UBYTE *)"Messydos volume",
+	volume,
 	&RwError[1]
     },
     {
@@ -78,16 +90,19 @@ static struct IntuiText RwError[] = {
     {
 	AUTOFRONTPEN, AUTOBACKPEN, AUTODRAWMODE,
 	16,	      25,	   AUTOITEXTFONT,
-	(UBYTE *)"has a Read or Write error",
+	hasrwerr,
 	NULL
     },
 };
+
+static const UBYTE must[] = "You MUST!! replace messy volume";
+static const UBYTE inthat[] = "in that floppy drive !!";
 
 struct IntuiText MustReplace[] = {
     {
 	AUTOFRONTPEN, AUTOBACKPEN, AUTODRAWMODE,
 	16,	      5,	   AUTOITEXTFONT,
-	(UBYTE *)"You MUST!! replace messy volume",
+	must,
 	&MustReplace[1]
     },
     {
@@ -99,7 +114,7 @@ struct IntuiText MustReplace[] = {
     {
 	AUTOFRONTPEN, AUTOBACKPEN, AUTODRAWMODE,
 	16,	      25,	   AUTOITEXTFONT,
-	(UBYTE *)"in that floppy drive !!",
+	inthat,
 	NULL
     },
 };
@@ -163,10 +178,12 @@ fail:
     return FALSE;
 }
 
-static struct IntuiText Ok = {
+static const UBYTE ok[] = "Ok";
+
+static const struct IntuiText Ok = {
     AUTOFRONTPEN, AUTOBACKPEN, AUTODRAWMODE,
     AUTOLEFTEDGE, AUTOTOPEDGE, AUTOITEXTFONT,
-    (UBYTE *)"Ok",
+    ok,
     AUTONEXTTEXT
 };
 

@@ -1,11 +1,17 @@
-; $Id: hancrtso.a,v 1.43 91/09/28 01:46:54 Rhialto Exp $
-; $Log:	hancrtso.a,v $
+; $Id: hancrtso.a,v 1.46 91/10/06 18:25:52 Rhialto Rel $
+; $Log: hancrtso.a,v $
+; Revision 1.46  91/10/06  18:25:52  Rhialto
+;
+; Freeze for MAXON
+;
 ; Revision 1.43  91/09/28  01:46:54  Rhialto
 ; Create regargs entrypoints for byte swap routines.
-; 
+;
 ; Revision 1.42  91/06/14  00:07:56  Rhialto
 ; DICE conversion
 ;
+resident	equ 1	; Do we handle RESIDENT (== pure) code?
+;		near a4 ; for A68k 2.7.1: also needs -m32766 for offset
 		;   C.A
 		;
 		;   (c)Copyright 1990, Matthew Dillon, All Rights Reserved
@@ -97,43 +103,45 @@ start:
 		;   If we are not flagged resident then BSS IS ALLOCATED AFTER DATA,
 		;	BUT NOT CLEARED.
 
-;		move.w	#__RESIDENT,D0
-;		beq	snotres
+		;ifne resident
+		move.w	#__RESIDENT,D0
+		beq	snotres
 
 		;   Allocate BSS+DATA space and then copy static data.
 
-;		move.l	#__BSS_LEN,D0
-;		add.l	#__DATA_LEN,D0
-;		asl.l	#2,D0		    ; x4
-;		addq.l	#8,D0		    ; MemList header extra
-;		move.l	D0,D5		    ; D5 = #bytes
-;		move.l	#MEMF_PUBLIC,D1
-;		jsr	_LVOAllocMem(A6)
-;		tst.l	D0
-;		bne	alok
-;		move.l	A2,sp
-;		moveq.l #-1,D0
-;		bra	exfail
+		move.l	#__BSS_LEN,D0
+		add.l	#__DATA_LEN,D0
+		asl.l	#2,D0		    ; x4
+		addq.l	#8,D0		    ; MemList header extra
+		move.l	D0,D5		    ; D5 = #bytes
+		move.l	#MEMF_PUBLIC,D1
+		jsr	_LVOAllocMem(A6)
+		tst.l	D0
+		bne	alok
+		move.l	A2,sp
+		moveq.l #-1,D0
+		bra	exfail
 
-;alok		move.l	D0,A0
-;		clr.l	(A0)+               ; MemList entry next ptr
-;		move.l	D5,(A0)+            ; MemList entry #bytes
-;		lea	32766(A0),A4        ; SET A4
-;		lea	-8(A0),A3           ; A3 = MemList entry base
+alok		move.l	D0,A0
+		clr.l	(A0)+               ; MemList entry next ptr
+		move.l	D5,(A0)+            ; MemList entry #bytes
+		lea	32766(A0),A4        ; SET A4
+		lea	-8(A0),A3           ; A3 = MemList entry base
 					    ; can't copy to MemList(A4) yet
 
 
 		;   Copy data to allocated copy
 
 					    ; A0 = dst
-;		lea	__DATA_BAS,A1	    ; A1 = src
-;		move.l	#__DATA_LEN,D0	    ; D0 = long words
-;		bra	bssent
-;bsslop 	move.l	(A1)+,(A0)+
-;bssent 	dbf	D0,bsslop
-;		sub.l	#$10000,D0
-;		bcc	bsslop
-;		bra	clrbss
+		lea	__DATA_BAS,A1	    ; A1 = src
+		move.l	#__DATA_LEN,D0	    ; D0 = long words
+		bra	bssent
+bsslop		move.l	(A1)+,(A0)+
+bssent		dbf	D0,bsslop
+		sub.l	#$10000,D0
+		bcc	bsslop
+		bra	clrbss
+		;endc
 
 
 		;   Not resident, BSS space has been allocated for us
@@ -159,7 +167,9 @@ clrent		dbf	D0,clrlop
 		sub.l	#$10000,D0
 		bcc	clrlop
 
-;		move.l	A3,___MemList(A4)   ; memlist entry (if resident)
+		;ifne resident
+		move.l	A3,___MemList(A4)   ; memlist entry (if resident)
+		;endc
 		move.l	A2,__ExitSP(A4)     ; sp to restore
 
 ;		moveq.l #0,D0		    ; new signals
@@ -171,13 +181,15 @@ clrent		dbf	D0,clrlop
 		;   Return value of 0 indicates succcess.  Flags
 		;   have been set.
 
-;		jsr	__AutoInit0	    ; A6 has SYSBase
-;		bne	xfail
+		;ifne resident
+		jsr	__AutoInit0	    ; A6 has SYSBase
+		bne	xfail
 ;		pea	1.W		    ; autoconfig loader
 ;		jsr	__AutoConfig	    ; note, rt pulls stack
 ;		addq.l	#4,sp
-;		jsr	__AutoInit1	    ; A6 has SYSBase
-;		bne	xfail
+		jsr	__AutoInit1	    ; A6 has SYSBase
+		bne	xfail
+		;endc
 		jsr	_messydoshandler(PC)
 
 		;   fall through to low level exit... this avoids referencing
@@ -199,25 +211,29 @@ _exit:
 ;		jsr	__AutoConfig	    ; note, rt pulls stack
 ;		addq.l	#4,sp
 		move.l	_SysBase(A4),A6
-;		jsr	__AutoExit1	    ; A6 has SysBase
-;		jsr	__AutoExit0	    ; A6 has SysBase
+		;ifne resident
+		jsr	__AutoExit1	    ; A6 has SysBase
+		jsr	__AutoExit0	    ; A6 has SysBase
+		;endc
 
 		move.l	__ExitSP(A4),A5     ; get sp... because we might free
 					    ; the space taken by the variable!
 
 ;		move.l	__WBMsg(A4),D6      ; D6 = WBMsg if it exists
 
-;		move.l	___MemList(A4),D0   ; free memory
-;		beq	ex20
-;ex10		move.l	D0,A2
-;		move.l	(A2),A3             ; next...
+		;ifne resident
+		move.l	___MemList(A4),D0   ; free memory
+		beq	ex20
+ex10		move.l	D0,A2
+		move.l	(A2),A3             ; next...
 
-;		move.l	4(A2),D0            ; bytes
-;		move.l	A2,A1		    ; ptr
-;		jsr	_LVOFreeMem(A6)
+		move.l	4(A2),D0            ; bytes
+		move.l	A2,A1		    ; ptr
+		jsr	_LVOFreeMem(A6)
 
-;		move.l	A3,D0		    ; next...
-;		bne	ex10
+		move.l	A3,D0		    ; next...
+		bne	ex10
+		;endc
 ex20
 
 		move.l	4(sp),D0            ; get exit code
@@ -239,14 +255,16 @@ exfail
 
 		;   Base of autoinit section
 
-;		section autoinit0,code
-;__AutoInit0:
-;		section autoinit1,code
-;__AutoInit1:
-;		section autoexit0,code
-;__AutoExit0:
-;		section autoexit1,code
-;__AutoExit1:
+		;ifne resident
+		section autoinit0,code
+__AutoInit0:
+		section autoinit1,code
+__AutoInit1:
+		section autoexit0,code
+__AutoExit0:
+		section autoexit1,code
+__AutoExit1:
+		;endc
 ;		section autoconfig,code
 ;__AutoConfig:
 
@@ -263,12 +281,13 @@ _Reserved	dc.l	0		; force section to exist (dummy)
 
 		section libbss,bss
 
-;		xdef	___MemList	; used by malloc/free
-
 _SysBase	ds.l	1
 __ExitSP	ds.l	1
 ;__WBMsg	ds.l	1
-;___MemList	ds.l	1
+		;ifne resident
+		xdef	___MemList	; used by malloc/free
+___MemList	ds.l	1
+		;endc
 
 ;;;;
 ;
@@ -308,6 +327,21 @@ _OtherEndianLong:
 	rol.w	#8,d0
 	swap	d0
 	rol.w	#8,d0
+	rts
+
+;;;;
+;
+; Glue for the disk change interrupt handler. A4 is now in A1 (is_Data).
+; We only need this when we compile for PURE code, but it won't harm
+; either.
+
+	xref _ChangeIntHand
+	xdef _ChangeIntHand0
+_ChangeIntHand0:
+	move.l	a4,-(sp)
+	movea.l a1,a4
+	jsr	_ChangeIntHand	; C code
+	move.l	(sp)+,a4
 	rts
 
 	END

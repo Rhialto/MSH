@@ -1,9 +1,13 @@
 /*-
- * $Id: support.c,v 1.43 91/09/28 01:43:35 Rhialto Exp $
+ * $Id: support.c,v 1.46 91/10/06 18:25:58 Rhialto Rel $
  * $Log:	support.c,v $
+ * Revision 1.46  91/10/06  18:25:58  Rhialto
+ *
+ * Freeze for MAXON
+ *
  * Revision 1.43  91/09/28  01:43:35  Rhialto
  * *** empty log message ***
- * 
+ *
  * Revision 1.42  91/06/13  23:55:51  Rhialto
  * DICE conversion
  *
@@ -22,8 +26,16 @@ typedef unsigned long		ulong;
 typedef unsigned char		byte;
 
 #include "dos.h"
+#include "han.h"
 
-extern PORT    *DosPort;	/* Our DOS port... */
+Prototype void returnpacket(struct DosPacket *packet);
+Prototype int packetsqueued(void);
+Prototype void *dosalloc(ulong bytes);
+Prototype void dosfree(ulong *ptr);
+Prototype void btos(byte *bstr, byte *buf);
+Prototype void *GetHead(struct MinList *list);
+Prototype void *GetTail(struct MinList *list);
+Prototype char *typetostr(long ty);
 
 /*
  * PACKET ROUTINES.	Dos Packets are in a rather strange format as you
@@ -107,10 +119,11 @@ byte	       *buf;
  */
 
 #ifdef notdef
+Prototype void * NextNode(struct MinNode *node);
 
 void	       *
 NextNode(node)
-register NODE		*node;
+struct MinNode *node;
 {
     node = node->mln_Succ;
     if (node->mln_Succ == NULL)
@@ -122,7 +135,7 @@ register NODE		*node;
 
 void	       *
 GetHead(list)
-register LIST		*list;
+register struct MinList *list;
 {
     if ((void *) list->mlh_Head != (void *) &list->mlh_Tail)
 	return (list->mlh_Head);
@@ -131,7 +144,7 @@ register LIST		*list;
 
 void	       *
 GetTail(list)
-register LIST		*list;
+register struct MinList *list;
 {
     if ((void *) list->mlh_Head != (void *) &list->mlh_Tail)
 	return (list->mlh_TailPred);

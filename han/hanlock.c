@@ -1,10 +1,14 @@
 /*-
- * $Id: hanlock.c,v 1.43 91/09/28 01:41:06 Rhialto Exp $
+ * $Id: hanlock.c,v 1.46 91/10/06 18:26:37 Rhialto Rel $
  * $Log:	hanlock.c,v $
+ * Revision 1.46  91/10/06  18:26:37  Rhialto
+ *
+ * Freeze for MAXON
+ *
  * Revision 1.43  91/09/28  01:41:06  Rhialto
  * Changed to newer syslog stuff.
  * Fix bug that assign always refers to the rootdir.
- * 
+ *
  * Revision 1.42  91/06/13  23:55:16  Rhialto
  * DICE conversion
  *
@@ -35,8 +39,8 @@
  * The Lock department. Takes care of operations on locks, and consequently,
  * on directories.
  *
- * This code is (C) Copyright 1989 by Olaf Seibert. All rights reserved. May
- * not be used or copied without a licence.
+ * This code is (C) Copyright 1989-1992 by Olaf Seibert. All rights reserved.
+ * May not be used or copied without a licence.
 -*/
 
 #include <amiga.h>
@@ -51,13 +55,38 @@
 #   define	debug(x)
 #endif
 
+Prototype int CompareNames(struct MsDirEntry *dir, byte *name);
+Prototype void NextDirEntry(word *sector, word *offset);
+Prototype struct DirEntry *FindNext(struct DirEntry *previous, int createit);
+Prototype void PrintDirEntry(struct DirEntry *de);
+Prototype struct MSFileLock *MakeLock(struct MSFileLock *parentdir, struct DirEntry *dir, ulong mode);
+Prototype struct MSFileLock *MSLock(struct MSFileLock *parentdir, byte *name, ulong mode);
+Prototype struct MSFileLock *MSDupLock(struct MSFileLock *fl);
+Prototype struct MSFileLock *MSParentDir(struct MSFileLock *fl);
+Prototype int MSUnLock(struct MSFileLock *fl);
+Prototype void ExamineDirEntry(struct MsDirEntry *msd, struct FileInfoBlock *fib);
+Prototype int MSExamine(struct MSFileLock *fl, struct FileInfoBlock *fib);
+Prototype int MSExNext(struct MSFileLock *fl, struct FileInfoBlock *fib);
+Prototype long MSSetProtect(struct MSFileLock *parentdir, char *name, long mask);
+Prototype int CheckLock(struct MSFileLock *lock);
+Prototype void WriteFileLock(struct MSFileLock *fl);
+Prototype void UpdateFileLock(struct MSFileLock *fl);
+Prototype struct LockList *NewLockList(void *cookie);
+Prototype void FreeLockList(struct LockList *ll);
+
+Prototype struct LockList *LockList;
+Prototype struct MSFileLock *RootLock;
+Prototype struct MSFileLock *EmptyFileLock;
+Prototype const struct DirEntry FakeRootDirEntry;
+Prototype const byte DotDot[1 + 8 + 3];
+
 struct LockList *LockList;	/* List of all locked files we have. Note
 				 * this is not the same as all locks we
 				 * have */
 struct MSFileLock *RootLock;	/* Lock on root directory */
 struct MSFileLock *EmptyFileLock;	/* 2nd result of MSLock() */
 
-struct DirEntry FakeRootDirEntry = {
+const struct DirEntry FakeRootDirEntry = {
     {				/* de_Msd */
 	"Unnamed ",             /* msd_Name */
 	"   ",                  /* msd_Ext */
@@ -73,7 +102,7 @@ struct DirEntry FakeRootDirEntry = {
     ROOT_SEC,			/* de_Sector */
     -2				/* de_Offset */
 };
-byte		DotDot[1 + 8 + 3] = "..          ";
+const byte DotDot[1 + 8 + 3] = "..          ";
 
 /*
  * This routine compares a name in a directory entry with a given name

@@ -1,12 +1,22 @@
 /*-
- * $Id: hanconv.c,v 1.46 91/10/06 18:24:51 Rhialto Exp $
+ * $Id: hanconv.c,v 1.48 91/11/03 00:56:34 Rhialto Exp $
  * $Log:	hanconv.c,v $
+ * Revision 1.48  91/11/03  00:56:34  Rhialto
+ * Codes for s on PC/ST were swapped.
+ *
  * Revision 1.46  91/10/06  18:24:51  Rhialto
  *
  * Freeze for MAXON
  *
  * Revision 1.45  91/10/03  23:34:41  Rhialto
  * Initial version
+ *
+ *
+ * HANCONV.C
+ *
+ * The code for the messydos file system handler.
+ *
+ * This parts handles conversions on file data: PC/ST codes vs ISO-Latin-1.
  *
  * This code is (C) Copyright 1991,1992 by Olaf Seibert. All rights reserved.
  * May not be used or copied without a licence.
@@ -80,7 +90,7 @@ long		fromsize;
 	Table_FromPC[0x9A] = 0xDC;   /* U */
 	Table_FromPC[0x8E] = 0xC4;   /* A */
 	Table_FromPC[0x99] = 0xD6;   /* O */
-	Table_FromPC[0x9E] = 0xDF;   /* s */
+	Table_FromPC[0xE1] = 0xDF;   /* s */
     }
 
     if (Table_FromPC != NULL) {
@@ -107,7 +117,7 @@ long		fromsize;
 	Table_FromST[0x9A] = 0xDC;   /* U */
 	Table_FromST[0x8E] = 0xC4;   /* A */
 	Table_FromST[0x99] = 0xD6;   /* O */
-	Table_FromST[0xE1] = 0xDF;   /* s */
+	Table_FromST[0x9E] = 0xDF;   /* s */
     }
 
     if (Table_FromST != NULL) {
@@ -134,7 +144,7 @@ long		fromsize;
 	Table_ToPC[0xDC] = 0x9A;   /* U */
 	Table_ToPC[0xC4] = 0x8E;   /* A */
 	Table_ToPC[0xD6] = 0x99;   /* O */
-	Table_ToST[0xDF] = 0x9E;   /* s */
+	Table_ToST[0xDF] = 0xE1;   /* s */
     }
 
     if (Table_ToPC != NULL) {
@@ -161,7 +171,7 @@ long		fromsize;
 	Table_ToST[0xDC] = 0x9A;   /* U */
 	Table_ToST[0xC4] = 0x8E;   /* A */
 	Table_ToST[0xD6] = 0x99;   /* O */
-	Table_ToPC[0xDF] = 0xE1;   /* s */
+	Table_ToPC[0xDF] = 0x9E;   /* s */
     }
 
     if (Table_ToST != NULL) {

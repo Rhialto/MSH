@@ -1,6 +1,10 @@
 /*-
- * $Id: hanfile.c,v 1.45 91/10/03 23:36:16 Rhialto Exp $
+ * $Id: hanfile.c,v 1.46 91/10/06 18:24:36 Rhialto Rel $
  * $Log:	hanfile.c,v $
+ * Revision 1.46  91/10/06  18:24:36  Rhialto
+ *
+ * Freeze for MAXON
+ *
  * Revision 1.45  91/10/03  23:36:16  Rhialto
  * Implement in-situ conversions during Read()/Write()
  *
@@ -46,8 +50,24 @@
 #   define	debug(x)
 #endif
 
-
-extern char	DotDot[1 + 8 + 3];
+Prototype int GetFat(void);
+Prototype void FreeFat(void);
+Prototype word GetFatEntry(word cluster);
+Prototype void SetFatEntry(word cluster, word value);
+Prototype word FindFreeCluster(word prev);
+Prototype word ExtendClusterChain(word cluster);
+Prototype void FreeClusterChain(word cluster);
+Prototype struct MSFileHandle *MakeMSFileHandle(struct MSFileLock *fl, long mode);
+Prototype struct MSFileHandle *MSOpen(struct MSFileLock *parentdir, char *name, long mode);
+Prototype long MSClose(struct MSFileHandle *fh);
+Prototype long FilePos(struct MSFileHandle *fh, long position, long mode);
+Prototype long MSSeek(struct MSFileHandle *fh, long position, long mode);
+Prototype long MSRead(struct MSFileHandle *fh, byte *userbuffer, long size);
+Prototype long MSWrite(struct MSFileHandle *fh, byte *userbuffer, long size);
+Prototype long MSDeleteFile(struct MSFileLock *parentdir, byte *name);
+Prototype long MSSetDate(struct MSFileLock *parentdir, byte *name, struct DateStamp *datestamp);
+Prototype struct MSFileLock *MSCreateDir(struct MSFileLock *parentdir, byte *name);
+Prototype long MSRename(struct MSFileLock *slock, byte *sname, struct MSFileLock *dlock, byte *dname);
 
 /*
  * Read the FAT from the disk, and count the free clusters.
@@ -341,7 +361,7 @@ makefh:
     return NULL;
 }
 
-void
+long
 MSClose(fh)
 register struct MSFileHandle *fh;
 {
@@ -349,6 +369,7 @@ register struct MSFileHandle *fh;
 	MSUnLock(fh->msfh_FileLock);
 	FreeMem(fh, (long) sizeof (*fh));
     }
+    return DOSTRUE;
 }
 
 long
@@ -548,7 +569,7 @@ register long	size;
 		if (update)
 		    UpdateFileLock(fl);
 #if 1
-		return -1;	/* We loose the information about how much
+		return -1;	/* We lose the information about how much
 				 * data we wrote, but the standard file system
 				 * seems to do it this way. */
 #else
