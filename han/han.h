@@ -1,6 +1,9 @@
 /*-
- *  $Id: han.h,v 1.46 91/10/06 18:26:52 Rhialto Rel $
+ *  $Id: han.h,v 1.51 92/04/17 15:39:01 Rhialto Rel $
  *  $Log:	han.h,v $
+ * Revision 1.51  92/04/17  15:39:01  Rhialto
+ * Freeze for MAXON3.
+ *
  * Revision 1.46  91/10/06  18:26:52  Rhialto
  *
  * Freeze for MAXON
@@ -39,7 +42,7 @@
 
 /*----- End configuration section -----*/
 
-#define MODE_READWRITE	1004L
+/* #define MODE_READWRITE  1004L */
 #define MODE_CREATEFILE (1L<<31)
 #define FILE_DIR     2
 #define FILE_FILE   -3
@@ -61,8 +64,8 @@
 
 #define FAT_EOF     0xFFFF	/* end of file FAT entry */
 #define FAT_UNUSED  0		/* unused block */
-#define SEC_EOF     -1		/* end of FAT chain */
-#define ROOT_SEC    -1		/* where the root directory 'is' */
+#define SEC_EOF     ((word)-1)  /* end of FAT chain */
+#define ROOT_SEC    ((word)-1)  /* where the root directory 'is' */
 
 #define DIR_DELETED	    0xE5
 #define DIR_DELETED_MASK    0x80
