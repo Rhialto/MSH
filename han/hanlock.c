@@ -1,9 +1,12 @@
 /*-
- * $Id: hanlock.c,v 1.41 91/06/13 23:37:53 Rhialto Exp $
+ * $Id: hanlock.c,v 1.42 91/06/13 23:55:16 Rhialto Exp $
  * $Log:	hanlock.c,v $
+ * Revision 1.42  91/06/13  23:55:16  Rhialto
+ * DICE conversion
+ *
  * Revision 1.41  91/06/13  23:37:53  Rhialto
  * Fix MSSetProtect (converted dirs into files) + DICE conversion
- * 
+ *
  * Revision 1.40  91/03/03  17:53:35  Rhialto
  * Freeze for MAXON
  *
@@ -39,10 +42,7 @@
 #include "dos.h"
 
 #ifdef HDEBUG
-#   define	debug(x)  syslog x
-    void initsyslog(void);
-    void syslog(char *, ...);
-    void uninitsyslog(void);
+#   include "syslog.h"
 #else
 #   define	debug(x)
 #endif
@@ -304,8 +304,8 @@ ulong		mode;
 	register byte  *colon;
 
 	if (colon = strchr(name, ':')) {
+	    debug(("name == %lx \"%s\"\n", name, name));
 	    name = colon + 1;
-	    parentdir = RootLock;
 	    /*
 	     * MSH::Command or ::Command?
 	     */
@@ -323,6 +323,10 @@ ulong		mode;
      * Get a copy of the parent dir lock, so we can walk it over the
      * directory tree.
      */
+#ifdef HDEBUG
+    if (!parentdir)
+	debug(("Parentdir == NULL\n"));
+#endif
     parentdir = MSDupLock(parentdir);
 
     /*
