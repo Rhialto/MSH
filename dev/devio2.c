@@ -1,6 +1,9 @@
 /*-
- * $Id: devio2.c,v 1.46 91/10/06 18:27:22 Rhialto Rel $
+ * $Id: devio2.c,v 1.47 91/11/03 00:49:17 Rhialto Exp $
  * $Log:	devio2.c,v $
+ * Revision 1.47  91/11/03  00:49:17  Rhialto
+ * Only set WORDSYNC when we want to write, not on read.
+ *
  * Revision 1.46  91/10/06  18:27:22  Rhialto
  *
  * Freeze for MAXON
@@ -27,8 +30,8 @@
  *
  * The messydisk.device code that does the real work.
  *
- * This code is (C) Copyright 1989 by Olaf Seibert. All rights reserved. May
- * not be used or copied without a licence.
+ * This code is (C) Copyright 1989-1992 by Olaf Seibert. All rights reserved.
+ * May not be used or copied without a licence.
 -*/
 
 #include <amiga.h>
@@ -44,11 +47,41 @@
 #endif
 #define REGISTER
 
-struct DiskResource *DRResource;/* Argh! A global variable! */
-void *CiaBResource;		/* And yet another! */
+Prototype void CMD_Read(struct IOStdReq *ioreq, UNIT *unit);
+Prototype void CMD_Write(struct IOStdReq *ioreq, UNIT *unit);
+Prototype void TD_Format(struct IOStdReq *ioreq, UNIT *unit);
+Prototype void CMD_Reset(struct IOStdReq *ioreq, UNIT *unit);
+Prototype void CMD_Update(struct IOStdReq *ioreq, UNIT *unit);
+Prototype void CMD_Clear(struct IOStdReq *ioreq, UNIT *unit);
+Prototype void TD_Seek(struct IOStdReq *ioreq, UNIT *unit);
+Prototype void TD_Changenum(struct IOStdReq *ioreq, UNIT *unit);
+Prototype void TD_Addchangeint(struct IOStdReq *ioreq);
+Prototype void TD_Remchangeint(struct IOStdReq *ioreq);
+Prototype int DevInit(DEV *dev);
+Prototype void InitDecoding(byte  *decode);
+Prototype long MyDoIO(struct IORequest *req);
+Prototype int TDMotorOn(struct IOExtTD *tdreq);
+Prototype int TDGetNumTracks(struct IOExtTD *tdreq);
+Prototype int TDSeek(UNIT *unit, struct IOStdReq *ioreq, int track);
+Prototype void *GetDrive(struct DiskResourceUnit *drunit);
+Prototype void FreeDrive(void);
+Prototype int GetTrack(struct IOStdReq *ioreq, int track);
+Prototype int CheckChanged(struct IOExtTD *ioreq, UNIT *unit);
+Prototype int DevCloseDown(DEV *dev);
+Prototype int CheckRequest(struct IOExtTD *ioreq, UNIT *unit);
+Prototype UNIT *UnitInit(DEV *dev, ulong UnitNr);
+Prototype int UnitCloseDown(struct IOStdReq *ioreq, DEV *dev, UNIT *unit);
+Prototype __geta4 void DiskChangeHandler(__A1 UNIT *unit);
+Prototype void DiskChangeHandler0(void);
 
-extern __far struct Custom custom;
-extern __far struct CIA ciab;
+#ifndef READONLY
+Prototype word CalculateGapLength(int sectors);
+Prototype int InitWrite(DEV *dev);
+Prototype void FreeBuffer(DEV *dev);
+Prototype void Internal_Update(struct IOStdReq *ioreq, UNIT *unit);
+Prototype __stkargs void EncodeTrack(byte *TrackBuffer, byte *Rawbuffer, word *Crcs, long Cylinder, long Side, long GapLen, long NumSecs);
+/* should become  ... word Cylinder, word Side, word GapLen, word NumSecs */
+#endif
 
 __stkargs word DataCRC(byte *buffer);
 __stkargs void IndexIntCode(void);
@@ -58,6 +91,12 @@ int DecodeTrack(DEV *dev, UNIT *unit);
 __stkargs word DecodeTrack0(DEV *dev, UNIT *unit);
 __stkargs void SafeEnableICR(long bits);
 __stkargs byte DecodeByte(byte *mfmdecode, word mfm);
+
+extern __far struct Custom custom;
+extern __far struct CIA ciab;
+
+struct DiskResource *DRResource;/* Argh! A global variable! */
+void *CiaBResource;		/* And yet another! */
 
 /*-
  *  The high clock bit in this table is still 0, but it could become
@@ -140,11 +179,13 @@ struct IOStdReq *ioreq;
 	tdreq->iotd_Req.io_Flags = IOTDF_INDEXSYNC;
 	tdreq->iotd_Req.io_Length = WLEN;
 	tdreq->iotd_Req.io_Data = (APTR)dev->md_Rawbuffer;
-	tdreq->iotd_Req.io_Offset = unit->mu_CurrentCylinder;
-	if ((ioreq->io_Flags & IOMDF_40TRACKS) && (unit->mu_NumCyls == 80))
-	    tdreq->iotd_Req.io_Offset *= 2;
-	tdreq->iotd_Req.io_Offset *= NUMHEADS;
-	tdreq->iotd_Req.io_Offset += unit->mu_CurrentSide;
+	if ((ioreq->io_Flags & IOMDF_40TRACKS) &&
+	    (unit->mu_NumTracks == TRACKS(80))) {
+	    tdreq->iotd_Req.io_Offset = 2 * unit->mu_CurrentTrack -
+					TRK2SIDE(unit->mu_CurrentTrack);
+	} else {
+	    tdreq->iotd_Req.io_Offset = unit->mu_CurrentTrack;
+	}
 	debug(("TDRawWrite %ld\n", tdreq->iotd_Req.io_Offset));
 	MyDoIO((struct IORequest *)tdreq);
 
@@ -171,7 +212,7 @@ struct IOStdReq *ioreq;
     ciab.ciaprb = 0xff & ~CIAF_DSKMOTOR;    /* See hardware manual p229 */
     ciab.ciaprb = 0xff & ~CIAF_DSKMOTOR
 		       & ~(CIAF_DSKSEL0 << unit->mu_UnitNr)
-		       & ~(unit->mu_CurrentSide << CIAB_DSKSIDE);
+		       & ~(TRK2SIDE(unit->mu_CurrentTrack) << CIAB_DSKSIDE);
 
     /* Set up disk parameters */
 
@@ -188,7 +229,7 @@ struct IOStdReq *ioreq;
 	adk = ADKF_SETCLR|ADKF_MFMPREC|ADKF_FAST;
 
 	/* Are we on the inner half ? */
-	if (unit->mu_CurrentCylinder > unit->mu_NumCyls >> 1) {
+	if (unit->mu_CurrentTrack > (unit->mu_NumTracks >> 1)) {
 	    adk |= ADKF_PRECOMP0;
 	}
 	/* Do we need wordsync ? */
@@ -239,29 +280,6 @@ word mfm;
 	   mfmdecode[(byte)(mfm >> 8) & 0x7F] << 4;
 }
 
-/*
-/*#asm
-mfmdecode   set     4
-mfm	    set     8
-
-_DecodeByte:
-	move.l	mfmdecode(sp),a0
-	move.b	mfm(sp),d1      ; high nybble
-	and.w	#$7f,d1 	; strip clock bit (and garbage)
-	move.b	(a0,d1.w),d0    ; decode 4 data bits
-	lsl.b	#4,d0		; make room for the rest
-
-	move.b	mfm+1(sp),d1    ; low nybble
-	and.b	#$7f,d1 	; strip clock bit again
-	or.b	(a0,d1.w),d0    ; insert 4 decoded bits
-
-	rts
-
-/*#endasm
-*/
-
-/* INDENT ON */
-
 int
 DecodeTrack(dev, unit)
 DEV	       *dev;
@@ -302,12 +320,12 @@ find_id:
 	}
 
 	sector = DecodeByte(decode, *rawbuf++);
-	if (sector != unit->mu_CurrentCylinder) {
+	if (TRACKS(sector) != unit->mu_CurrentTrack) {
 	    debug(("Cylinder error?? %ld\n", sector));
 	    goto find_id;
 	}
 	sector = DecodeByte(decode, *rawbuf++);
-	if (sector != unit->mu_CurrentSide) {
+	if (sector != TRK2SIDE(unit->mu_CurrentTrack)) {
 	    debug(("Side error?? %ld\n", sector));
 	    goto find_id;
 	}
@@ -369,7 +387,7 @@ end:
      * accurately find if this number is unknown. Let's hope that the first
      * user of this disk starts reading it here.
      */
-    if (unit->mu_CurrentCylinder == 0 && unit->mu_CurrentSide == 0) {
+    if (unit->mu_CurrentTrack == 0) {
 	unit->mu_SectorsPerTrack = maxsec;
     }
     unit->mu_CurrentSectors = maxsec;
@@ -401,7 +419,7 @@ UNIT	       *unit;
      * accurately find if this number is unknown. Let's hope that the first
      * user of this disk starts reading it here.
      */
-    if (unit->mu_CurrentCylinder == 0 && unit->mu_CurrentSide == 0) {
+    if (unit->mu_CurrentTrack == 0) {
 	unit->mu_SectorsPerTrack = maxsec;
     }
     unit->mu_CurrentSectors = maxsec;
@@ -464,38 +482,41 @@ REGISTER struct IOExtTD *tdreq;
 }
 
 /*
- * Get the number of cylinders the drive is capable of using.
+ * Get the number of tracks the drive is capable of using. This is
+ * NUMHEADS times the number of cylinders.
  */
 
 int
-TDGetNumCyls(tdreq)
+TDGetNumTracks(tdreq)
 REGISTER struct IOExtTD *tdreq;
 {
     tdreq->iotd_Req.io_Command = TD_GETNUMTRACKS;
     DoIO((struct IORequest *)tdreq);
 
-    return tdreq->iotd_Req.io_Actual / NUMHEADS;
+    return tdreq->iotd_Req.io_Actual;
 }
 
 /*
- * Seek the drive to the indicated cylinder. Use the trackdisk.device for
+ * Seek the drive to the indicated track. Use the trackdisk.device for
  * ease. Don't use this when you have allocated the disk via GetDrive().
+ * The tracknumber is in Amiga units. We don't care what side of the disk
+ * we end up on ;-) so we discard the side number information.
  */
 
 int
-TDSeek(unit, ioreq, cylinder)
+TDSeek(unit, ioreq, track)
 UNIT	   *unit;
 struct IOStdReq *ioreq;
-int	    cylinder;
+int	    track;
 {
 
     REGISTER struct IOExtTD *tdreq = unit->mu_DiskIOReq;
 
-    debug(("TDSeek %ld\n", (long)cylinder));
+    debug(("TDSeek track %ld\n", (long)track));
 
     tdreq->iotd_Req.io_Command = TD_SEEK;
-    tdreq->iotd_Req.io_Offset = cylinder * (TD_SECTOR * NUMSECS * NUMHEADS);
-    if ((ioreq->io_Flags & IOMDF_40TRACKS) && (unit->mu_NumCyls == 80))
+    tdreq->iotd_Req.io_Offset = TRK2CYL(track) * (TD_SECTOR * NUMSECS * NUMHEADS);
+    if ((ioreq->io_Flags & IOMDF_40TRACKS) && (unit->mu_NumTracks == TRACKS(80)))
 	tdreq->iotd_Req.io_Offset *= 2;
     DoIO((struct IORequest *)tdreq);
 
@@ -532,20 +553,19 @@ FreeDrive()
 }
 
 int
-GetTrack(ioreq, side, cylinder)
+GetTrack(ioreq, track)
 struct IOStdReq *ioreq;
-int		side;
-int		cylinder;
+int		track;
 {
     REGISTER int    i;
     DEV 	   *dev;
     REGISTER UNIT  *unit;
 
-    debug(("GetTrack %ld %ld\n", (long)cylinder, (long)side));
+    debug(("GetTrack %ld\n", (long)track));
     dev = (DEV *) ioreq->io_Device;
     unit = (UNIT *) ioreq->io_Unit;
 
-    if (cylinder != unit->mu_CurrentCylinder || side != unit->mu_CurrentSide) {
+    if (track != unit->mu_CurrentTrack) {
 #ifndef READONLY
 	Internal_Update(ioreq, unit);
 #endif
@@ -554,12 +574,11 @@ int		cylinder;
 	}
 
 	TDMotorOn(unit->mu_DiskIOReq);
-	if (TDSeek(unit, ioreq, cylinder)) {
+	if (TDSeek(unit, ioreq, track)) {
 	    debug(("Seek error\n"));
 	    return ioreq->io_Error = IOERR_BADLENGTH;
 	}
-	unit->mu_CurrentCylinder = cylinder;
-	unit->mu_CurrentSide = side;
+	unit->mu_CurrentTrack = track;
 	ObtainSemaphore(&dev->md_HardwareUse);
 	HardwareIO(dev, unit, 0, NULL); /* ioreq not needed */
 	i = DecodeTrack(dev, unit);
@@ -567,7 +586,7 @@ int		cylinder;
 	debug(("DecodeTrack returns %ld\n", (long)i));
 
 	if (i != 0) {
-	    unit->mu_CurrentCylinder = -1;
+	    unit->mu_CurrentTrack = -1;
 	    return i;
 	}
     }
@@ -616,7 +635,7 @@ error:
     }
     /*
      * if (ioreq->iotd_Req.io_Offset + ioreq->iotd_Req.io_Length >
-     * (unit->mu_NumCyls * MS_NSIDES * MS_SPT * MS_BPS)) {
+     * (unit->mu_NumTracks * MS_SPT * MS_BPS)) {
      * ioreq->iotd_Req.io_Error = IOERR_BADLENGTH; goto error; }
      */
 
@@ -659,8 +678,7 @@ CMD_Read(ioreq, unit)
 REGISTER struct IOStdReq *ioreq;
 REGISTER UNIT  *unit;
 {
-    int 	    side;
-    int 	    cylinder;
+    int 	    track;
     int 	    sector;
     byte	   *userbuf;
     long	    length;
@@ -674,11 +692,9 @@ REGISTER UNIT  *unit;
     offset = ioreq->io_Offset / MS_BPS;        /* Sector number */
     debug(("userbuf %08lx off %ld len %ld ", userbuf, offset, length));
 
-    cylinder = offset / unit->mu_SectorsPerTrack;
-    side = cylinder % MS_NSIDES;
-    cylinder /= MS_NSIDES;
+    track = offset / unit->mu_SectorsPerTrack;
     sector = offset % unit->mu_SectorsPerTrack;       /* 0..8 or 9 */
-    debug(("Tr=%ld Si=%ld Se=%ld\n", (long)cylinder, (long)side, (long)sector));
+    debug(("Tr=%ld Si=%ld Se=%ld\n", (long)track / MS_NSIDES, (long)track % MS_NSIDES, (long)sector));
 
     ioreq->io_Actual = 0;
 
@@ -688,7 +704,7 @@ REGISTER UNIT  *unit;
     retrycount = 0;
     diskbuf = unit->mu_TrackBuffer + MS_BPS * sector;
 gettrack:
-    GetTrack(ioreq, side, cylinder);
+    GetTrack(ioreq, track);
 
     for (;;) {
 	/*
@@ -706,7 +722,7 @@ gettrack:
 	}
 	if (unit->mu_SectorStatus[sector] > TDERR_NoError) {
 	    if (++retrycount < 3) {
-		unit->mu_CurrentCylinder = -1;
+		unit->mu_CurrentTrack = -1;
 		goto gettrack;
 	    }
 	    ioreq->io_Error = unit->mu_SectorStatus[sector];
@@ -722,14 +738,11 @@ gettrack:
 	if (++sector >= unit->mu_SectorsPerTrack) {
 	    sector = 0;
 	    diskbuf = unit->mu_TrackBuffer;
-	    if (++side >= MS_NSIDES) {
-		side = 0;
-		if (++cylinder >= unit->mu_NumCyls) {
-		    /* ioreq->io_Error = IOERR_BADLENGTH; */
-		    goto end;
-		}
+	    if (++track >= unit->mu_NumTracks) {
+		/* ioreq->io_Error = IOERR_BADLENGTH; */
+		goto end;
 	    }
-	    GetTrack(ioreq, side, cylinder);
+	    GetTrack(ioreq, track);
 	}
     }
 
@@ -764,7 +777,7 @@ CMD_Reset(ioreq, unit)
 struct IOStdReq *ioreq;
 UNIT	       *unit;
 {
-    unit->mu_CurrentSide = -1;
+    unit->mu_CurrentTrack = -1;
     unit->mu_TrackChanged = 0;
     TermIO(ioreq);
 }
@@ -787,7 +800,7 @@ struct IOStdReq *ioreq;
 UNIT	       *unit;
 {
     if (!CheckChanged((struct IOExtTD *)ioreq, unit)) {
-	unit->mu_CurrentSide = -1;
+	unit->mu_CurrentTrack = -1;
 	unit->mu_TrackChanged = 0;
     }
     TermIO(ioreq);
@@ -799,11 +812,10 @@ struct IOStdReq *ioreq;
 UNIT	       *unit;
 {
     if (!CheckChanged((struct IOExtTD *)ioreq, unit)) {
-	word		cylinder;
+	int		track;
 
-	cylinder = (ioreq->io_Offset / unit->mu_SectorsPerTrack) /
-		    (MS_BPS * MS_NSIDES);
-	TDSeek(unit, ioreq, cylinder);
+	track = (ioreq->io_Offset / MS_BPS) / unit->mu_SectorsPerTrack;
+	TDSeek(unit, ioreq, track);
     }
     TermIO(ioreq);
 }
@@ -917,10 +929,10 @@ ulong		UnitNr;
     }
     NewList((struct List *)&unit->mu_ChangeIntList);
 
-    unit->mu_NumCyls = TDGetNumCyls(tdreq);
+    unit->mu_NumTracks = TDGetNumTracks(tdreq);
     unit->mu_UnitNr = UnitNr;
     unit->mu_DiskState = STATEF_UNKNOWN;
-    unit->mu_CurrentSide = -1;
+    unit->mu_CurrentTrack = -1;
     unit->mu_TrackChanged = 0;
     unit->mu_InitSectorStatus = CRC_UNCHECKED;
     unit->mu_SectorsPerTrack = MS_SPT;
@@ -1037,9 +1049,9 @@ REGISTER struct IOStdReq *ioreq;
     TermIO(ioreq);
 }
 
-__stkargs __geta4 void
-DiskChangeHandler0(unit)
-UNIT	  *unit;
+__geta4 void
+DiskChangeHandler(unit)
+__A1 UNIT      *unit;
 {
     REGISTER struct IOStdReq *ioreq;
     REGISTER struct IOStdReq *next;
@@ -1101,8 +1113,8 @@ DEV	       *dev;
  * changes we don't have to bother about actually writing any data to the
  * disk. GetSTS has to be changed in the following way:
  *
- * if (cylinder != mu_CurrentCylinder || side != mu_CurrentSide) { Internal_Update(); for
- * (i = 0; i < MS_SPT; i++) ..... etc.
+ * if (track != mu_CurrentTrack) { Internal_Update();
+ * for (i = 0; i < MS_SPT; i++) ..... etc.
  */
 
 void
@@ -1110,8 +1122,7 @@ CMD_Write(ioreq, unit)
 REGISTER struct IOStdReq *ioreq;
 UNIT	       *unit;
 {
-    int 	    side;
-    int 	    cylinder;
+    int 	    track;
     int 	    sector;
     byte	   *userbuf;
     long	    length;
@@ -1125,18 +1136,16 @@ UNIT	       *unit;
     debug(("userbuf %08lx off %ld len %ld ", userbuf, offset, length));
 
     spt = unit->mu_SectorsPerTrack;
-    cylinder = offset / spt;
-    side = cylinder % MS_NSIDES;
-    cylinder /= MS_NSIDES;
+    track = offset / spt;
     sector = offset % spt;
-    debug(("T=%ld Si=%ld Se=%ld\n", (long)cylinder, (long)side, (long)sector));
+    debug(("T=%ld Si=%ld Se=%ld\n", (long)track / MS_NSIDES, (long)side % MS_NSIDES, (long)sector));
 
     ioreq->io_Actual = 0;
 
     if (length <= 0 || CheckRequest((struct IOExtTD *)ioreq, unit))
 	goto end;
 
-    GetTrack(ioreq, side, cylinder);
+    GetTrack(ioreq, track);
     for (;;) {
 	CopyMem(userbuf, unit->mu_TrackBuffer + MS_BPS * sector, (long) MS_BPS);
 	unit->mu_TrackChanged = 1;
@@ -1151,12 +1160,9 @@ UNIT	       *unit;
 	 */
 	if (++sector >= spt) {
 	    sector = 0;
-	    if (++side >= MS_NSIDES) {
-		side = 0;
-		if (++cylinder >= unit->mu_NumCyls)
-		    goto end;
-	    }
-	    GetTrack(ioreq, side, cylinder);
+	    if (++track >= unit->mu_NumTracks)
+		goto end;
+	    GetTrack(ioreq, track);
 	}
     }
 
@@ -1212,11 +1218,12 @@ REGISTER UNIT  *unit;
 	    ObtainSemaphore(&dev->md_HardwareUse);
 	    EncodeTrack(unit->mu_TrackBuffer, dev->md_Rawbuffer,
 			unit->mu_CrcBuffer,
-			unit->mu_CurrentCylinder, unit->mu_CurrentSide,
+			TRK2CYL(unit->mu_CurrentTrack),  /* cylinder */
+			TRK2SIDE(unit->mu_CurrentTrack), /* side */
 			SectorGap, unit->mu_CurrentSectors);
 
 	    TDMotorOn(tdreq);
-	    if (TDSeek(unit, ioreq, unit->mu_CurrentCylinder)) {
+	    if (TDSeek(unit, ioreq, unit->mu_CurrentTrack)) {
 		debug(("Seek error\n"));
 		ioreq->io_Error = TDERR_SeekError;
 		goto end;
@@ -1242,8 +1249,7 @@ UNIT	       *unit;
 {
     REGISTER struct IOExtTD *tdreq = unit->mu_DiskIOReq;
     DEV 	   *dev;
-    short	    side;
-    int 	    cylinder;
+    int 	    track;
     byte	   *userbuf;
     int 	    length;
     word	    spt;
@@ -1256,7 +1262,7 @@ UNIT	       *unit;
 
     userbuf = (byte *) ioreq->io_Data;
     length = ioreq->io_Length / MS_BPS; 	   /* Sector count */
-    cylinder = ioreq->io_Offset / MS_BPS;	   /* Sector number */
+    track = ioreq->io_Offset / MS_BPS;		   /* Sector number */
     /*
      * Now try to guess the number of sectors the user wants per track.
      * 40 sectors is the first ambiguous length.
@@ -1286,12 +1292,10 @@ found_spt:
      */
     unit->mu_SectorsPerTrack = spt;
 
-    length /= spt;
-    cylinder /= spt;
+    length /= spt;		/* convert to number of tracks */
+    track /= spt;		/* convert to track number */
 
-    side = cylinder % MS_NSIDES;
-    cylinder /= MS_NSIDES;
-    debug(("userbuf %08lx cylinder %ld len %ld\n", userbuf, (long)cylinder, (long)length));
+    debug(("userbuf %08lx track %ld len %ld\n", userbuf, (long)track, (long)length));
 
     ioreq->io_Actual = 0;
 
@@ -1299,8 +1303,8 @@ found_spt:
      * Write out the current track if we are not going to overwrite it.
      * After the format operation, the buffer is invalidated.
      */
-    if (cylinder <= unit->mu_CurrentCylinder &&
-	unit->mu_CurrentCylinder < cylinder + length)
+    if (track <= unit->mu_CurrentTrack &&
+		 unit->mu_CurrentTrack < track + length)
 	Internal_Update(ioreq, unit);
 
     dev = (DEV *) ioreq->io_Device;
@@ -1316,17 +1320,17 @@ found_spt:
 	}
 	ObtainSemaphore(&dev->md_HardwareUse);
 	EncodeTrack(userbuf, dev->md_Rawbuffer, unit->mu_CrcBuffer,
-		    cylinder, side,
+		    TRK2CYL(track),     /* cylinder */
+		    TRK2SIDE(track),    /* side */
 		    gaplen, spt);
 
 	TDMotorOn(tdreq);
-	if (TDSeek(unit, ioreq, cylinder)) {
+	if (TDSeek(unit, ioreq, track)) {
 	    debug(("Seek error\n"));
 	    ioreq->io_Error = IOERR_BADLENGTH;
 	    break;
 	}
-	unit->mu_CurrentSide = side;
-	unit->mu_CurrentCylinder = cylinder;
+	unit->mu_CurrentTrack = track;
 	HardwareIO(dev, unit, DSKWRITE, ioreq);
 
 	ReleaseSemaphore(&dev->md_HardwareUse);
@@ -1335,14 +1339,11 @@ found_spt:
 	userbuf += MS_BPS * spt;
 	ioreq->io_Actual += MS_BPS * spt;
 
-	if (++side >= MS_NSIDES) {
-	    side = 0;
-	    if (++cylinder >= unit->mu_NumCyls)
-		goto end;
-	}
+	if (++track >= unit->mu_NumTracks)
+	    goto end;
     }
 end:
-    unit->mu_CurrentSide = -1;
+    unit->mu_CurrentTrack = -1;
     unit->mu_TrackChanged = 0;
 termio:
     TermIO(ioreq);

@@ -1,7 +1,11 @@
 ;;;;
 ;
-; $Id: devio1.a,v 1.46 91/10/06 18:27:12 Rhialto Rel $
+; $Id: devio1.a,v 1.47 91/11/03 01:08:02 Rhialto Exp $
 ; $Log: devio1.a,v $
+; Revision 1.47  91/11/03  01:08:02  Rhialto
+; Load A0 with custom address in interrupt code since that value is
+; not guaranteed already there.
+;
 ; Revision 1.46  91/10/06  18:27:12  Rhialto
 ;
 ; Freeze for MAXON
@@ -685,13 +689,15 @@ CRCTable2:
 ;
 ; The disk change interrupt handler glue code.
 
-	xref _DiskChangeHandler0
-	xdef _DiskChangeHandler
+	ifne	0
+	xref	_DiskChangeHandler
+	xdef	_DiskChangeHandler0
 
-_DiskChangeHandler:
+_DiskChangeHandler0:
 	move.l	a1,-(sp)                ; is_Data
-	jsr	_DiskChangeHandler0
+	jsr	_DiskChangeHandler
 	lea	4(sp),sp
 	rts
+	endc
 
 	end

@@ -1,6 +1,10 @@
 /*-
- *  $Id: device.h,v 1.42 91/06/14 00:07:33 Rhialto Exp $
+ *  $Id: device.h,v 1.46 91/10/06 18:25:45 Rhialto Rel $
  *  $Log:	device.h,v $
+ * Revision 1.51  92/04/17  15:43:10  Rhialto
+ * Freeze for MAXON3. Change cyl+side units to track units.
+ *
+ * Revision 1.46  91/10/06  18:25:45  Rhialto
  *
  * Freeze for MAXON
  *
@@ -43,9 +47,12 @@
 extern struct ExecBase *SysBase;
 
 #define MD_NUMUNITS	4
+#ifndef NUMHEADS
+#define NUMHEADS	2   /* Used to be in devices/trackdisk.h */
+#endif
 #define TRACKS(cyls)    ((cyls) * NUMHEADS)
 #define VERSION 	34L
-#define REVISION	11
+#define REVISION	12
 
 #define VERSION 	SYS2_04
 #define REVISION	16
@@ -77,8 +84,8 @@ struct MessyUnit {
     ulong	    mu_ChangeNum;
     ulong	    mu_OpenFlags;
     byte	    mu_DiskState;
-    short	    mu_CurrentCylinder; /* Position of the head, and */
-    short	    mu_CurrentSide;	/* what's in the track buffer */
+    byte	    mu_DmaSignal;
+    short	    mu_SectorsPerTrack; /* The nominal #sectors/track */
     short	    mu_CurrentSectors;	/* The current #sectors on this track */
     short	    mu_TrackChanged;
     short	    mu_ReadLen; 	/* 1 track + ~1 sector */
@@ -86,7 +93,6 @@ struct MessyUnit {
     struct DiskResourceUnit mu_DRUnit;
     struct MsgPort  mu_DiskReplyPort;
     struct IOExtTD *mu_DiskIOReq;
-    short	    mu_NumCyls;
     byte	    mu_TrackBuffer[MS_SPT_MAX * MS_BPS];   /* Must be word aligned */
     word	    mu_CrcBuffer[MS_SPT_MAX];
     char	    mu_SectorStatus[MS_SPT_MAX];
@@ -153,67 +159,14 @@ typedef struct MessyUnit   UNIT;
 __stkargs struct DiskResourceUnit *GetUnit(struct DiskResourceUnit *);
 __stkargs void GiveUnit(void);
 
+struct DiskResourceUnit *GetUnit(__A1 struct DiskResourceUnit *);
+void GiveUnit(void);
+
 #define Prototype extern
  *  Forward declarations:
 
 /*
-
-extern void Init(), _DevOpen(), _DevClose(), _DevExpunge(), _LibNull();
-extern void _DevBeginIO(), _DevAbortIO();
-
-extern char DevName[], idString[];
-
-__stkargs __geta4 DEV *CInit(ulong D2, ulong D3, long segment);
-__stkargs __geta4 void DevOpen(ulong unitno, ulong flags, ulong D2, ulong D3, struct IOStdReq *ioreq, DEV *dev);
-__stkargs __geta4 long DevClose(ulong D2, ulong D3, struct IOStdReq *ioreq, DEV *dev);
-__stkargs __geta4 long DevExpunge(ulong D2, ulong D3, DEV *dev);
-__stkargs __geta4 void DevBeginIO(ulong D2, ulong D3, struct IOStdReq *ioreq, DEV *dev);
-__stkargs __geta4 long DevAbortIO(ulong D2, ulong D3, struct IOStdReq *ioreq, DEV *dev);
-void TermIO(struct IOStdReq *ioreq);
-void WakePort(struct MsgPort *port);
-__geta4 void UnitTask(void);
-void CMD_Invalid(struct IOStdReq *ioreq, UNIT *unit);
-void CMD_Stop(struct IOStdReq *ioreq, UNIT *unit);
-void CMD_Start(struct IOStdReq *ioreq, UNIT *unit);
-void CMD_Flush(struct IOStdReq *ioreq, UNIT *unit);
-void CMD_Read(struct IOStdReq *ioreq, UNIT *unit);
-void CMD_Write(struct IOStdReq *ioreq, UNIT *unit);
-void TD_Format(struct IOStdReq *ioreq, UNIT *unit);
-void CMD_Reset(struct IOStdReq *ioreq, UNIT *unit);
-void CMD_Update(struct IOStdReq *ioreq, UNIT *unit);
-void CMD_Clear(struct IOStdReq *ioreq, UNIT *unit);
-void TD_Seek(struct IOStdReq *ioreq, UNIT *unit);
-void TD_Changenum(struct IOStdReq *ioreq, UNIT *unit);
-void TD_Addchangeint(struct IOStdReq *ioreq);
-void TD_Remchangeint(struct IOStdReq *ioreq);
-
-void TrackdiskGateway(struct IOStdReq *ioreq, UNIT *unit);
-
-int DevInit(DEV *dev);
-void InitDecoding(byte  *decode);
-long MyDoIO(struct IORequest *req);
-int TDMotorOn(struct IOExtTD *tdreq);
-int TDGetNumCyls(struct IOExtTD *tdreq);
-int TDSeek(UNIT *unit, struct IOStdReq *ioreq, int cylinder);
-void *GetDrive(struct DiskResourceUnit *drunit);
-void FreeDrive(void);
-int GetTrack(struct IOStdReq *ioreq, int side, int cylinder);
-int CheckChanged(struct IOExtTD *ioreq, UNIT *unit);
-int DevCloseDown(DEV *dev);
-int CheckRequest(struct IOExtTD *ioreq, UNIT *unit);
-UNIT *UnitInit(DEV *dev, ulong UnitNr);
-int UnitCloseDown(struct IOStdReq *ioreq, DEV *dev, UNIT *unit);
-__stkargs __geta4 void DiskChangeHandler0(UNIT *unit);
-void DiskChangeHandler(void);
-
-#ifndef READONLY
-word CalculateGapLength(int sectors);
-int InitWrite(DEV *dev);
-void FreeBuffer(DEV *dev);
-void Internal_Update(struct IOStdReq *ioreq, UNIT *unit);
-__stkargs void EncodeTrack(byte *TrackBuffer, byte *Rawbuffer, word *Crcs, long Cylinder, long Side, long GapLen, long NumSecs);
-/* should become							   word Cylinder, word Side, word GapLen, word NumSecs */
-#endif
+ *  Prototypes:
  */
 
 #include "devproto.h"

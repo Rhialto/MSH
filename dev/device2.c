@@ -1,6 +1,9 @@
 /*-
- * $Id: device2.c,v 1.42 91/06/13 23:45:09 Rhialto Exp $
+ * $Id: device2.c,v 1.46 91/10/06 18:22:08 Rhialto Rel $
  * $Log:	device2.c,v $
+ * Revision 1.46  91/10/06  18:22:08  Rhialto
+ * Freeze for MAXON; new syslog stuff
+ *
  * Revision 1.42  91/06/13  23:45:09  Rhialto
  * DICE conversion
  *
@@ -18,8 +21,8 @@
  * The messydisk.device code that makes it a real Exec .device.
  * Mostly based on the 1.1 RKM example and Matt Dillon's library code.
  *
- * This code is (C) Copyright 1989 by Olaf Seibert. All rights reserved. May
- * not be used or copied without a licence.
+ * This code is (C) Copyright 1989-1992 by Olaf Seibert. All rights reserved.
+ * May not be used or copied without a licence.
 -*/
 
 #include <amiga.h>
@@ -35,20 +38,42 @@
 #endif
 /* INDENT ON */
 
+/* Prototypes for assembler glue routines: */
+Prototype void _Init(), _DevOpen(), _DevClose(), _DevExpunge(), _LibNull();
+Prototype void _DevBeginIO(), _DevAbortIO();
 
-char		DevName[] = "messydisk.device";
-char		idString[] = "messydisk.device $Revision: 1.42 $ $Date: 91/06/13 23:45:09 $\r\n";
+Prototype __geta4 DEV *Init(__A0 long segment);
+Prototype __geta4 void DevOpen(__D0 ulong unitno, __D1 ulong flags, __A1 struct IOStdReq *ioreq, __A6 DEV *dev);
+Prototype __geta4 long DevClose(__A1 struct IOStdReq *ioreq, __A6 DEV *dev);
+Prototype __geta4 long DevExpunge(__A6 DEV *dev);
+Prototype __geta4 void DevBeginIO(__A1 struct IOStdReq *ioreq, __A6 DEV *dev);
+Prototype __geta4 long DevAbortIO(__A1 struct IOStdReq *ioreq, __A6 DEV *dev);
+
+Prototype void TermIO(struct IOStdReq *ioreq);
+Prototype void WakePort(struct MsgPort *port);
+Prototype __geta4 void UnitTask(void);
+Prototype void CMD_Invalid(struct IOStdReq *ioreq, UNIT *unit);
+Prototype void CMD_Stop(struct IOStdReq *ioreq, UNIT *unit);
+Prototype void CMD_Start(struct IOStdReq *ioreq, UNIT *unit);
+Prototype void CMD_Flush(struct IOStdReq *ioreq, UNIT *unit);
+Prototype void TrackdiskGateway(struct IOStdReq *ioreq, UNIT *unit);
+
+Prototype const char DevName[];
+Prototype const char idString[];
+
+const char	DevName[] = "messydisk.device";
+const char	idString[] = "messydisk.device $Revision: 1.46 $ $Date: 91/10/06 18:22:08 $\r\n";
 
 /*
  * -30-6*X  Library vectors:
  */
 
-void		(*LibVectors[]) () =
+const void	(*LibVectors[]) () =
 {
-    _DevOpen, _DevClose, _DevExpunge, _LibNull,
+    DevOpen, DevClose, DevExpunge, _LibNull,
 
-    _DevBeginIO,
-    _DevAbortIO,
+    DevBeginIO,
+    DevAbortIO,
     (void (*) ()) -1
 };
 
@@ -56,7 +81,7 @@ void		(*LibVectors[]) () =
  * Device commands:
  */
 
-void		(*funcTable[]) (struct IOStdReq *, UNIT *) = {
+const void	(*funcTable[]) (struct IOStdReq *, UNIT *) = {
     CMD_Invalid, CMD_Reset, CMD_Read, CMD_Write, CMD_Update, CMD_Clear,
     CMD_Stop, CMD_Start, CMD_Flush, TD_Motor, TD_Seek, TD_Format,
     TD_Remove, TD_Changenum, TD_Changestate, TD_Protstatus, TD_Rawread,
@@ -78,11 +103,9 @@ long		SysBase;	/* Argh! A global variable! */
  */
 
 
-__stkargs __geta4 DEV		 *
-CInit(D2, D3, segment)
-ulong		D2,
-		D3;
-long		segment;
+__geta4 DEV    *
+Init(segment)
+__A0 long	segment;
 {
     DEV 	   *dev;
 
@@ -112,14 +135,12 @@ long		segment;
  * Forbid() for us during the call.
  */
 
-__stkargs __geta4 void
-DevOpen(unitno, flags, D2, D3, ioreq, dev)
-ulong		unitno;
-ulong		flags;
-ulong		D2,
-		D3;
-struct IOStdReq *ioreq;
-DEV	       *dev;
+__geta4 void
+DevOpen(unitno, flags, ioreq, dev)
+__D0 ulong	unitno;
+__D1 ulong	flags;
+__A1 struct IOStdReq *ioreq;
+__A6 DEV       *dev;
 {
     UNIT	   *unit;
 
@@ -155,12 +176,10 @@ error:
  * Exec has Forbid() for us during the call.
  */
 
-__stkargs __geta4 long
-DevClose(D2, D3, ioreq, dev)
-ulong		D2,
-		D3;
-struct IOStdReq *ioreq;
-DEV	       *dev;
+__geta4 long
+DevClose(ioreq, dev)
+__A1 struct IOStdReq *ioreq;
+__A6 DEV       *dev;
 {
     UNIT	   *unit;
 
@@ -183,10 +202,10 @@ DEV	       *dev;
     ioreq->io_Device = (void *) -1;
 
     if (dev->dev_OpenCnt && --dev->dev_OpenCnt)
-	return (NULL);
+	return NULL;
     if (dev->dev_Flags & LIBF_DELEXP)
-	return (DevExpunge(D2, D3, dev));
-    return (NULL);
+	return DevExpunge(dev);
+    return NULL;
 }
 
 /*
@@ -203,17 +222,15 @@ DEV	       *dev;
  * DevExpunge(lib) must remove the device itself as shown below.
  */
 
-__stkargs __geta4 long
-DevExpunge(D2, D3, dev)
-ulong		D2,
-		D3;
-DEV	       *dev;
+__geta4 long
+DevExpunge(dev)
+__A6 DEV       *dev;
 {
     long	    Seglist;
 
     if (dev->dev_OpenCnt) {
 	dev->dev_Flags |= LIBF_DELEXP;
-	return (NULL);
+	return NULL;
     }
     Remove(&dev->dev_Node);
     DevCloseDown(dev);          /* Should be quick! */
@@ -223,7 +240,7 @@ DEV	       *dev;
     Seglist = dev->md_Seglist;
     FreeMem((char *) dev - dev->dev_NegSize,
 	    (long) dev->dev_NegSize + dev->dev_PosSize);
-    return (Seglist);
+    return Seglist;
 }
 
 /*
@@ -231,12 +248,10 @@ DEV	       *dev;
  * the request to the proper unit to handle.
  */
 
-__stkargs __geta4 void
-DevBeginIO(D2, D3, ioreq, dev)
-ulong		D2,
-		D3;
-struct IOStdReq *ioreq;
-DEV	       *dev;
+__geta4 void
+DevBeginIO(ioreq, dev)
+__A1 struct IOStdReq *ioreq;
+__A6 DEV       *dev;
 {
     UNIT	   *unit;
 
@@ -379,18 +394,17 @@ Immediate:
  * AbortIO entry point. We try to abort IO here.
  */
 
-__stkargs __geta4 long
-DevAbortIO(D2, D3, ioreq, dev)
-ulong		D2,
-		D3;
-struct IOStdReq *ioreq;
-DEV	       *dev;
+__geta4 long
+DevAbortIO(ioreq, dev)
+__A1 struct IOStdReq *ioreq;
+__A6 DEV       *dev;
 {
+    Forbid();
     if (ioreq->io_Flags & IOF_QUICK ||
 	IMMEDIATE & (1L << STRIP(ioreq->io_Command))) {
+	Permit();
 	return 1;
     } else {
-	Forbid();
 	Remove(&ioreq->io_Message.mn_Node);
 	Permit();
 	ioreq->io_Error = IOERR_ABORTED;
