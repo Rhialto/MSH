@@ -1,6 +1,9 @@
 /*-
- * $Id: hanlock.c,v 1.1 89/12/17 20:03:01 Rhialto Exp Locker: Rhialto $
+ * $Id: hanlock.c,v 1.2 89/12/17 23:05:33 Rhialto Exp Locker: Rhialto $
  * $Log:	hanlock.c,v $
+ * Revision 1.2  89/12/17  23:05:33  Rhialto
+ * Add MSSetProtect
+ *
  * Revision 1.1  89/12/17  20:03:01  Rhialto
  *
  * HANLOCK.C
@@ -305,6 +308,7 @@ newdir:
     debug(("Component: '%11s'\n", component));
     if (nextpart[0] != '/') {
 	nextpart = NULL;
+#ifndef READONLY
 	/*
 	 * See if we are requested to get an empty spot in the directory
 	 * if the given name does not exist already. The value of mode is
@@ -315,6 +319,7 @@ newdir:
 	    createit = 1;
 	} else
 	    createit = 0;
+#endif
     } else
 	nextpart++;
 
