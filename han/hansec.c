@@ -1,6 +1,9 @@
 /*-
- * $Id: hansec.c,v 1.51 92/04/17 15:37:19 Rhialto Rel $
+ * $Id: hansec.c,v 1.53 92/10/25 02:27:32 Rhialto Rel $
  * $Log:	hansec.c,v $
+ * Revision 1.53  92/10/25  02:27:32  Rhialto
+ * No real change.
+ *
  * Revision 1.51  92/04/17  15:37:19  Rhialto
  * Freeze for MAXON.
  *
@@ -43,7 +46,6 @@
  * May not be used or copied without a licence.
 -*/
 
-#include <functions.h>
 #include <string.h>
 #include "han.h"
 #include "dos.h"
@@ -66,7 +68,8 @@ Prototype long	IDDiskType;
 Prototype struct timerequest *TimeIOReq;
 Prototype int	MaxCache;
 Prototype ulong BufMemType;
-Prototype int	DelayState;
+Prototype char	CacheDirty;
+Prototype char	DelayCount;
 Prototype short CheckBootBlock;
 Prototype word	Get8086Word(byte *Word8086);
 Prototype word	OtherEndianWord(long oew);     /* long should become word */
@@ -86,10 +89,11 @@ Prototype void	FreeCacheSector(struct CacheSec *sec);
 Prototype void	InitCacheList(void);
 Prototype void	FreeCacheList(void);
 Prototype void	MSUpdate(int immediate);
-Prototype void	StartTimer(void);
-Prototype byte *GetSec(int sector);
+Prototype void	StartTimer(int);
+Prototype byte *ReadSec(int sector);
 Prototype byte *EmptySec(int sector);
-Prototype void	PutSec(int sector, byte *data);
+Prototype void	WriteSec(int sector, byte *data);
+Prototype struct CacheSec *MayWriteTrack(struct CacheSec *cache);
 Prototype void	FreeSec(byte *buffer);
 Prototype void	MarkSecDirty(byte *buffer);
 Prototype void	WriteFat(void);
@@ -108,6 +112,7 @@ Prototype int	MyDoIO(struct IOStdReq *ioreq);
 struct MsgPort *DiskReplyPort;
 struct IOExtTD *DiskIOReq;
 struct IOStdReq *DiskChangeReq;
+int		HeadOnTrack;
 
 const struct DiskParam DefaultDisk = {
     MS_BPS,
@@ -136,7 +141,8 @@ int		CurrentCache;	/* How many cached buffers do we have */
 int		MaxCache;	/* Maximum amount of cached buffers */
 long		CacheBlockSize; /* Size of disk block + overhead */
 ulong		BufMemType;
-int		DelayState;
+char		CacheDirty;
+char		DelayCount;
 short		CheckBootBlock; /* Do we need to check the bootblock? */
 
 #define LRU_TO_SEC(lru) ((struct CacheSec *)((char *)lru - \
@@ -394,12 +400,14 @@ struct MinNode *pred;
 	     */
 	    if (&sec->sec_NumberNode == pred)
 		pred = sec->sec_NumberNode.mln_Pred;
+	    debug(("NewCacheSector: dump dirty sec %d\n", sec->sec_Number));
 	    FreeCacheSector(sec);       /* Also writes it to disk */
 	    continue;
 	}
 	if (sec->sec_Refcount == 0) {   /* Implies not SEC_DIRTY */
 	    if (&sec->sec_NumberNode == pred) /* Same comment */
 		pred = sec->sec_NumberNode.mln_Pred;
+	    debug(("NewCacheSector: re-use clean sec %d\n", sec->sec_Number));
 	    Remove((struct Node *)&sec->sec_LRUNode);
 	    Remove((struct Node *)&sec->sec_NumberNode);
 	    goto move;
@@ -434,13 +442,20 @@ FreeCacheSector(sec)
 register struct CacheSec *sec;
 {
     debug(("FreeCacheSector %ld\n", (long)sec->sec_Number));
-    Remove((struct Node *)&sec->sec_LRUNode);
-    Remove((struct Node *)&sec->sec_NumberNode);
+
+    if (sec->sec_Refcount & ~SEC_DIRTY) {
+	debug(("\n\t*** PANIC!!! Refcount not 0 !!! ***\n\n"));
+	sec->sec_Refcount &= SEC_DIRTY;
+    }
+
 #ifndef READONLY
     if (sec->sec_Refcount & SEC_DIRTY) {
-	PutSec(sec->sec_Number, sec->sec_Data);
+	/*WriteSec(sec->sec_Number, sec->sec_Data);*/
+	MayWriteTrack(sec);
     }
 #endif
+    Remove((struct Node *)&sec->sec_LRUNode);
+    Remove((struct Node *)&sec->sec_NumberNode);
     FreeMem(sec, CacheBlockSize);
     CurrentCache--;
 }
@@ -457,6 +472,7 @@ InitCacheList()
     NewList((struct List *)&CacheList.LRUList);
     NewList((struct List *)&CacheList.NumberList);
     CurrentCache = 0;
+    CacheDirty = 0;
     CacheBlockSize = Disk.bps + sizeof (*sec) - sizeof (sec->sec_Data);
 }
 
@@ -476,53 +492,95 @@ FreeCacheList()
 }
 
 /*
- * Write all dirty cache buffers to disk. They are written from highest to
- * lowest, and then the FAT is written out.
+ * Eventually write all dirty cache buffers to disk. When we decide to
+ * do this, we start writing at the nearest end of the range we need
+ * to go through.
  */
 
 void
 MSUpdate(immediate)
 int		immediate;
 {
-    register struct CacheSec *sec;
-    register void  *nextsec;
+    int 	    writingfat;
 
-    debug(("MSUpdate\n"));
+    debug(("MSUpdate, imm=%d, count=%d\n", immediate, DelayCount));
+
+    if (immediate)
+	DelayCount = 1;
 
 #ifndef READONLY
-    if (DelayState & DELAY_DIRTY) {
+    writingfat = DelayCount <= 2 && FatDirty;
+
+    if (DelayCount <= 3 && CacheDirty) {
+	register struct CacheSec *sec;
+	register struct MinNode *nextsec;
+	int		lowtrack, hightrack;
+	int		offset;
+
+# if 1
+	if (CurrentCache > 0) {
+	    if (writingfat) {
+		lowtrack = 0;
+	    } else {
+		sec = NN_TO_SEC(CacheList.NumberList.mlh_Head);
+		lowtrack = sec->sec_Number / Disk.spt;
+	    }
+	    sec = NN_TO_SEC(CacheList.NumberList.mlh_TailPred);
+	    hightrack = sec->sec_Number / Disk.spt;
+
+	    if ((HeadOnTrack - lowtrack) <= (hightrack - HeadOnTrack)) {
+		/* closer to low track */
+		debug(("MSUpdate: Closer to lower track %d <- %d %d\n",
+		       lowtrack, HeadOnTrack, hightrack));
+		sec = NN_TO_SEC(CacheList.NumberList.mlh_Head);
+		offset = OFFSETOF(CacheSec, sec_NumberNode.mln_Succ);
+		if (writingfat) {
+		    WriteFat();
+		}
+	    } else {
+		/* closer to high track */
+		debug(("MSUpdate: Closer to higher track %d %d -> %d\n",
+		       lowtrack, HeadOnTrack, hightrack));
+		sec = NN_TO_SEC(CacheList.NumberList.mlh_TailPred);
+		offset = OFFSETOF(CacheSec, sec_NumberNode.mln_Pred);
+	    }
+
+	    for ( ; nextsec = *(struct MinNode **)((char *)sec + offset);
+		 sec = NN_TO_SEC(nextsec)) {
+		if (sec->sec_Refcount & SEC_DIRTY) {
+		    WriteSec(sec->sec_Number, sec->sec_Data);
+		    sec->sec_Refcount &= ~SEC_DIRTY;
+		}
+	    }
+	}
+# else
 	/*
 	 * Do a backward scan to write them out.
 	 */
 	for (sec = NN_TO_SEC(CacheList.NumberList.mlh_TailPred);
-	     nextsec = (void *) sec->sec_NumberNode.mln_Pred;
+	     nextsec = sec->sec_NumberNode.mln_Pred;
 	     sec = NN_TO_SEC(nextsec)) {
 	    if (sec->sec_Refcount & SEC_DIRTY) {
-		PutSec(sec->sec_Number, sec->sec_Data);
+		WriteSec(sec->sec_Number, sec->sec_Data);
 		sec->sec_Refcount &= ~SEC_DIRTY;
 	    }
 	}
-	DelayState &= ~DELAY_DIRTY;
+# endif
+	CacheDirty = 0;
     }
-    if (FatDirty) {
+    if (DelayCount <= 2 && FatDirty)
 	WriteFat();
-    }
 #endif
 
-    if (immediate)
-	DelayState = DELAY_RUNNING1;
-
-    if (DelayState & DELAY_RUNNING2) {
-	StartTimer();
-	DelayState &= ~DELAY_RUNNING2;
-    } else {			/* DELAY_RUNNING1 */
+    if (DelayCount <= 1) {
 #ifndef READONLY
 	while (TDUpdate() != 0 && RetryRwError(DiskIOReq))
 	    ;
 #endif
 	TDMotorOff();
-	DelayState = DELAY_OFF;
     }
+    if (DelayCount && --DelayCount)
+	StartTimer(0);
 }
 
 /*
@@ -531,14 +589,16 @@ int		immediate;
  */
 
 void
-StartTimer()
+StartTimer(times)
+int		times;
 {
-    DelayState |= DELAY_RUNNING1 | DELAY_RUNNING2;
+    if (DelayCount < times)
+	DelayCount = times;
 
     if (CheckIO((struct IORequest *)TimeIOReq)) {
 	WaitIO((struct IORequest *)TimeIOReq);
 	TimeIOReq->tr_node.io_Command = TR_ADDREQUEST;
-	TimeIOReq->tr_time.tv_secs = 3;
+	TimeIOReq->tr_time.tv_secs = 2;
 	TimeIOReq->tr_time.tv_micro = 0;
 	SendIO((struct IORequest *)TimeIOReq);
     }
@@ -551,14 +611,14 @@ StartTimer()
  */
 
 byte	       *
-GetSec(sector)
+ReadSec(sector)
 int		sector;
 {
     struct CacheSec *sec;
 
 #ifdef HDEBUG
     if (sector == 0) {
-	debug(("************ GetSec(0) ***************\n"));
+	debug(("************ ReadSec(0) ***************\n"));
     }
 #endif
 
@@ -573,7 +633,7 @@ int		sector;
 	sec->sec_Number = sector;
 	sec->sec_Refcount = 1;
 
-	debug(("GetSec %ld\n", (long)sector));
+	debug(("ReadSec %ld\n", (long)sector));
 
 	req = DiskIOReq;
 	do {
@@ -584,7 +644,8 @@ int		sector;
 	    MyDoIO(&req->iotd_Req);
 	} while (req->iotd_Req.io_Error != 0 && RetryRwError(req));
 
-	StartTimer();
+	StartTimer(2);
+	HeadOnTrack = sector / Disk.spt;
 
 	if (req->iotd_Req.io_Error == 0) {
 	    return sec->sec_Data;
@@ -601,7 +662,6 @@ byte	       *
 EmptySec(sector)
 int		sector;
 {
-    byte	   *buffer;
     register struct CacheSec *sec;
 
 #ifdef HDEBUG
@@ -625,13 +685,13 @@ int		sector;
 }
 
 void
-PutSec(sector, data)
+WriteSec(sector, data)
 int		sector;
 byte	       *data;
 {
     register struct IOExtTD *req;
 
-    debug(("PutSec %ld\n", (long)sector));
+    debug(("WriteSec %ld\n", (long)sector));
 
     req = DiskIOReq;
     do {
@@ -642,7 +702,47 @@ byte	       *data;
 	MyDoIO(&req->iotd_Req);
     } while (req->iotd_Req.io_Error != 0 && RetryRwError(req));
 
-    StartTimer();
+    StartTimer(2);
+    HeadOnTrack = sector / Disk.spt;
+}
+
+/*
+ * Write all sectors that are on the same track as this one.
+ * This speeds up I/O by taking advantage of track buffering and
+ * reduction of seeking.
+ * As a general rule we don't write sectors which are dirty but
+ * still in use. (Not that this is expected to occur often, though).
+ */
+
+struct CacheSec *
+MayWriteTrack(cache)
+struct CacheSec *cache;
+{
+    struct CacheSec *c;
+    struct MinNode *cn;
+    int 	    lowsec;
+    int 	    highsec;
+
+    lowsec = (cache->sec_Number / Disk.spt) * Disk.spt;
+    highsec = lowsec + Disk.spt;
+
+    debug(("MayWriteTrack sec %d (sec %d-%d)\n", cache->sec_Number, lowsec, highsec-1));
+
+    for (c = cache; cn = c->sec_NumberNode.mln_Pred; c = NN_TO_SEC(cn)) {
+	if (c->sec_Number < lowsec)
+	    break;
+	cache = c;
+    }
+
+    for (c = cache; cn = c->sec_NumberNode.mln_Succ; c = NN_TO_SEC(cn)) {
+	if (c->sec_Number >= highsec)
+	    break;
+	if (c->sec_Refcount == SEC_DIRTY) {     /* don't write active sectors */
+	    WriteSec(c->sec_Number, c->sec_Data);
+	    c->sec_Refcount &= ~SEC_DIRTY;
+	}
+    }
+    return c;
 }
 
 #endif
@@ -657,29 +757,42 @@ void
 FreeSec(buffer)
 byte	       *buffer;
 {
-    register struct CacheSec *sec;
 
     if (buffer) {
+	register struct CacheSec *sec;
+
 	sec = FindSecByBuffer(buffer);
 #ifdef HDEBUG
 	if (sec->sec_Number == 0) {
 	    debug(("************ FreeSec(0) ***************\n"));
 	}
 #endif
+	--sec->sec_Refcount;
+#if 1
+	/* Write out the sector, if doing it now is cheap */
+	if (/*(sec->sec_Refcount == SEC_DIRTY) &&*/
+	    (sec->sec_Number / Disk.spt) == HeadOnTrack) {
+	    /*WriteSec(sec->sec_Number, sec->sec_Data);*/
+	    /*sec->sec_Refcount &= ~SEC_DIRTY;*/
+	    MayWriteTrack(sec);
+	}
+#endif
 #ifdef notdef
-	if (--sec->sec_Refcount == 0) { /* Implies not SEC_DIRTY */
+	if (sec->sec_Refcount == 0) { /* Implies not SEC_DIRTY */
 	    if (CurrentCache > MaxCache) {
 		FreeCacheSector(sec);
 	    }
 	}
 #else
-	--sec->sec_Refcount;
 	/*
-	 * If we need to dump cache then dump some long-unused sector.
+	 * If we need to dump cache then dump some long-unused sectors.
 	 */
-	if (CurrentCache > MaxCache &&
+	while (CurrentCache > MaxCache &&
 	    (sec = LRU_TO_SEC(GetTail(&CacheList.LRUList))) &&
 	    (sec->sec_Refcount & ~SEC_DIRTY) == 0) {
+	    debug(("FreeSec: dump %s sec %d\n",
+		    (sec->sec_Refcount & SEC_DIRTY)? "dirty" : "clean",
+		    sec->sec_Number));
 	    FreeCacheSector(sec);
 	}
 #endif
@@ -697,8 +810,8 @@ byte	       *buffer;
     if (buffer) {
 	sec = FindSecByBuffer(buffer);
 	sec->sec_Refcount |= SEC_DIRTY;
-	DelayState |= DELAY_DIRTY;
-	StartTimer();
+	CacheDirty = 1;
+	StartTimer(4);
     }
 }
 
@@ -718,8 +831,7 @@ WriteFat()
     /* Write all FATs */
     for (fat = 0; fat < Disk.nfats; fat++) {
 	for (sec = 0; sec < Disk.spf; sec++) {
-	    PutSec(disksec++, Fat + sec * Disk.bps);
-	    /* return;	       /* Fat STILL dirty! */
+	    WriteSec(disksec++, Fat + sec * Disk.bps);
 	}
     }
     FatDirty = FALSE;
@@ -824,7 +936,7 @@ ReadBootBlock()
 	debug(("Changenumber = %ld\n", DiskIOReq->iotd_Count));
 
 	Cancel = 1;
-	if (bootblock = GetSec(0)) {
+	if (bootblock = ReadSec(0)) {
 	    word	oldbps;
 
 	    if ((CheckBootBlock & CHECK_BOOTJMP) &&
@@ -869,7 +981,7 @@ ReadBootBlock()
 	    Disk.maxclst = (Disk.nsects - Disk.start) / Disk.spc - 1;
 	    Disk.bpc = Disk.bps * Disk.spc;
 	    Disk.vollabel = FakeRootDirEntry;
-/*	    Disk.fat16bits = Disk.nsects > 20740;   /* DOS3.2 magic value */
+/*	    Disk.fat16bits = Disk.nsects > 20740;  / * DOS3.2 magic value */
 	    Disk.fat16bits = Disk.maxclst >= 0xFF7; /* DOS3.0 magic value */
 
 	    debug(("%lx\tbytes per sector\n", (long)Disk.bps));
@@ -964,7 +1076,7 @@ struct DateStamp *date;
 	byte	       *dirblock;
 	register struct MsDirEntry *dirent;
 
-	if (dirblock = GetSec(Disk.rootdir)) {
+	if (dirblock = ReadSec(Disk.rootdir)) {
 	    dirent = (struct MsDirEntry *) dirblock;
 
 	    while ((byte *) dirent < &dirblock[Disk.bps]) {
