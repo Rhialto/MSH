@@ -1,6 +1,10 @@
 /*-
- * $Id: hanlock.c,v 1.30a $
+ * $Id: hanlock.c,v 1.31 90/11/10 02:48:38 Rhialto Exp $
  * $Log:	hanlock.c,v $
+ * Revision 1.31  90/11/10  02:48:38  Rhialto
+ * Patch 3a. Introduce disk volume date. Update modification time of
+ * directories. *.INF -> *.info.
+ *
  * Revision 1.30  90/06/04  23:17:18  Rhialto
  * Release 1 Patch 3
  *
@@ -19,7 +23,7 @@
 #include "han.h"
 
 #ifdef HDEBUG
-#   define	debug(x)  dbprintf x
+#   define	debug(x)  syslog x
 #else
 #   define	debug(x)
 #endif
@@ -85,7 +89,7 @@ register word  *offset;
 	if (*sector >= Disk.datablock) {
 	    /* Must be subdirectory */
 	    *sector = NextClusteredSector(*sector);
-	    debug(("NextClusteredSector: %d\n", *sector));
+	    debug(("NextClusteredSector: %ld\n", (long)*sector));
 	} else {
 	    if (++*sector >= Disk.datablock) {
 		*sector = SEC_EOF;
@@ -147,15 +151,15 @@ void
 PrintDirEntry(de)
 struct DirEntry *de;
 {
-    debug(("%d,%d ", de->de_Sector, de->de_Offset));
-    debug(("%.8s.%.3s attr:%x time:%x date:%x start:%x size:%lx\n",
+    debug(("%ld,%ld ", (long)de->de_Sector, (long)de->de_Offset));
+    debug(("%.8s.%.3s attr:%lx time:%lx date:%lx start:%lx size:%lx\n",
 	   de->de_Msd.msd_Name,
 	   de->de_Msd.msd_Ext,
-	   de->de_Msd.msd_Attributes,
-	   de->de_Msd.msd_Time,
-	   de->de_Msd.msd_Date,
-	   de->de_Msd.msd_Cluster,
-	   de->de_Msd.msd_Filesize
+	   (long)de->de_Msd.msd_Attributes,
+	   (long)de->de_Msd.msd_Time,
+	   (long)de->de_Msd.msd_Date,
+	   (long)de->de_Msd.msd_Cluster,
+	   (long)de->de_Msd.msd_Filesize
 	   ));
 }
 

@@ -1,6 +1,9 @@
 /*-
- * $Id: date.c,v 1.3 90/03/11 17:47:11 Rhialto Rel $
+ * $Id: date.c,v 1.30 90/06/04 23:18:11 Rhialto Rel $
  * $Log:	date.c,v $
+ * Revision 1.30  90/06/04  23:18:11  Rhialto
+ * Release 1 Patch 3
+ *
  * DATE.C
  *
  * Two date conversion routines: DateStamp <-> MSDOS date/time.
@@ -11,6 +14,12 @@
 
 #include <libraries/dos.h>
 #include "han.h"
+
+#ifdef HDEBUG
+#   define	debug(x)  syslog x
+#else
+#   define	debug(x)
+#endif
 
 #define BASEYEAR	    1978
 #define DAYS_PER_YEAR	    365
@@ -80,12 +89,9 @@ word time;
 
 	/* t now is the number of days in 4 whole years since ... */
 
-	/*dbprintf(("ly0: i=%ld(%ld) j=%ld(%ld) t=%ld\n", i, i+BASEYEAR,j,j+BASEYEAR, t));*/
 	while (i < j) {
-	    /*dbprintf(("ly1: i=%ld(%ld) j=%ld(%ld) t=%ld\n", i, i+BASEYEAR,j,j+BASEYEAR, t));*/
 	    t += DAYS_PER_YEAR;
 	    if (LeapYear(i + BASEYEAR)) {
-		/*dbprintf(("leap year\n"));*/
 		t++;
 	    }
 	    i++;
@@ -93,9 +99,7 @@ word time;
 
 	/* t now is the number of days in whole years since ... */
 
-	/*dbprintf(("m0:  i=%ld j=%ld t=%ld\n", i, j, t));*/
 	for (i = 0; i < month; i++) {
-	    /*dbprintf(("m1: i=%ld j=%ld t=%ld\n", i, j, t));*/
 	    t += daycount[i];
 	    if (i == 1 && LeapYear(year)) {
 		t++;

@@ -1,6 +1,9 @@
 /*-
- * $Id: hansec.c,v 1.30a $
+ * $Id: hansec.c,v 1.31 90/11/10 02:44:35 Rhialto Exp $
  * $Log:	hansec.c,v $
+ * Revision 1.31  90/11/10  02:44:35  Rhialto
+ * Patch 3a. Changes location of disk volume date.
+ *
  * Revision 1.30  90/06/04  23:17:02  Rhialto
  * Release 1 Patch 3
  *
@@ -18,9 +21,8 @@
 #include "dos.h"
 #include "han.h"
 
-/*#undef HDEBUG 			 /**/
 #ifdef HDEBUG
-#   define	debug(x)  dbprintf x
+#   define	debug(x)  syslog x
 #else
 #   define	debug(x)
 #endif
@@ -182,12 +184,12 @@ register int	number;
     register struct CacheSec *sec;
     register
 
-    debug(("FindSecByNumber %d", number));
+    debug(("FindSecByNumber %ld", (long)number));
 
     for (sec = (void *) CacheList.mlh_Head;
 	 nextsec = (void *) sec->sec_Node.mln_Succ; sec = nextsec) {
 	if (sec->sec_Number == number) {
-	    debug((" (%x) %lx\n", sec->sec_Refcount, sec));
+	    debug((" (%lx) %lx\n", (long)sec->sec_Refcount, sec));
 	    Remove(sec);
 	    AddHead(&CacheList, &sec->sec_Node);
 	    return sec;
@@ -257,7 +259,7 @@ void
 FreeCacheSector(sec)
 register struct CacheSec *sec;
 {
-    debug(("FreeCacheSector %d\n", sec->sec_Number));
+    debug(("FreeCacheSector %ld\n", (long)sec->sec_Number));
     Remove(sec);
 #ifndef READONLY
     if (sec->sec_Refcount & SEC_DIRTY) {
@@ -291,7 +293,7 @@ FreeCacheList()
 {
     register struct CacheSec *sec;
 
-    debug(("FreeCacheList, %d\n", CurrentCache));
+    debug(("FreeCacheList, %ld\n", (long)CurrentCache));
     while (sec = GetHead(&CacheList)) {
 	FreeCacheSector(sec);
     }
@@ -312,11 +314,11 @@ register struct CacheSec *tosort;
     register word   secno;
 
     secno = tosort->sec_Number;
-    debug(("SortSec %d: ", secno));
+    debug(("SortSec %ld: ", (long)secno));
 
     for (sec = (void *) CacheList.mlh_Head;
 	 nextsec = (void *) sec->sec_Node.mln_Succ; sec = nextsec) {
-	debug(("%d, ", sec->sec_Number));
+	debug(("%ld, ", (long)sec->sec_Number));
 	if (sec == tosort) {
 	    debug(("\n"));
 	    return;			/* No need to move it away */
@@ -436,7 +438,7 @@ int		sector;
 	sec->sec_Number = sector;
 	sec->sec_Refcount = 1;
 
-	debug(("GetSec %d\n", sector));
+	debug(("GetSec %ld\n", (long)sector));
 
 	req = DiskIOReq;
 	do {
@@ -494,7 +496,7 @@ byte	       *data;
 {
     register struct IOExtTD *req;
 
-    debug(("PutSec %d\n", sector));
+    debug(("PutSec %ld\n", (long)sector));
 
     req = DiskIOReq;
     do {
@@ -592,7 +594,7 @@ AwaitDFx()
 	infoData = (struct InfoData *)(((long)&xinfodata[3]) & ~3L);
 
 	for (triesleft = 10; triesleft; triesleft--) {
-	    debug(("AwaitDFx %d\n", triesleft));
+	    debug(("AwaitDFx %ld\n", (long)triesleft));
 	    if ((dfxProc = DeviceProc(dfx)) == NULL)
 		break;
 
@@ -688,25 +690,25 @@ ReadBootBlock()
 /*	    Disk.fat16bits = Disk.nsects > 20740;   /* DOS3.2 magic value */
 	    Disk.fat16bits = Disk.maxclst >= 0xFF7; /* DOS3.0 magic value */
 
-	    debug(("%x\tbytes per sector\n", Disk.bps));
-	    debug(("%x\tsectors per cluster\n", Disk.spc));
-	    debug(("%x\treserved blocks\n", Disk.res));
-	    debug(("%x\tfats\n", Disk.nfats));
-	    debug(("%x\tdirectory entries\n", Disk.ndirs));
-	    debug(("%x\tsectors\n", Disk.nsects));
-	    debug(("%x\tmedia byte\n", Disk.media));
-	    debug(("%x\tsectors per FAT\n", Disk.spf));
-	    debug(("%x\tsectors per track\n", Disk.spt));
-	    debug(("%x\tsides\n", Disk.nsides));
-	    debug(("%x\thidden sectors\n", Disk.nhid));
+	    debug(("%lx\tbytes per sector\n", (long)Disk.bps));
+	    debug(("%lx\tsectors per cluster\n", (long)Disk.spc));
+	    debug(("%lx\treserved blocks\n", (long)Disk.res));
+	    debug(("%lx\tfats\n", (long)Disk.nfats));
+	    debug(("%lx\tdirectory entries\n", (long)Disk.ndirs));
+	    debug(("%lx\tsectors\n", (long)Disk.nsects));
+	    debug(("%lx\tmedia byte\n", (long)Disk.media));
+	    debug(("%lx\tsectors per FAT\n", (long)Disk.spf));
+	    debug(("%lx\tsectors per track\n", (long)Disk.spt));
+	    debug(("%lx\tsides\n", (long)Disk.nsides));
+	    debug(("%lx\thidden sectors\n", (long)Disk.nhid));
 
-	    debug(("%x\tdirectory sectors\n", Disk.ndirsects));
-	    debug(("%x\troot dir block\n", Disk.rootdir));
-	    debug(("%x\tblock for (imaginary) cluster 0\n", Disk.start));
-	    debug(("%x\tfirst data block\n", Disk.datablock));
-	    debug(("%x\tclusters total\n", Disk.maxclst));
-	    debug(("%x\tbytes per cluster\n", Disk.bpc));
-	    debug(("%x\t16-bits FAT?\n", Disk.fat16bits));
+	    debug(("%lx\tdirectory sectors\n", (long)Disk.ndirsects));
+	    debug(("%lx\troot dir block\n", (long)Disk.rootdir));
+	    debug(("%lx\tblock for (imaginary) cluster 0\n", (long)Disk.start));
+	    debug(("%lx\tfirst data block\n", (long)Disk.datablock));
+	    debug(("%lx\tclusters total\n", (long)Disk.maxclst));
+	    debug(("%lx\tbytes per cluster\n", (long)Disk.bpc));
+	    debug(("%lx\t16-bits FAT?\n", (long)Disk.fat16bits));
 
 	    IDDiskType = ID_DOS_DISK;
 #ifdef READONLY
@@ -725,7 +727,7 @@ ReadBootBlock()
 
 	    GetFat();
 	} else {
-	    debug(("Can't read %d.\n", DiskIOReq->iotd_Req.io_Error));
+	    debug(("Can't read %ld.\n", (long)DiskIOReq->iotd_Req.io_Error));
 	bad_disk:
 	    FreeCacheList();
 	    error = ERROR_NO_DISK;
@@ -735,7 +737,7 @@ ReadBootBlock()
 	Cancel = oldCancel;
     }
 #ifdef HDEBUG
-    else debug(("No disk inserted %d.\n", DiskIOReq->iotd_Req.io_Error));
+    else debug(("No disk inserted %ld.\n", (long)DiskIOReq->iotd_Req.io_Error));
 #endif
 no_disk:
     return 1;

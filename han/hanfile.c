@@ -1,6 +1,9 @@
 /*-
- * $Id: hanfile.c,v 1.30a $
+ * $Id: hanfile.c,v 1.31 90/11/10 02:50:04 Rhialto Exp $
  * $Log:	hanfile.c,v $
+ * Revision 1.31  90/11/10  02:50:04  Rhialto
+ * Patch 3a. Update modification time of directories.
+ *
  * Revision 1.30  90/06/04  23:17:33  Rhialto
  * Release 1 Patch 3
  *
@@ -18,7 +21,7 @@
 #include "han.h"
 
 #ifdef HDEBUG
-#   define	debug(x)  dbprintf x
+#   define	debug(x)  syslog x
 #else
 #   define	debug(x)
 #endif
@@ -435,7 +438,7 @@ register long	size;
 	    word	    newclust;
 
 	    newclust = ExtendClusterChain(prevclust);
-	    debug(("Extend with %d\n", newclust));
+	    debug(("Extend with %ld\n", (long)newclust));
 	    if (newclust != FAT_EOF) {
 		if (prevclust == 0) {   /* Record first cluster in dir */
 		    fl->msfl_Msd.msd_Cluster = newclust;

@@ -1,6 +1,9 @@
 /*-
- * $Id: hancmd.c,v 1.1 90/03/11 18:10:50 Rhialto Rel $
+ * $Id: hancmd.c,v 1.30 90/06/04 23:18:03 Rhialto Rel $
  * $Log:	hancmd.c,v $
+ * Revision 1.30  90/06/04  23:18:03  Rhialto
+ * Release 1 Patch 3
+ *
  * HANCMD.C
  *
  * The code for the messydos file system handler
@@ -14,7 +17,7 @@
 #include "han.h"
 
 #ifdef HDEBUG
-#   define	debug(x)  dbprintf x
+#   define	debug(x)  syslog x
 #else
 #   define	debug(x)
 #endif
@@ -27,9 +30,6 @@ register char  *cmd;
 {
 #ifdef HDEBUG
     if (cmd[1] == 'D') {
-	extern short	DBEnable;
-
-	DBEnable = name[2] & 0x0F;
     } else
 #endif
     if (cmd[1] == 'B') {

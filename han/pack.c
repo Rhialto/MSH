@@ -1,6 +1,9 @@
 /*-
- * $Id: pack.c,v 1.30a $
+ * $Id: pack.c,v 1.31 90/11/10 02:42:38 Rhialto Exp $
  * $Log:	pack.c,v $
+ * Revision 1.31  90/11/10  02:42:38  Rhialto
+ * Patch 3a.
+ *
  * Revision 1.30  90/06/04  23:15:58  Rhialto
  * Release 1 Patch 3
  *
@@ -31,7 +34,7 @@
 #include "han.h"
 
 #ifdef HDEBUG
-#   define	debug(x)  dbprintf x
+#   define	debug(x)  syslog x
 #else
 #   define	debug(x)
 #endif
@@ -49,7 +52,7 @@ DEVLIST        *VolNode;	/* Device List structure for our volume
 				 * node */
 
 void	       *SysBase;	/* EXEC library base */
-DOSLIB	       *DOSBase;	/* DOS library base for debug process */
+DOSLIB	       *DOSBase;	/* DOS library base */
 long		PortMask;	/* The signal mask for our DosPort */
 long		WaitMask;	/* The signal mask to wait for */
 short		DiskChanged;	/* Set by disk change interrupt */
@@ -93,11 +96,10 @@ messydoshandler()
 
 #ifdef HDEBUG
     /*
-     * Initialize debugging code as soon as possible. Only SysBase and
-     * DOSBase are required.
+     * Initialize debugging code as soon as possible. Only SysBase required.
      */
 
-    dbinit();
+    initsyslog();
 #endif				/* HDEBUG */
 
     DosPort = &((struct Process *)FindTask(NULL))->pr_MsgPort;
@@ -142,7 +144,7 @@ messydoshandler()
 		get(Disk.spt, DE_BLKSPERTRACK);
 		get(Disk.bps, DE_SIZEBLOCK);
 		Disk.bps *= 4;
-		debug(("Disk.bps %d\n", Disk.bps));
+		debug(("Disk.bps %ld\n", (long)Disk.bps));
 		get(Disk.lowcyl, DE_LOWCYL);
 		get(Reserved, DE_RESERVEDBLKS);
 		get(DosType, DE_DOSTYPE);
@@ -310,7 +312,7 @@ top:
 		    MaxCache = 1;
 		} else
 		    PRes1 = DOSTRUE;
-		debug(("Now %d cache sectors\n", MaxCache));
+		debug(("Now %ld cache sectors\n", (long)MaxCache));
 		break;
 	    case ACTION_COPY_DIR:	/* Lock 		   Lock      */
 		{
@@ -503,7 +505,7 @@ top:
 	    } /* end switch */
 	    if (packet) {
 		if (error) {
-		    debug(("ERR=%d\n", error));
+		    debug(("ERR=%ld\n", (long)error));
 		    PRes2 = error;
 		}
 #ifdef HDEBUG
@@ -555,15 +557,15 @@ top:
     TDRemChangeInt();
     DiskRemoved();
     HanCloseDown();
-    debug(("HanCloseDown returned. dbuninit in 2 seconds:\n"));
+    debug(("HanCloseDown returned. uninitsyslog in 2 seconds:\n"));
 
     /*
-     * Remove debug window, closedown, fall of the end of the world.
+     * Remove debug, closedown, fall of the end of the world.
      */
 exit:
 #ifdef HDEBUG
     Delay(100L);                /* This is dangerous! */
-    dbuninit();
+    uninitsyslog();
 #endif				/* HDEBUG */
 
 #if 1
@@ -903,137 +905,3 @@ struct FileLock *lock;
 
     return error;
 }
-
-#ifdef HDEBUG
-		    /*	DEBUGGING			*/
-PORT *Dbport;	    /*	owned by the debug process	*/
-PORT *Dback;	    /*	owned by the DOS device driver	*/
-short DBEnable;
-
-/*
- *  DEBUGGING CODE.	You cannot make DOS library calls that access other
- *  devices from within a DOS device driver because they use the same
- *  message port as the driver.  If you need to make such calls you must
- *  create a port and construct the DOS messages yourself.  I do not
- *  do this.  To get debugging info out another PROCESS is created to which
- *  debugging messages can be sent.
- */
-
-extern void debugproc();
-
-dbinit()
-{
-    TASK *task = FindTask(NULL);
-
-    Dback = CreatePort("MSH:Dback", -1L);
-    CreateProc("MSH_DB", (long)task->tc_Node.ln_Pri+1, CTOB(debugproc), 4096L);
-    WaitPort(Dback);                                /* handshake startup    */
-    GetMsg(Dback);                                  /* remove dummy msg     */
-    DBEnable = 1;
-    dbprintf("Debugger running V1.10\n");
-}
-
-dbuninit()
-{
-    MSG killmsg;
-
-    if (Dbport) {
-	killmsg.mn_Length = 0;	    /*	0 means die	    */
-	PutMsg(Dbport,  &killmsg);
-	WaitPort(Dback);            /*  He's dead jim!      */
-	GetMsg(Dback);
-	DeletePort(Dback);
-
-	/*
-	 *  Since the debug process is running at a greater priority, I
-	 *  am pretty sure that it is guarenteed to be completely removed
-	 *  before this task gets control again.  Still, it doesn't hurt...
-	 */
-
-	Delay(50L);                 /*  ensure he's dead    */
-    }
-}
-
-dbprintf(a,b,c,d,e,f,g,h,i,j)
-long a,b,c,d,e,f,g,h,i,j;
-{
-    struct {
-	MSG	msg;
-	char	buf[256];
-    } msgbuf;
-    register MSG *msg = &msgbuf.msg;
-    register long len;
-
-    if (Dbport && DBEnable) {
-	sprintf(msgbuf.buf,a,b,c,d,e,f,g,h,i,j);
-	len = strlen(msgbuf.buf)+1;
-	msg->mn_Length = len;	/*  Length NEVER 0  */
-	PutMsg(Dbport, msg);
-	WaitPort(Dback);
-	GetMsg(Dback);
-    }
-}
-
-/*
- *  BTW, the DOS library used by debugmain() was actually opened by
- *  the device driver.
- */
-
-debugmain()
-{
-    register MSG *msg;
-    register long len;
-    register void *fh;
-    void *fh2;
-    MSG DummyMsg;
-
-    Dbport = CreatePort("MSH:Dbport", -1L);
-    fh = Open("CON:0/10/640/190/FileSystem debug", MODE_NEWFILE);
-    fh2 = Open("PAR:", MODE_OLDFILE);
-    PutMsg(Dback, &DummyMsg);
-    for (;;) {
-	WaitPort(Dbport);
-	msg = GetMsg(Dbport);
-	len = msg->mn_Length;
-	if (len == 0)
-	    break;
-	--len;			    /*	Fix length up	*/
-	if (DBEnable & 1)
-	    Write(fh, msg+1, len);
-	if (DBEnable & 2)
-	    Write(fh2, msg+1, len);
-	PutMsg(Dback, msg);
-    }
-    Close(fh);
-    Close(fh2);
-    DeletePort(Dbport);
-    PutMsg(Dback, msg);             /*  Kill handshake  */
-}
-
-/*
- *  The assembly tag for the DOS process:  CNOP causes alignment problems
- *  with the Aztec assembler for some reason.  I assume then, that the
- *  alignment is unknown.  Since the BCPL conversion basically zero's the
- *  lower two bits of the address the actual code may start anywhere
- *  within 8 bytes of address (remember the first longword is a segment
- *  pointer and skipped).  Sigh....  (see CreateProc() above).
- */
-
-#asm
-	public	_debugproc
-	public	_debugmain
-
-	cseg
-_debugproc:
-	nop
-	nop
-	nop
-	nop
-	nop
-	movem.l D2-D7/A2-A6,-(sp)
-	jsr	_debugmain
-	movem.l (sp)+,D2-D7/A2-A6
-	rts
-#endasm
-
-#endif				/* HDEBUG */

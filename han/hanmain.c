@@ -1,6 +1,9 @@
 /*-
- * $Id: hanmain.c,v 1.30a $
+ * $Id: hanmain.c,v 1.31 90/11/10 02:46:35 Rhialto Exp $
  * $Log:	hanmain.c,v $
+ * Revision 1.31  90/11/10  02:46:35  Rhialto
+ * Patch 3a. Changes location of disk volume date.
+ *
  * Revision 1.30  90/06/04  23:16:50  Rhialto
  * Release 1 Patch 3
  *
@@ -19,7 +22,7 @@
 #include "han.h"
 
 #ifdef HDEBUG
-#   define	debug(x)  dbprintf x
+#   define	debug(x)  syslog x
 #else
 #   define	debug(x)
 #endif
@@ -27,7 +30,7 @@
 extern int	CheckBootBlock;
 extern char	DotDot[1 + 8 + 3];
 struct Library *IntuitionBase;
-static char RCSId[] = "Messydos filing system $Revision: 1.30a $ $Date$, by Olaf Seibert";
+static char RCSId[] = "Messydos filing system $Revision: 1.31 $ $Date: 90/11/10 02:46:35 $, by Olaf Seibert";
 
 byte
 ToUpper(ch)

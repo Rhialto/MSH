@@ -1,6 +1,9 @@
 /*-
- * $Id: device.c,v 1.6 90/03/11 17:42:06 Rhialto Rel $
- * $Log$
+ * $Id: device.c,v 1.30 90/06/04 23:18:39 Rhialto Rel $
+ * $Log:	device.c,v $
+ * Revision 1.30  90/06/04  23:18:39  Rhialto
+ * Release 1 Patch 3
+ *
  * DEVICE.C
  *
  * The messydisk.device code that makes it a real Exec .device.
@@ -15,7 +18,7 @@
 
 /*#undef DEBUG			/**/
 #ifdef DEBUG
-#   define	debug(x)  dbprintf x
+#   define	debug(x)  syslog x
 #else
 #   define	debug(x)
 #endif
@@ -57,7 +60,7 @@ _RomTag:
 /* INDENT ON */
 
 char		DevName[] = "messydisk.device";
-char		idString[] = "messydisk.device $Revision: 1.6 $ $Date: 90/03/11 17:42:06 $\r\n";
+char		idString[] = "messydisk.device $Revision: 1.30 $ $Date: 90/06/04 23:18:39 $\r\n";
 
 /*
  * -30-6*X  Library vectors:
@@ -184,7 +187,7 @@ long		segment;
 
     SysBase = *(long *) 4;
 #ifdef DEBUG
-    dbinit();
+    initsyslog();
 #endif
     dev = MakeLibrary(LibVectors, NULL, NULL, (long) sizeof (DEV), NULL);
     if (DevInit(dev)) {
@@ -314,7 +317,7 @@ DEV	       *dev;
     Remove(dev);
     DevCloseDown(dev);          /* Should be quick! */
 #ifdef DEBUG
-    dbuninit();
+    uninitsyslog();
 #endif
     Seglist = dev->md_Seglist;
     FreeMem((char *) dev - dev->dev_NegSize,
@@ -429,8 +432,8 @@ register struct IOStdReq *ioreq;
     register UNIT  *unit;
 
     unit = (UNIT *) ioreq->io_Unit;
-    debug(("TermIO: io %08lx u %08lx %ld %d\n", ioreq, unit,
-	   ioreq->io_Actual, ioreq->io_Error));
+    debug(("TermIO: io %08lx u %08lx %ld %ld\n", ioreq, unit,
+	   ioreq->io_Actual, (long)ioreq->io_Error));
 
 #ifdef HANDLE_IO_QUICK
     /*
@@ -534,7 +537,7 @@ UnitTask()
     }
 
     for (;;) {
-	debug(("Task: Waiting... "));
+	debug(("Task: Waiting...\n"));
 	Wait(waitmask);
 
 	/*
@@ -556,7 +559,7 @@ UnitTask()
 #endif
 
 	while (ioreq = (struct IOExtTD *) GetMsg(&unit->mu_Port)) {
-	    debug(("Task: io %08lx %x\n", ioreq, ioreq->iotd_Req.io_Command));
+	    debug(("Task: io %08lx %lx\n", ioreq, (long)ioreq->iotd_Req.io_Command));
 	    ioreq->iotd_Req.io_Error = 0;
 	    PerformIO((&ioreq->iotd_Req), unit);
 	}
@@ -621,7 +624,7 @@ UNIT	       *unit;
 {
     register struct IOExtTD *tdioreq;
 
-    debug(("Trackdisk: %x ", ioreq->iotd_Req.io_Command));
+    debug(("Trackdisk: %lx ", (long)ioreq->iotd_Req.io_Command));
     tdioreq = unit->mu_DiskIOReq;
 
     /*
@@ -646,154 +649,3 @@ UNIT	       *unit;
 
     TermIO(ioreq);
 }
-
-#ifdef DEBUG
-/* DEBUGGING			    */
-struct MsgPort *Dbport; 	/* owned by the debug process	    */
-struct MsgPort *Dback;		/* owned by the DOS device driver  */
-short		DBEnable;
-struct SignalSemaphore PortUse;
-
-#define CTOB(x) (void *)(((long)(x))>>2)        /* BCPL conversion */
-
-/*
- * DEBUGGING CODE.	You cannot make DOS library calls that access
- * other devices from within a device driver because the caller may not be
- * a process.  If you need to make such calls you must create a port and
- * construct the DOS messages yourself.  I do not do this.  To get
- * debugging info out another PROCESS is created to which debugging
- * messages can be sent. The replyport gets a new SigTask for every
- * dbprintf call, therefore the semaphore.
- */
-
-extern void	debugproc();
-struct Library *DOSBase,
-	       *OpenLibrary();
-
-dbinit()
-{
-    struct Task    *task = FindTask(NULL);
-
-    DOSBase = OpenLibrary("dos.library", 0L);
-    Dback = CreatePort("Dback", -1L);
-    FreeSignal((long) Dback->mp_SigBit);
-    Dback->mp_SigBit = 2;
-    InitSemaphore(&PortUse);
-    CreateProc("messydisk_DB", (long) TASKPRI + 1, CTOB(debugproc), 2000L);
-    WaitPort(Dback);            /* handshake startup    */
-    GetMsg(Dback);              /* remove dummy msg     */
-    DBEnable = 1;
-    dbprintf("Debugger running V1.11\n");
-}
-
-dbuninit()
-{
-    struct Message  killmsg;
-
-    if (Dbport) {
-	killmsg.mn_Length = 0;	/* 0 means die	    */
-	ObtainSemaphore(&PortUse);
-	Dback->mp_SigTask = FindTask(NULL);
-	PutMsg(Dbport, &killmsg);
-	WaitPort(Dback);        /* He's dead jim!      */
-	GetMsg(Dback);
-	ReleaseSemaphore(&PortUse);
-	Dback->mp_SigBit = -1;
-	DeletePort(Dback);
-
-	/*
-	 * Since the debug process is running at a greater priority, I am
-	 * pretty sure that it is guarenteed to be completely removed
-	 * before this task gets control again.
-	 */
-    }
-    CloseLibrary(DOSBase);
-}
-
-dbprintf(a, b, c, d, e, f, g, h, i, j)
-long		a, b, c, d, e, f, g, h, i, j;
-{
-    struct {
-	struct Message	msg;
-	char		buf[256];
-    }		    msgbuf;
-    register struct Message *msg = &msgbuf.msg;
-    register long   len;
-
-    if (Dbport && DBEnable) {
-	ObtainSemaphore(&PortUse);      /* sprintf is not re-entrant */
-	sprintf(msgbuf.buf, a, b, c, d, e, f, g, h, i, j);
-	len = strlen(msgbuf.buf) + 1;
-	msg->mn_Length = len;	/* Length NEVER 0	 */
-	Dback->mp_SigTask = FindTask(NULL);
-	PutMsg(Dbport, msg);
-	WaitPort(Dback);
-	GetMsg(Dback);
-	ReleaseSemaphore(&PortUse);
-    }
-}
-
-/*
- * BTW, the DOS library used by debugmain() was actually opened by the
- * opener of the device driver.
- */
-
-debugmain()
-{
-    register struct Message *msg;
-    register long   len;
-    register void  *fh,
-		   *Open();
-    void	   *fh2;
-    struct Message  DummyMsg;
-
-    Dbport = CreatePort("Dbport", -1L);
-    fh = Open("CON:0/20/640/101/Device debug", MODE_NEWFILE);
-    fh2 = Open("PAR:", MODE_OLDFILE);
-    PutMsg(Dback, &DummyMsg);
-    for (;;) {
-	WaitPort(Dbport);
-	msg = GetMsg(Dbport);
-	len = msg->mn_Length;
-	if (len == 0)
-	    break;
-	--len;			/* Fix length up	 */
-	if (DBEnable & 1)
-	    Write(fh, msg + 1, len);
-	if (DBEnable & 2)
-	    Write(fh2, msg + 1, len);
-	PutMsg(Dback, msg);
-    }
-    Close(fh);
-    Close(fh2);
-    DeletePort(Dbport);
-    PutMsg(Dback, msg);         /* Kill handshake  */
-}
-
-/*
- * The assembly tag for the DOS process:  CNOP causes alignment problems
- * with the Aztec assembler for some reason.  I assume then, that the
- * alignment is unknown.  Since the BCPL conversion basically zero's the
- * lower two bits of the address the actual code may start anywhere within
- * 8 bytes of address (remember the first longword is a segment pointer
- * and skipped).  Sigh....  (see CreateProc() above).
- */
-/* INDENT OFF */
-#asm
-	public	_debugproc
-	public	_debugmain
-
-	cseg
-_debugproc:
-	nop
-	nop
-	nop
-	nop
-	nop
-	movem.l D2-D7/A2-A6,-(sp)
-	jsr	_debugmain
-	movem.l (sp)+,D2-D7/A2-A6
-	rts
-#endasm
-
-#endif				/* DEBUG */

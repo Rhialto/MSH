@@ -1,6 +1,9 @@
 /*-
- * $Id: hanreq.c,v 1.2 90/03/11 17:46:08 Rhialto Rel $
+ * $Id: hanreq.c,v 1.30 90/06/04 23:17:48 Rhialto Rel $
  * $Log:	hanreq.c,v $
+ * Revision 1.30  90/06/04  23:17:48  Rhialto
+ * Release 1 Patch 3
+ *
  *  HANREQ.C
  *
  *  The code for the messydos file system handler.
@@ -16,7 +19,7 @@
 #include <intuition/intuition.h>
 
 #ifdef HDEBUG
-#   define	debug(x)  dbprintf x
+#   define	debug(x)  syslog x
 #else
 #   define	debug(x)
 #endif

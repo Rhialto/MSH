@@ -1,6 +1,9 @@
 /*-
- * $Id: devio.c,v 1.5 90/03/11 17:44:05 Rhialto Rel $
+ * $Id: devio.c,v 1.30 90/06/04 23:18:52 Rhialto Rel $
  * $Log:	devio.c,v $
+ * Revision 1.30  90/06/04  23:18:52  Rhialto
+ * Release 1 Patch 3
+ *
  * DEVIO.C
  *
  * The messydisk.device code that does the real work.
@@ -14,7 +17,7 @@
 
 /*#undef DEBUG			/**/
 #ifdef DEBUG
-#   define	debug(x)  dbprintf x
+#   define	debug(x)  syslog x
 #else
 #   define	debug(x)
 #endif
@@ -328,7 +331,7 @@ UNIT	       *unit;
 find_id:
 	while (*rawbuf != SYNC) {
 	    if (++rawbuf >= rawend) {
-		debug(("id start, EOT %4x\n", Len));
+		debug(("id start, EOT %4lx\n", (long)Len));
 		goto end;
 	    }
 	}
@@ -336,28 +339,28 @@ find_id:
 	    rawbuf++;
 	}
 	if (*rawbuf++ != MFM_ID) {
-	    debug(("No ID (%4x), %4x\n", rawbuf[-1], Len));
+	    debug(("No ID (%4lx), %4lx\n", (long)rawbuf[-1], (long)Len));
 	    goto find_id;
 	}
 
 	sector = DecodeByte(decode, *rawbuf++);
 	if (sector != unit->mu_CurrentTrack) {
-	    debug(("Track error?? %d\n", (int)sector));
+	    debug(("Track error?? %ld\n", sector));
 	    goto find_id;
 	}
 	sector = DecodeByte(decode, *rawbuf++);
 	if (sector != unit->mu_CurrentSide) {
-	    debug(("Side error?? %d\n", (int)sector));
+	    debug(("Side error?? %ld\n", sector));
 	    goto find_id;
 	}
 	if (rawbuf >= rawend) {
-	    debug(("id end, EOT %4x\n", Len));
+	    debug(("id end, EOT %4lx\n", (long)Len));
 	    goto end;
 	}
 	sector = DecodeByte(decode, *rawbuf++);
-	debug(("#%2d %4x, ", (int)sector, Len-0xC));
+	debug(("#%2ld %4x, ", sector, (long)Len-0xC));
 	if (sector > MS_SPT_MAX) {
-	    debug(("Bogus sector number) "));
+	    debug(("Bogus sector number)\n"));
 	    goto find_id;
 	}
 	if (sector > maxsec)
@@ -370,7 +373,7 @@ find_id:
 find_data:
 	while (*rawbuf != SYNC) {
 	    if (++rawbuf >= rawend) {
-		debug(("data start, EOT %4x\n", Len));
+		debug(("data start, EOT %4lx\n", (long)Len));
 		return 0; /* TDERR_TooFewSecs; */
 	    }
 	}
@@ -378,20 +381,20 @@ find_data:
 	    rawbuf++;
 	}
 	if (*rawbuf++ != MFM_DATA) {
-	    debug(("No Data (%4x), %4x\n", rawbuf[-1], Len));
+	    debug(("No Data (%4lx), %4lx\n", (long)rawbuf[-1], (long)Len));
 	    goto find_id;
 	}
-	debug(("%4x, ", Len-8));
+	debug(("%4lx, ", (long)Len-8));
 
 	if (rawbuf >= rawend) {
-	    debug(("short data, EOT %4x\n", Len));
+	    debug(("short data, EOT %4lx\n", (long)Len));
 	    goto end;
 	}
 	secptr = trackbuf + MS_BPS * sector;
 	for (numbytes = 0; numbytes < MS_BPS; numbytes++) {
 	    *secptr++ = DecodeByte(decode, *rawbuf++);
 	}
-	debug(("%4x\n", Len));
+	debug(("%4lx\n", (long)Len));
 	oldcrc[sector]	= DecodeByte(decode, *rawbuf++) << 8;
 	oldcrc[sector] |= DecodeByte(decode, *rawbuf++);
 	unit->mu_SectorStatus[sector] = unit->mu_InitSectorStatus;
@@ -412,7 +415,7 @@ end:
 	unit->mu_SectorsPerTrack = maxsec;
     }
     unit->mu_CurrentSectors = maxsec;
-    debug(("%d sectors\n", unit->mu_SectorsPerTrack));
+    debug(("%ld sectors\n", (long)unit->mu_SectorsPerTrack));
 #endif
 
     return 0;
@@ -553,7 +556,7 @@ return:
 	unit->mu_SectorsPerTrack = maxsec;
     }
     unit->mu_CurrentSectors = maxsec;
-    debug(("%d sectors\n", unit->mu_SectorsPerTrack));
+    debug(("%ld sectors\n", (long)unit->mu_SectorsPerTrack));
 #endif
 
     return 0;
@@ -658,7 +661,7 @@ int		cylinder;
 {
     register struct IOExtTD *tdreq = unit->mu_DiskIOReq;
 
-    debug(("TDSeek %d\n", cylinder));
+    debug(("TDSeek %ld\n", (long)cylinder));
 
     tdreq->iotd_Req.io_Command = TD_SEEK;
     tdreq->iotd_Req.io_Offset = cylinder * (TD_SECTOR * NUMSECS * NUMHEADS);
@@ -708,7 +711,7 @@ int		track;
     DEV 	   *dev;
     register UNIT  *unit;
 
-    debug(("GetTrack %d %d\n", track, side));
+    debug(("GetTrack %ld %ld\n", (long)track, (long)side));
     dev = (DEV *) ioreq->io_Device;
     unit = (UNIT *) ioreq->io_Unit;
 
@@ -731,7 +734,7 @@ int		track;
 	HardwareIO(dev, unit, 0);
 	i = DecodeTrack(dev, unit);
 	ReleaseSemaphore(&dev->md_HardwareUse);
-	debug(("DecodeTrack returns %d\n", i));
+	debug(("DecodeTrack returns %ld\n", (long)i));
 
 	if (i != 0) {
 	    unit->mu_CurrentTrack = -1;
@@ -845,7 +848,7 @@ register UNIT  *unit;
     side = cylinder % MS_NSIDES;
     cylinder /= MS_NSIDES;
     sector = offset % unit->mu_SectorsPerTrack;       /* 0..8 or 9 */
-    debug(("Tr=%d Si=%d Se=%d\n", cylinder, side, sector));
+    debug(("Tr=%ld Si=%ld Se=%ld\n", (long)cylinder, (long)side, (long)sector));
 
     ioreq->iotd_Req.io_Actual = 0;
 
@@ -866,7 +869,7 @@ gettrack:
 	     * Do it now. If it mismatches, remember that for later.
 	     */
 	    if (unit->mu_CrcBuffer[sector] != DataCRC(diskbuf)) {
-		debug(("%d: %04x, now %04x\n", sector, unit->mu_CrcBuffer[sector], DataCRC(diskbuf)));
+		debug(("%ld: %04lx, now %04lx\n", (long)sector, (long)unit->mu_CrcBuffer[sector], (long)DataCRC(diskbuf)));
 		unit->mu_SectorStatus[sector] = TDERR_BadSecSum;
 	    } else
 		unit->mu_SectorStatus[sector] = TDERR_NoError;
@@ -1130,19 +1133,7 @@ register UNIT  *unit;
      */
 
     if (unit->mu_Port.mp_SigTask) {
-#ifdef DEBUG
-	extern struct SignalSemaphore PortUse;
-
-	/*
-	 * Make sure that the unit task does not get removed when it has
-	 * the semaphore.
-	 */
-	ObtainSemaphore(&PortUse);
-#endif
 	RemTask(unit->mu_Port.mp_SigTask);
-#ifdef DEBUG
-	ReleaseSemaphore(&PortUse);
-#endif
     }
     if (unit->mu_DiskChangeReq) {
 #if 0				/* V1.2 and V1.3 have a broken
@@ -1354,7 +1345,7 @@ UNIT	       *unit;
     side = cylinder % MS_NSIDES;
     cylinder /= MS_NSIDES;
     sector = offset % spt;
-    debug(("T=%d Si=%d Se=%d\n", cylinder, side, sector));
+    debug(("T=%ld Si=%ld Se=%ld\n", (long)cylinder, (long)side, (long)sector));
 
     ioreq->iotd_Req.io_Actual = 0;
 
@@ -1421,7 +1412,7 @@ register UNIT  *unit;
 	    for (i = unit->mu_CurrentSectors - 1; i >= 0; i--) {
 		if (unit->mu_SectorStatus[i] == CRC_CHANGED) {
 		    unit->mu_CrcBuffer[i] = DataCRC(unit->mu_TrackBuffer + i * MS_BPS);
-		    debug(("%d: %04x\n", i, unit->mu_CrcBuffer[i]));
+		    debug(("%ld: %04x\n", (long)i, unit->mu_CrcBuffer[i]));
 		}
 	    }
 	}
@@ -1516,7 +1507,7 @@ found_spt:
 
     side = cylinder % MS_NSIDES;
     cylinder /= MS_NSIDES;
-    debug(("userbuf %08lx cylinder %d len %d\n", userbuf, cylinder, length));
+    debug(("userbuf %08lx cylinder %ld len %ld\n", userbuf, (long)cylinder, (long)length));
 
     ioreq->iotd_Req.io_Actual = 0;
 
@@ -1536,7 +1527,7 @@ found_spt:
 
 	    for (i = spt - 1; i >= 0; i--) {
 		unit->mu_CrcBuffer[i] = DataCRC(userbuf + i * MS_BPS);
-		debug(("%d: %04x\n", i, unit->mu_CrcBuffer[i]));
+		debug(("%ld: %04x\n", (long)i, unit->mu_CrcBuffer[i]));
 	    }
 	}
 	ObtainSemaphore(&dev->md_HardwareUse);
