@@ -1,6 +1,11 @@
 /*-
- * $Id: device2.c,v 1.54 1993/06/24 04:56:00 Rhialto Exp $
+ * $Id: device2.c,v 1.55 1993/12/30 22:45:10 Rhialto Rel $
  * $Log: device2.c,v $
+ * Revision 1.55  1993/12/30  22:45:10	Rhialto
+ * Remove InitTable.
+ * Do units 4..11.
+ * UnitCloseDown no longer gets the IO request.
+ *
  * Revision 1.54  1993/06/24  04:56:00	Rhialto
  * Switch to RTF_AUTOINIT, saves a few bytes. DICE 2.07.54R.
  *
@@ -68,13 +73,13 @@ Prototype const char DevName[];
 Prototype const char idString[];
 
 const char	DevName[] = "messydisk.device";
-const char	idString[] = "$VER: messydisk.device $Revision: 1.54 $ $Date: 1993/06/24 04:56:00 $\r\n";
+const char	idString[] = "$\VER: messydisk.device $Revision: 1.55 $ $Date: 1993/12/30 22:45:10 $\r\n";
 
 /*
  * Device commands:
  */
 
-const void	(*funcTable[]) (struct IOStdReq *, UNIT *) = {
+void	       (*const funcTable[]) (struct IOStdReq *, UNIT *) = {
     CMD_Invalid, CMD_Reset, CMD_Read, CMD_Write, CMD_Update, CMD_Clear,
     CMD_Stop, CMD_Start, CMD_Flush, TD_Motor, TD_Seek, TD_Format,
     TD_Remove, TD_Changenum, TD_Changestate, TD_Protstatus, TD_Rawread,
@@ -263,7 +268,7 @@ __A6 DEV       *dev;
      * Bookkeeping.
      */
     unit = (UNIT *) ioreq->io_Unit;
-    debug(("BeginIO: io %08lx dev %08lx u %08lx\n", ioreq, dev, unit));
+    debug(("BeginIO: io %08lx dev %08lx u %08lx cmd %x\n", ioreq, dev, unit, ioreq->io_Command));
 
     /*
      * See if the io command is within range.
@@ -347,9 +352,9 @@ NoCmd:
 
 void
 TermIO(ioreq)
-register struct IOStdReq *ioreq;
+struct IOStdReq *ioreq;
 {
-    register UNIT  *unit;
+    UNIT  *unit;
 
     unit = (UNIT *) ioreq->io_Unit;
     debug(("TermIO: io %08lx u %08lx %ld %ld\n", ioreq, unit,
@@ -420,7 +425,7 @@ __A6 DEV       *dev;
 
 void
 WakePort(port)
-register struct MsgPort *port;
+struct MsgPort *port;
 {
     Signal(port->mp_SigTask, 1L << port->mp_SigBit);
 }
@@ -532,7 +537,7 @@ CMD_Flush(ioreq, unit)
 struct IOStdReq *ioreq;
 UNIT	       *unit;
 {
-    register struct IOStdReq *req;
+    struct IOStdReq *req;
 
     /* Flush our own command queue */
     Forbid();
@@ -548,10 +553,10 @@ UNIT	       *unit;
 
 void
 TrackdiskGateway(ioreq, unit)
-register struct IOStdReq *ioreq;
+struct IOStdReq *ioreq;
 UNIT	       *unit;
 {
-    register struct IOExtTD *tdioreq;
+    struct IOExtTD *tdioreq;
 
     debug(("Trackdisk: %lx ", (long)ioreq->io_Command));
     tdioreq = unit->mu_DiskIOReq;
