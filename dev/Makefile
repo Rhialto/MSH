@@ -1,19 +1,19 @@
-# $Id: Makefile.dev,v 1.53 92/10/25 03:15:23 Rhialto Rel $
+# $Id: Makefile.dev,v 1.54 1993/06/24 04:56:00 Rhialto Exp $
 #
 # Makefile for messydos device, for use with the DICE C compiler.
 #
 # This code is (C) Copyright 1989-1992 by Olaf Seibert. All rights reserved.
 # May not be used or copied without a licence.
 
-#DBOBJ = /syslog/syslog.o
-#DB =	 -DDEBUG -I/syslog
-#WACK =  -s
+#DBOBJ = /syslog/syslogi.o
+#DB =	 -d1 -DDEBUG -I/syslog
+#WACK =  -d1 -s
 REGARGS = -mRR -mi
 PURE = -mS
 HDR =	-Hdevice.sym=device.h
 
 DOBJ =	device1.o device2.o devio1.o devio2.o $(DBOBJ)
-DSRC =	device1.a device2.c devio1.a devio2.c dev.h device.h
+DSRC =	device1.a device2.c devio1.a devio2.c dev.h device.h layout.h
 XSRC =	mkci.c Makefile.dev /util/ignore.c
 
 .SUFFIXES: .a
@@ -47,8 +47,7 @@ c.i:	mkci
 	mkci c.i
 
 ci:
-	RCS:ci $(RCSOPT) $(DSRC) $(XSRC)
-	RCS:co -u $(RCSOPT) $(DSRC) $(XSRC)
+	RCS:ci -u $(RCSOPT) $(DSRC) $(XSRC)
 
 co:
 	RCS:co -u $(RCSOPT) $(DSRC) $(XSRC)
