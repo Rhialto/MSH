@@ -1,6 +1,9 @@
 /*-
- *  $Id: dev.h,v 1.51 92/04/17 15:43:01 Rhialto Rel $
+ *  $Id: dev.h,v 1.53 92/10/25 02:16:07 Rhialto Rel $
  *  $Log:	dev.h,v $
+ * Revision 1.53  92/10/25  02:16:07  Rhialto
+ * Add repeated #include protection.
+ * 
  * Revision 1.51  92/04/17  15:43:01  Rhialto
  * Freeze for MAXON3. Change cyl+side units to track units.
  *

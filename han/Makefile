@@ -1,4 +1,4 @@
-# $Id: Makefile,v 1.53 92/10/25 02:45:10 Rhialto Rel $
+# $Id: Makefile,v 1.53 92/10/25 03:31:10 Rhialto Rel $
 #
 # Makefile for messydos file system handler, for use with the
 # DICE C compiler.
@@ -6,15 +6,13 @@
 # This code is (C) Copyright 1989-1992 by Olaf Seibert. All rights reserved.
 # May not be used or copied without a licence.
 
-#DB =	 -DHDEBUG
+#DB =	 -DHDEBUG -I/syslog
 #DBOBJ = /syslog/syslog.o
 #WACK =  -s
-REGARGS = -mRR
+REGARGS = -mRR -mi
 PURE = -r -mS
-CLIB =	csr.lib  # when regargs are used set this to cr.lib
-#CLIB = cs.lib	 # when no regargs are used set this to c.lib
-HDR =	-Hhan.sym=han.h
-INC =	-I/han -I/dev -H/han/han.sym=/han/han.h
+HDR =	-Hhan.sym=han.h -Hdos.sym=dos.h
+INC =	-I/han -I/dev -H/han/han.sym=/han/han.h -H/han/dos.sym=/han/dos.h
 
 HOBJ =	hancrtso.o pack.o support.o hanmain.o hansec.o hanlock.o hanfile.o \
 	hanconv.o hanreq.o hancmd.o date.o han2.o $(DBOBJ)
@@ -33,19 +31,28 @@ XSRC =	Makefile /util/messyfmt.c /util/die.c \
 .a.o:
 	a68k -q $*.a -o$@
 
-all:	/MessyFileSystem
-utils:	/c/Die /c/MessyFmt /c/LoadConv /c/MSH-Set /c/MSH-Format
+all:	precompile /MessyFileSystem
+utils:	precompile /c/Die /c/MessyFmt /c/LoadConv /c/MSH-Set /c/MSH-Format
 doc:	dev.man msh.man
 
 /MessyFileSystem:    hanproto.h $(HOBJ)
-	dcc -o $@ -l0 $(REGARGS) $(PURE) $(WACK) $(HOBJ) $(CLIB) amigas13.lib
+	dcc -o $@ -l0 $(REGARGS) $(PURE) $(WACK) $(HOBJ) -lc -lamiga20
 
 hancrtso.o: hancrtso.a
 	dcc -c -o hancrtso.o hancrtso.a
 
 hanproto.h: $(HSRC)
+	-delete hanproto.h han.sym
 	makeproto -o hanproto.h $(HSRC)
+
+# Dependencies for precompiled header files
+han.sym: han.h
 	-delete han.sym
+
+dos.sym: dos.h
+	-delete dos.sym
+
+precompile: han.sym dos.sym
 
 ###
 

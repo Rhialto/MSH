@@ -1,6 +1,9 @@
 /*-
- * $Id: date.c,v 1.52 92/09/06 00:22:03 Rhialto Exp $
+ * $Id: date.c,v 1.53 92/10/25 02:43:23 Rhialto Rel $
  * $Log:	date.c,v $
+ * Revision 1.53  92/10/25  02:43:23  Rhialto
+ * No real change.
+ *
  * Revision 1.52  92/09/06  00:22:03  Rhialto
  * Didn't believe in leap days and some other days.
  *
@@ -30,11 +33,10 @@
  *
  * Two date conversion routines: DateStamp <-> MSDOS date/time.
  *
- * This code is (C) Copyright 1989-1992 by Olaf Seibert. All rights reserved.
+ * This code is (C) Copyright 1989-1993 by Olaf Seibert. All rights reserved.
  * May not be used or copied without a licence.
  */
 
-#include <functions.h>
 #include "han.h"
 #ifndef LIBRARIES_DOS_H
 #include <libraries/dos.h>

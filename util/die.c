@@ -1,5 +1,5 @@
 /*-
- * $Id: die.c,v 1.51 92/04/17 15:39:37 Rhialto Rel $
+ * $Id: die.c,v 1.53 92/10/25 02:46:02 Rhialto Rel $
  *
  *  DIE.C
  *
@@ -10,7 +10,6 @@
 #include <stdio.h>
 #include <string.h>
 #include "han.h"
-#include <functions.h>
 
 #ifndef EXEC_TYPES_H
 #include <exec/types.h>
@@ -21,6 +20,12 @@
 #ifndef LIBRARIES_DOSEXTENS_H
 #include <libraries/dosextens.h>
 #endif
+
+#ifndef CLIB_DOS_PROTOS_H
+#include <clib/dos_protos.h>
+#endif
+
+const char	idString[] = "$VER: Die $Revision$ $Date$\r\n";
 
 long
 dos_packet2(struct MsgPort *port, long type, long arg1, long arg2)

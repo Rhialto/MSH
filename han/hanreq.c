@@ -1,6 +1,9 @@
 /*-
- * $Id: hanreq.c,v 1.51 92/04/17 15:38:20 Rhialto Rel $
+ * $Id: hanreq.c,v 1.53 92/10/25 02:42:27 Rhialto Rel $
  * $Log:	hanreq.c,v $
+ * Revision 1.53  92/10/25  02:42:27  Rhialto
+ * No real change.
+ *
  * Revision 1.51  92/04/17  15:38:20  Rhialto
  * Freeze for MAXON.
  *
@@ -32,16 +35,21 @@
  *
  *  Read/Write error requesters.
  *
- *  This code is (C) Copyright 1989 by Olaf Seibert. All rights reserved. May
- *  not be used or copied without a licence.
+ *  This code is (C) Copyright 1989-1993 by Olaf Seibert. All rights reserved.
+ *  May not be used or copied without a licence.
 -*/
 
-#include <functions.h>
 #include "han.h"
 #include "dos.h"
+
 #ifndef INTUITION_INTUITION_H
 #include <intuition/intuition.h>
 #endif
+#ifndef CLIB_INTUITION_PROTOS_H
+#include <clib/intuition_protos.h>
+#endif
+
+extern struct IntuitionBase *IntuitionBase;
 
 #ifdef HDEBUG
 #   include "syslog.h"

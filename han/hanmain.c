@@ -1,6 +1,9 @@
 /*-
- * $Id: hanmain.c,v 1.52 92/09/06 00:19:31 Rhialto Exp $
+ * $Id: hanmain.c,v 1.53 92/10/25 02:25:46 Rhialto Rel $
  * $Log:	hanmain.c,v $
+ * Revision 1.53  92/10/25  02:25:46  Rhialto
+ * Expose private info if user asks nicely.
+ *
  * Revision 1.52  92/09/06  00:19:31  Rhialto
  * Include $VER in version string.
  *
@@ -43,7 +46,6 @@
  *  not be used or copied without a licence.
 -*/
 
-#include <functions.h>
 #include "han.h"
 #include "dos.h"
 #ifdef CONVERSIONS
@@ -70,7 +72,7 @@ Prototype long MSRelabel(byte *newname);
 Prototype struct PrivateInfo *PrivateInfo(void);
 
 struct Library *IntuitionBase;
-Local const char RCSId[] = "\0$VER: Messydos filing system $Revision: 1.52 $ $Date: 92/09/06 00:19:31 $, by Olaf Seibert";
+Local const char RCSId[] = "\0$VER: Messydos filing system $Revision: 1.53 $ $Date: 92/10/25 02:25:46 $, by Olaf Seibert";
 
 #define CONV_SEP    ';'
 
@@ -261,7 +263,7 @@ MSDiskRemoved(locks)
 struct LockList **locks;
 {
 #ifndef READONLY
-    if (FatDirty || (DelayState & DELAY_DIRTY))
+    if (FatDirty || CacheDirty)
 	MSUpdate(1);            /* Force a requester */
 #endif
 
@@ -351,7 +353,7 @@ HanOpenUp()
     Fat = NULL;
     IDDiskState = ID_WRITE_PROTECTED;
     IDDiskType = ID_NO_DISK_PRESENT;
-    DelayState = DELAY_OFF;
+    DelayCount = 0;
     Disk.bps = MS_BPS;
     CheckBootBlock = CHECK_BOOTJMP | CHECK_SANITY | CHECK_SAN_DEFAULT;
     InitCacheList();
@@ -457,8 +459,8 @@ byte	       *newname;
 		byte	       *tosec;
 		struct MsDirEntry *dir;
 
-		fromsec = GetSec(Disk.rootdir);
-		tosec = GetSec(new->msfl_DirSector);
+		fromsec = ReadSec(Disk.rootdir);
+		tosec = ReadSec(new->msfl_DirSector);
 
 		dir = (struct MsDirEntry *) fromsec;
 		while (dir->msd_Attributes & (ATTR_SYSTEM | ATTR_DIRECTORY)) {

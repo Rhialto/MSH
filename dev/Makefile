@@ -1,4 +1,4 @@
-# $Id: Makefile.dev,v 1.53 92/10/25 02:19:20 Rhialto Rel $
+# $Id: Makefile.dev,v 1.53 92/10/25 03:15:23 Rhialto Rel $
 #
 # Makefile for messydos device, for use with the DICE C compiler.
 #
@@ -6,12 +6,10 @@
 # May not be used or copied without a licence.
 
 #DBOBJ = /syslog/syslog.o
-#DB =	 -DDEBUG
+#DB =	 -DDEBUG -I/syslog
 #WACK =  -s
-REGARGS = -mRR
+REGARGS = -mRR -mi
 PURE = -mS
-CLIB =	csr.lib  # when regargs are used set this to cr.lib
-#CLIB = cs.lib	 # when no regargs are used set this to c.lib
 HDR =	-Hdevice.sym=device.h
 
 DOBJ =	device1.o device2.o devio1.o devio2.o $(DBOBJ)
@@ -30,7 +28,7 @@ XSRC =	mkci.c Makefile.dev /util/ignore.c
 all:	/messydisk.device /c/Ignore
 
 /messydisk.device: devproto.h $(DOBJ)
-	dcc -o $@ -l0 $(REGARGS) $(WACK) $(DOBJ) $(CLIB) amigas13.lib
+	dcc -o $@ -l0 $(REGARGS) $(WACK) $(DOBJ) -lc -lamiga20
 
 Mkci:	mkci.c dev.h device.h
 	dcc mkci.c $(HDR) -o Mkci
@@ -42,20 +40,18 @@ device1.o: device1.a c.i
 devio1.o: devio1.a c.i
 
 devproto.h: $(DSRC)
+	-delete devproto.h device.sym
 	makeproto -o devproto.h $(DSRC)
-	-delete device.sym
-
-device.sym: device.h
-	delete device.sym
 
 c.i:	mkci
 	mkci c.i
 
 ci:
-	RCS:ci -u $(RCSOPT) $(DSRC) $(XSRC)
+	RCS:ci $(RCSOPT) $(DSRC) $(XSRC)
+	RCS:co -u $(RCSOPT) $(DSRC) $(XSRC)
 
 co:
-	RCS:co -l $(RCSOPT) $(DSRC) $(XSRC)
+	RCS:co -u $(RCSOPT) $(DSRC) $(XSRC)
 
 depend:
 	mkd -I/syslog/ -f $(DSRC) $(XSRC)
@@ -69,7 +65,7 @@ depend:
 
 makefile.dev:
 mkci.o: devproto.h dev.h device.h mkci.c
-devio2.o: /syslog/syslog.h devproto.h dev.h device.h devio2.c
+devio2.o: /syslog/syslog.h dev.h device.h devio2.c
 devio1.o: devio1.a
-device2.o: /syslog/syslog.h devproto.h dev.h device.h device2.c
+device2.o: /syslog/syslog.h dev.h device.h device2.c
 device1.o: device1.a

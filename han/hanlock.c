@@ -1,6 +1,9 @@
 /*-
- * $Id: hanlock.c,v 1.52 92/09/06 01:52:30 Rhialto Exp $
+ * $Id: hanlock.c,v 1.53 92/10/25 02:28:50 Rhialto Rel $
  * $Log:	hanlock.c,v $
+ * Revision 1.53  92/10/25  02:28:50  Rhialto
+ * No real change.
+ *
  * Revision 1.52  92/09/06  01:52:30  Rhialto
  * Handle /parentdir via MSParentDir().
  *
@@ -33,7 +36,7 @@
  *
  * Revision 1.31  90/11/10  02:48:38  Rhialto
  * Patch 3a. Introduce disk volume date. Update modification time of
- * directories. *.INF -> *.info.
+ * directories.
  *
  * Revision 1.30  90/06/04  23:17:18  Rhialto
  * Release 1 Patch 3
@@ -45,11 +48,10 @@
  * The Lock department. Takes care of operations on locks, and consequently,
  * on directories.
  *
- * This code is (C) Copyright 1989-1992 by Olaf Seibert. All rights reserved.
+ * This code is (C) Copyright 1989-1993 by Olaf Seibert. All rights reserved.
  * May not be used or copied without a licence.
 -*/
 
-#include <functions.h>
 #include <string.h>
 #include "han.h"
 #include "dos.h"
@@ -202,7 +204,7 @@ int		createit;
 	    }
 	}
 #endif
-    } else if (sector = GetSec(previous->de_Sector)) {
+    } else if (sector = ReadSec(previous->de_Sector)) {
 	CopyMem(sector + previous->de_Offset, (char *)&previous->de_Msd,
 		(long) MS_DIRENTSIZE);
 	OtherEndianMsd(&previous->de_Msd);
@@ -427,7 +429,7 @@ newdir:
     sde.de_Sector = DirClusterToSector(sde.de_Msd.msd_Cluster);
     sde.de_Offset = 0;
 
-    if ((sector = GetSec(sde.de_Sector)) == NULL)
+    if ((sector = ReadSec(sde.de_Sector)) == NULL)
 	goto some_error;
 
     CopyMem(sector, (char *)&sde.de_Msd, (long) sizeof (struct MsDirEntry));
@@ -566,6 +568,9 @@ struct MSFileLock *fl;
 #endif
 
     if (fl) {
+	if (fl->msfl_Flags & MSFL_DIRTY) {
+	    WriteFileLock(fl);
+	}
 	if (--fl->msfl_Refcount <= 0) {
 	    struct LockList *list;
 
@@ -708,7 +713,7 @@ skip:
     if (sector != SEC_EOF) {
 	struct MsDirEntry msd;
 
-	if (buf = GetSec(sector)) {
+	if (buf = ReadSec(sector)) {
 	    msd = *(struct MsDirEntry *) (buf + offset);
 	    FreeSec(buf);
 	    if (msd.msd_Name[0] == '\0') {
@@ -792,7 +797,7 @@ register struct MSFileLock *fl;
     debug(("WriteFileLock %08lx\n", fl));
 
     if (fl && (short) fl->msfl_DirOffset >= 0) {
-	register byte  *block = GetSec(fl->msfl_DirSector);
+	register byte  *block = ReadSec(fl->msfl_DirSector);
 
 	if (block) {
 	    CopyMem((char *)&fl->msfl_Msd, (char *)block + fl->msfl_DirOffset,
@@ -800,6 +805,7 @@ register struct MSFileLock *fl;
 	    OtherEndianMsd((struct MsDirEntry *)(block + fl->msfl_DirOffset));
 	    MarkSecDirty(block);
 	    FreeSec(block);
+	    fl->msfl_Flags &= ~MSFL_DIRTY;
 	}
     }
 }
@@ -815,7 +821,8 @@ register struct MSFileLock *fl;
 
 	DateStamp(&dateStamp);
 	ToMSDate(&fl->msfl_Msd.msd_Date, &fl->msfl_Msd.msd_Time, &dateStamp);
-	WriteFileLock(fl);
+	/*WriteFileLock(fl);*/
+	fl->msfl_Flags |= MSFL_DIRTY;
     }
 }
 

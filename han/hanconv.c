@@ -1,6 +1,9 @@
 /*-
- * $Id: hanconv.c,v 1.51 92/04/17 15:38:09 Rhialto Rel $
+ * $Id: hanconv.c,v 1.53 92/10/25 02:41:38 Rhialto Rel $
  * $Log:	hanconv.c,v $
+ * Revision 1.53  92/10/25  02:41:38  Rhialto
+ * Rearrange initialisation of tables.
+ *
  * Revision 1.51  92/04/17  15:38:09  Rhialto
  * Freeze for MAXON.
  *
@@ -21,11 +24,10 @@
  *
  * This parts handles conversions on file data: PC/ST codes vs ISO-Latin-1.
  *
- * This code is (C) Copyright 1991,1992 by Olaf Seibert. All rights reserved.
+ * This code is (C) Copyright 1991-1993 by Olaf Seibert. All rights reserved.
  * May not be used or copied without a licence.
 -*/
 
-#include <functions.h>
 #include "han.h"
 
 #ifdef CONVERSIONS
@@ -124,8 +126,10 @@ long		fromsize;
 	0, 0
     };
 
+    Forbid();
     if (Table_FromPC == 0)
 	Table_FromPC = InitTable(init_FromPC);
+    Permit();
 
     if (Table_FromPC != 0) {
 	unsigned char *table = Table_FromPC;
@@ -152,8 +156,10 @@ long		fromsize;
 	0, 0
     };
 
+    Forbid();
     if (Table_FromST == 0)
 	Table_FromST = InitTable(init_FromST);
+    Permit();
 
     if (Table_FromST != 0) {
 	unsigned char *table = Table_FromST;
@@ -180,8 +186,10 @@ long		fromsize;
 	0, 0
     };
 
+    Forbid();
     if (Table_ToPC == 0)
 	Table_ToPC = InitTable(init_ToPC);
+    Permit();
 
     if (Table_ToPC != 0) {
 	unsigned char *table = Table_ToPC;
@@ -208,8 +216,10 @@ long		fromsize;
 	0, 0
     };
 
+    Forbid();
     if (Table_ToST == 0)
 	Table_ToST = InitTable(init_ToST);
+    Permit();
 
     if (Table_ToST != 0) {
 	unsigned char *table = Table_ToST;
@@ -222,6 +232,7 @@ long		fromsize;
 void
 ConvCleanUp()
 {
+    Forbid();
     if (Table_FromPC) {
 	FreeMem(Table_FromPC, 256L);
 	Table_FromPC = 0;
@@ -238,6 +249,7 @@ ConvCleanUp()
 	FreeMem(Table_ToST, 256L);
 	Table_ToST = 0;
     }
+    Permit();
 }
 
 #endif /* CONVERSIONS */

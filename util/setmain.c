@@ -1,7 +1,10 @@
 /*-
- * $Id: setmain.c,v 1.53 1992/10/25 02:47:12 Rhialto Rel $
+ * $Id: setmain.c,v 1.53 92/10/25 02:47:12 Rhialto Rel $
  * $Log:	setmain.c,v $
- * Revision 1.53  1992/10/25  02:47:12  Rhialto
+ * Revision 1.53  92/10/25  02:47:12  Rhialto
+ * Initial revision.
+ *
+ *  SET MAIN.C
  *
  *  The main file of the MSH settings commodity.
  *
@@ -53,6 +56,8 @@
 const char	idString[] = "$VER: MSH-Set $Revision$ $Date$\r\n";
 
 struct Library *AslBase;
+struct Library *GadToolsBase;
+struct Library *IntuitionBase;
 struct Library *CxBase;
 struct Library *IconBase;
 
@@ -71,9 +76,9 @@ struct FileRequester *FileRequest;
 const char	OkString[] = "Ok";
 const char	PanicString[] = "Panic!";
 const char	RCSId[] = "\0$VER: MSH-Set $Revision: 1.53 $ $Date: 92/10/25 02:47:12 $, by Olaf Seibert";
-char            OkString[] = "Ok";
-char            PanicString[] = "Panic!";
-char            RCSId[] = "\0$VER: Messydos Settings $Revision: 1.53 $ $Date: 1992/10/25 02:47:12 $, by Olaf Seibert";
+
+void		Show(void);
+void		Hide(void);
 void		SetGadgetAttr(int id, ULONG tag, ULONG value);
 void		UpdateGadgets(struct PrivateInfo *p);
 void		DeselectHandler(void);

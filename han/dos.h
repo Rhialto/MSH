@@ -1,7 +1,10 @@
 
 /*
- *  $Id: dos.h,v 1.52 92/09/06 00:23:30 Rhialto Exp $
+ *  $Id: dos.h,v 1.53 92/10/25 02:44:02 Rhialto Rel $
  *  $Log:	dos.h,v $
+ * Revision 1.53  92/10/25  02:44:02  Rhialto
+ * No real change.
+ *
  * Revision 1.52  92/09/06  00:23:30  Rhialto
  * Didn't believe in leap days and some other days.
  *
@@ -56,6 +59,12 @@
 #ifndef DEVICES_TIMER_H
 #include "devices/timer.h"
 #endif
+
+#ifndef CLIB_DOS_PROTOS_H
+#include <clib/dos_protos.h>
+#endif
+
+extern struct DosLibrary *DOSBase;
 
 /*
  *  ACTIONS which do not exist in dosextens.h but which indeed exist on

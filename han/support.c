@@ -1,6 +1,9 @@
 /*-
- * $Id: support.c,v 1.51 92/04/17 15:36:18 Rhialto Rel $
+ * $Id: support.c,v 1.53 92/10/25 02:24:40 Rhialto Rel $
  * $Log:	support.c,v $
+ * Revision 1.53  92/10/25  02:24:40  Rhialto
+ * Add 2.0 stuff for debugging. Rearrange some #includes for precompilation.
+ *
  * Revision 1.51  92/04/17  15:36:18  Rhialto
  * Freeze for MAXON.
  *
@@ -21,11 +24,6 @@
  * Release 1 Patch 3
  *
 -*/
-
-#include <functions.h>
-
-typedef unsigned long		ulong;
-typedef unsigned char		byte;
 
 #include "han.h"
 #include "dos.h"

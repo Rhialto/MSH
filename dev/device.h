@@ -1,6 +1,10 @@
 /*-
- *  $Id: device.h,v 1.51 92/04/17 15:43:10 Rhialto Rel $
+ *  $Id: device.h,v 1.53 92/10/25 02:17:40 Rhialto Rel $
  *  $Log:	device.h,v $
+ * Revision 1.54  1993/06/24  04:56:00	Rhialto
+ * DICE 2.07.54R.
+ *
+ * Revision 1.53  92/10/25  02:17:40  Rhialto
  * Rearrange #inclusions and Device structure.
  * Add TD_Getgeometry, TD_Eject.
  *
@@ -51,11 +55,19 @@
 #ifndef EXEC_DEVICES_H
 #include <exec/devices.h>
 #endif
+#ifndef EXEC_SEMAPHORES_H
+#include "exec/semaphores.h"
+#endif
+#ifndef CLIB_EXEC_PROTOS_H
+#include <clib/exec_protos.h>
+#endif
 #ifndef CLIB_ALIB_PROTOS_H
 #include <clib/alib_protos.h>
 #endif
 
 #ifndef MESSYDISK_DEV_H
+#include "dev.h"
+#endif
 
 extern struct ExecBase *SysBase;
 
@@ -65,13 +77,13 @@ extern struct ExecBase *SysBase;
 #endif
 #define TRACKS(cyls)    ((cyls) * NUMHEADS)
 #define TRK2CYL(track)  ((track) >> 1)
-#define REVISION	13
+#define REVISION	14
 
 #define VERSION 	SYS2_04
 #define REVISION	16
 
 struct MessyDevice {
-    long	    md_UseRawWrite;
+    struct Device   md_Dev;
     struct MessyUnit *md_Unit[MD_NUMUNITS];
     long	    md_System_2_04;
     struct SignalSemaphore md_HardwareUse;
@@ -100,6 +112,8 @@ struct MessyUnit {
     byte	    mu_DmaSignal;
     short	    mu_SectorsPerTrack; /* The nominal #sectors/track */
     short	    mu_CurrentSectors;	/* The current #sectors on this track */
+    short	    mu_CurrentTrack;	/* what's in the track buffer */
+    short	    mu_NumTracks;
     short	    mu_TrackChanged;
     short	    mu_ReadLen; 	/* 1 track + ~1 sector */
     short	    mu_WriteLen;	/* ~1 track */
@@ -140,29 +154,29 @@ typedef struct MessyUnit   UNIT;
 
 /*
  *  Which of the device commands are real, and which are
-/*  #define CMD_Invalid     /**/
-/*  #define CMD_Reset	    /**/
-/*  #define CMD_Read	    /**/
-/*  #define CMD_Write	    /**/
-/*  #define CMD_Update	    /**/
-/*  #define CMD_Clear	    /**/
-/*  #define CMD_Stop	    /**/
-/*  #define CMD_Start	    /**/
-/*  #define CMD_Flush	    /**/
+ *  routed to trackdisk.device.
+ */
+
+/*  #define CMD_Invalid     */
+/*  #define CMD_Reset	    */
+/*  #define CMD_Read	    */
+/*  #define CMD_Write	    */
+/*  #define CMD_Update	    */
+/*  #define CMD_Clear	    */
 /*  #define CMD_Stop	    */
-/*  #define TD_Seek	    /**/
-/*  #define TD_Format	    /**/
+/*  #define CMD_Start	    */
+/*  #define CMD_Flush	    */
     #define TD_Motor	    TrackdiskGateway
-/*  #define TD_Changenum    /**/
+/*  #define TD_Seek	    */
 /*  #define TD_Format	    */
     #define TD_Remove	    TrackdiskGateway
 /*  #define TD_Changenum    */
     #define TD_Changestate  TrackdiskGateway
     #define TD_Protstatus   TrackdiskGateway
     #define TD_Rawread	    TrackdiskGateway
-/*  #define TD_Addchangeint /**/
-/*  #define TD_Remchangeint /**/
-/*  #define TD_Getgeometry  /**/
+    #define TD_Rawwrite     TrackdiskGateway
+    #define TD_Getdrivetype TrackdiskGateway
+    #define TD_Getnumtracks TrackdiskGateway
 /*  #define TD_Addchangeint */
 /*  #define TD_Remchangeint */
 /*  #define TD_Getgeometry  */
@@ -172,14 +186,14 @@ typedef struct MessyUnit   UNIT;
 #define IMMEDIATE   ((1<<CMD_INVALID)|(1<<CMD_RESET)|\
 		     (1<<CMD_STOP)|(1<<CMD_START)|(1<<CMD_FLUSH)|\
 		     (1L<<TD_ADDCHANGEINT))
-__stkargs struct DiskResourceUnit *GetUnit(struct DiskResourceUnit *);
-__stkargs void GiveUnit(void);
+#define PerformIO(ioreq, unit) \
+		    (funcTable[STRIP(ioreq->io_Command)])(ioreq, unit)
 
 struct DiskResourceUnit *GetUnit(__A1 struct DiskResourceUnit *);
 void GiveUnit(void);
 
 #define Prototype extern
- *  Forward declarations:
+#define Local	  static
 
 /*
  *  Prototypes:

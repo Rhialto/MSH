@@ -1,6 +1,9 @@
 /*-
- * $Id: pack.c,v 1.51 92/04/17 15:34:59 Rhialto Rel $
+ * $Id: pack.c,v 1.53 92/10/25 02:23:50 Rhialto Rel $
  * $Log:	pack.c,v $
+ * Revision 1.53  92/10/25  02:23:50  Rhialto
+ * Add 2.0 stuff.
+ *
  * Revision 1.51  92/04/17  15:34:59  Rhialto
  * Freeze for MAXON. DosType->Interleave; extra uninhibits fixed.
  *
@@ -46,11 +49,10 @@
  *  Also, most protection against non-inserted disks is done here.
 -*/
 
-#include <functions.h>
 #include "han.h"
 #include "dos.h"
-
 #include <string.h>
+
 #ifdef HDEBUG
 #   include "syslog.h"
 #else
@@ -137,7 +139,6 @@ messydoshandler(void)
      * referencing absolute memory location 4.
      */
 
-    /* SysBase = AbsExecBase; */
     DOSBase = OpenLibrary("dos.library", 0L);
 
 #ifdef HDEBUG
@@ -292,7 +293,6 @@ top:
 		break;
 	    case ACTION_LOCATE_OBJECT:	/* Lock,Name,Mode	Lock	     */
 		{
-		    register struct FileLock *newlock;
 		    struct FileLock *lock;
 		    struct MSFileLock *msfl;
 		    long	    lockmode;
@@ -361,12 +361,12 @@ top:
 				     buf2);
 		}
 		break;
-	    case ACTION_MORECACHE:	/* #BufsToAdd		   Bool      */
+	    case ACTION_MORECACHE:	/* #BufsToAdd		bool,numbufs */
 		if ((MaxCache += (short) PArg1) <= 0) {
 		    MaxCache = 1;
-		} else
-		    PRes1 = DOSTRUE;
-		PRes2 = MaxCache;
+		}
+		PRes1 = MaxCache;   /* observed behaviour in std filesystem */
+		PRes2 = MaxCache;   /* documented behaviour in manual */
 		debug(("Now %ld cache sectors\n", (long)MaxCache));
 		break;
 	    case ACTION_COPY_DIR:	/* Lock 		   Lock      */
@@ -445,7 +445,7 @@ top:
 	    case ACTION_FLUSH:		/* writeout bufs, disk motor off     */
 		MSUpdate(1);
 		break;
-/*	    case ACTION_SET_COMMENT:	/* -,Lock,Name,Comment	   Bool      */
+/*	    case ACTION_SET_COMMENT:   / * -,Lock,Name,Comment	   Bool      */
 	    case ACTION_PARENT: /* Lock 		       ParentLock    */
 		{
 		    struct FileLock *lock;
@@ -649,8 +649,8 @@ top:
 		/*
 		 * A few other packet types which we do not support
 		 */
-/*	    case ACTION_WAIT_CHAR:	/* Timeout, ticks	   Bool      */
-/*	    case ACTION_RAWMODE:	/* Bool(-1:RAW 0:CON)      OldState  */
+/*	    case ACTION_WAIT_CHAR:     / * Timeout, ticks	   Bool      */
+/*	    case ACTION_RAWMODE:       / * Bool(-1:RAW 0:CON)      OldState  */
 	    default:
 		error = ERROR_ACTION_NOT_KNOWN;
 		break;
@@ -683,9 +683,7 @@ top:
 	 */
 	if (CheckIO(&TimeIOReq->tr_node)) {   /* Timer finished? */
 	    debug(("TimeIOReq is finished\n"));
-	    if (DelayState != DELAY_OFF) {
-		MSUpdate(0);    /* Also may switch off motor */
-	    }
+	    MSUpdate(0);        /* Also may switch off motor */
 	}
     } /* end for (;done) */
 
@@ -725,7 +723,7 @@ exit:
     if (done & (2 | 1))
 	DevNode->dn_SegList = NULL;	/* Forbid()den, fortunately */
 
-    CloseLibrary(DOSBase);
+    CloseLibrary((struct Library *)DOSBase);
 
     /* Fall off the end of the world. Implicit Permit(). */
 }

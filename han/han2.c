@@ -1,6 +1,9 @@
 /*-
- * $Id: han2.c,v 1.52 92/09/06 00:20:34 Rhialto Exp $
+ * $Id: han2.c,v 1.53 92/10/25 02:43:47 Rhialto Rel $
  * $Log:	han2.c,v $
+ * Revision 1.53  92/10/25  02:43:47  Rhialto
+ * Make it work.
+ *
  * Revision 1.52  92/09/06  00:20:34  Rhialto
  *
  * Revision 1.46  91/10/06  18:26:04  Rhialto
@@ -17,11 +20,10 @@
  *
  * New functions to make 2.0 stuff work.
  *
- * This code is (C) Copyright 1991-1992 by Olaf Seibert. All rights reserved.
+ * This code is (C) Copyright 1991-1993 by Olaf Seibert. All rights reserved.
  * May not be used or copied without a licence.
 -*/
 
-#include <functions.h>
 #include "han.h"
 #include "dos.h"
 

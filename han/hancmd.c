@@ -1,6 +1,9 @@
 /*-
- * $Id: hancmd.c,v 1.51 92/04/17 15:38:30 Rhialto Rel $
+ * $Id: hancmd.c,v 1.53 92/10/25 02:42:51 Rhialto Rel $
  * $Log:	hancmd.c,v $
+ * Revision 1.53  92/10/25  02:42:51  Rhialto
+ * Add default conversion. Make ::M+ work as advertised.
+ *
  * Revision 1.51  92/04/17  15:38:30  Rhialto
  * Freeze for MAXON3.
  *
@@ -32,11 +35,10 @@
  *
  * Special commands through MSH::something file names.
  *
- * This code is (C) Copyright 1990-1992 by Olaf Seibert. All rights reserved.
+ * This code is (C) Copyright 1990-1993 by Olaf Seibert. All rights reserved.
  * May not be used or copied without a licence.
 -*/
 
-#include <functions.h>
 #include <stdlib.h>
 #include "han.h"
 #ifdef CONVERSIONS

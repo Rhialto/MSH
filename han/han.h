@@ -1,6 +1,9 @@
 /*-
- *  $Id: han.h,v 1.52 92/09/06 00:06:08 Rhialto Exp $
+ *  $Id: han.h,v 1.53 92/10/25 02:44:29 Rhialto Rel $
  *  $Log:	han.h,v $
+ * Revision 1.53  92/10/25  02:44:29  Rhialto
+ * Add PrivateInfo. #define magic cookie.
+ *
  * Revision 1.52  92/09/06  00:06:08  Rhialto
  * Add cast to *_EOFs.
  *
@@ -37,6 +40,15 @@
 
 #include "dev.h"
 
+#ifndef CLIB_EXEC_PROTOS_H
+#include <clib/exec_protos.h>
+#endif
+#ifndef CLIB_ALIB_PROTOS_H
+#include <clib/alib_protos.h>
+#endif
+
+extern struct ExecBase *SysBase;
+
 /*----- Configuration section -----*/
 
 #define CONVERSIONS
@@ -50,16 +62,12 @@
 #define FILE_DIR     2
 #define FILE_FILE   -3
 
-/* #define MS_BPS      512	/* Bytes per sector */
 #define MS_SPC	    2		/* Sectors per cluster */
 #define MS_RES	    1		/* Reserved sectors (boot block) */
 #define MS_NFATS    2		/* Number of FATs */
 #define MS_NDIRS    112 	/* Number of directory entries */
 #define MS_NSECTS   1440	/* total number of sectors */
 #define MS_SPF	    3		/* Sectors per FAT */
-/* #define MS_SPT      9	/* Sectors per track */
-/* #define MS_SPT_MAX  9	/* Max sectors per track */
-/* #define MS_NSIDES   2	/* Tracks per cylinder */
 #define MS_ROOTDIR  (MS_RES + MS_SPF * MS_NFATS)
 #define MS_DIRENTSIZE  sizeof(struct MsDirEntry) /* size of a directory entry */
 
@@ -161,7 +169,10 @@ struct MSFileLock {
     struct MsDirEntry msfl_Msd; 	/* Copy of directory entry */
     word	    msfl_DirSector;	/* Location of directory entry */
     word	    msfl_DirOffset;
+    word	    msfl_Flags;
 };
+
+#define MSFL_DIRTY  0x01		/* Only used in MSWrite */
 
 /*
  * A pointer to an MSFileHandle is put into the fh_Arg1 field of a DOS
@@ -211,12 +222,6 @@ struct Cache {
 };
 
 #define OFFSETOF(tag, member)   ((long)(&((struct tag *)0)->member))
-
-#define     DELAY_OFF	    0	/* Motor is off */
-#define     DELAY_RUNNING1  1	/* Motor may be on */
-#define     DELAY_RUNNING2  2	/* Motor may be on */
-#define     DELAY_RUNNING   3	/* Running1 | 2 */
-#define     DELAY_DIRTY     4	/* We have dirty buffers to flush */
 
 struct PrivateInfo {
     short	    Revision;

@@ -1,6 +1,9 @@
 /*
- * $Id: messyfmt.c,v 1.51 92/04/17 15:39:11 Rhialto Rel $
+ * $Id: messyfmt.c,v 1.53 92/10/25 02:45:24 Rhialto Rel $
  * $Log:	messyfmt.c,v $
+ * Revision 1.53  92/10/25  02:45:24  Rhialto
+ * No real change.
+ *
  * Revision 1.51  92/04/17  15:39:11  Rhialto
  * Freeze for MAXON3.
  *
@@ -37,7 +40,8 @@
 #include <string.h>
 #include <signal.h>
 #include "han.h"
-#include <functions.h>
+
+const char	idString[] = "$VER: MessyFmt $Revision$ $Date$\r\n";
 
 const ulong	BootBlock[] = {
     0xEB349049, 0x424D2020, 0x332E3200, 0x02020100,	/* ...IBM  3.2..... */

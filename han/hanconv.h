@@ -1,6 +1,9 @@
 /*-
- * $Id: hanconv.h,v 1.52 92/09/06 00:10:25 Rhialto Exp $
+ * $Id: hanconv.h,v 1.53 92/10/25 03:04:02 Rhialto Rel $
  * $Log:	hanconv.h,v $
+ * Revision 1.53  92/10/25  03:04:02  Rhialto
+ * Moved prototypes out of header file.
+ * 
  * Revision 1.52  92/09/06  00:10:25  Rhialto
  * Clean up declaration.
  *
