@@ -1,5 +1,5 @@
 /*-
- *  $Id: han.h,v 1.1 89/12/17 20:08:20 Rhialto Exp Locker: Rhialto $
+ *  $Id: han.h,v 1.2 89/12/17 23:07:26 Rhialto Exp Locker: Rhialto $
  *
  *  The header file for the MESSYDOS: file system handler
  *
@@ -24,11 +24,11 @@
 #define MS_SPT_MAX  9		/* Max sectors per track */
 #define MS_NSIDES   2		/* Tracks per cylinder */
 #define MS_ROOTDIR  (MS_RES + MS_SPF * MS_NFATS)
-#define MS_DIRENTSIZE	32	/* size of a directory entry */
+#define MS_DIRENTSIZE  sizeof(struct MsDirEntry) /* size of a directory entry */
 
 #define MS_FIRSTCLUST	2	/* Very strange convention... */
 
-#define FAT_EOF     0xFFF	/* end of file FAT entry */
+#define FAT_EOF     0xFFFF	/* end of file FAT entry */
 #define FAT_UNUSED  0		/* unused block */
 #define SEC_EOF     -1		/* end of FAT chain */
 
@@ -62,7 +62,7 @@ struct MsDirEntry {
 #define DATE_MIN	    0x21
 
 struct DirEntry {
-    struct MsDirEntry de_Msd;	/* Here also sometimes wrong byte order */
+    struct MsDirEntry de_Msd;
     word	    de_Sector;
     word	    de_Offset;
 };
@@ -90,6 +90,7 @@ struct DiskParam {
     word	    nsectsfree; /* amount of free space */
     long	    lowcyl;	/* offset to lowcyl */
     struct DirEntry vollabel;	/* copy of volume label */
+    word	    fat16bits;	/* Is the FAT 16 bits/entry? */
 };
 
 /*

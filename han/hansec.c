@@ -1,16 +1,18 @@
 /*-
- * $Id$
- * $Log$
+ * $Id: hansec.c,v 1.1 89/12/17 20:02:49 Rhialto Exp Locker: Rhialto $
+ * $Log:	hansec.c,v $
+ * Revision 1.1  89/12/17  20:02:49  Rhialto
+ * Initial revision
  *
- *  HANSEC.C
+ * HANSEC.C
  *
- *  The code for the messydos file system handler
+ * The code for the messydos file system handler.
  *
- *  Sector-level stuff: read, write, cache, unit conversion.
- *  Other interactions (via MyDoIO) with messydisk.device.
+ * Sector-level stuff: read, write, cache, unit conversion.
+ * Other interactions (via MyDoIO) with messydisk.device.
  *
- *  This code is (C) Copyright 1989 by Olaf Seibert. All rights reserved. May
- *  not be used or copied without a licence.
+ * This code is (C) Copyright 1989 by Olaf Seibert. All rights reserved. May
+ * not be used or copied without a licence.
 -*/
 
 #include "han.h"
@@ -40,7 +42,6 @@ int		MaxCache = 5;	/* Maximum amount of cached buffers */
 long		CacheBlockSize; /* Size of disk block + overhead */
 ulong		BufMemType;
 int		DelayState;
-
 
 byte	       *Word8086;
 
@@ -119,7 +120,6 @@ register word	cluster;
 	: Disk.rootdir;
 }
 
-
 word
 SectorToCluster(sector)
 register word	sector;
@@ -138,8 +138,7 @@ word cluster;
 {
     register word entry;
 
-
-    return (entry = GetFatEntry(cluster)) >= 0xFF7 ? FAT_EOF : entry;
+    return (entry = GetFatEntry(cluster)) >= 0xFFF0 ? FAT_EOF : entry;
 }
 
 word
@@ -564,6 +563,8 @@ ReadBootBlock()
 	    Disk.maxclst = (Disk.nsects - Disk.start) / Disk.spc - 1;
 	    Disk.bpc = Disk.bps * Disk.spc;
 	    Disk.vollabel = FakeRootDirEntry;
+	    Disk.fat16bits = (((long)Disk.nsects * Disk.bps) >= 1024L * 1024);
+							    /* 1M disk */
 
 	    debug(("%x\tbytes per sector\n", Disk.bps));
 	    debug(("%x\tsectors per cluster\n", Disk.spc));
@@ -583,6 +584,7 @@ ReadBootBlock()
 	    debug(("%x\tfirst data block\n", Disk.datablock));
 	    debug(("%x\tclusters total\n", Disk.maxclst));
 	    debug(("%x\tbytes per cluster\n", Disk.bpc));
+	    debug(("%x\t16-bits FAT?\n", Disk.fat16bits));
 
 	    IDDiskType = ID_DOS_DISK;
 #ifdef READONLY
@@ -642,7 +644,6 @@ struct DateStamp *date;
 		    Disk.vollabel.de_Offset = (byte *) dirent - dirblock;
 		    OtherEndianMsd(&Disk.vollabel.de_Msd);
 		    Disk.vollabel.de_Msd.msd_Cluster = 0;	/* to be sure */
-/*		    Disk.vollabel.de_Msd.msd_Attributes |= ATTR_DIRECTORY; */
 		    break;
 		}
 		dirent++;

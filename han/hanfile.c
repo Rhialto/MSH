@@ -1,6 +1,9 @@
 /*-
- * $Id: hanfile.c,v 1.2 89/12/17 23:04:39 Rhialto Exp Locker: Rhialto $
+ * $Id: hanfile.c,v 1.3 90/01/23 00:39:04 Rhialto Exp Locker: Rhialto $
  * $Log:	hanfile.c,v $
+ * Revision 1.3  90/01/23  00:39:04  Rhialto
+ * Always return -1 on MSWrite error.
+ *
  * Revision 1.2  89/12/17  23:04:39  Rhialto
  * Add ATTR_READONLY support
  *
@@ -82,29 +85,38 @@ FreeFat()
  *
  *  Two entries 	abc  123 (for one cluster and the next)
  *  are packed as	bc 3a 12
- *  and unpacked as	12 3a bc
- *
 -*/
 
 word
 GetFatEntry(cluster)
 word		cluster;
 {
-    word	    clusterpair = cluster / 2;
-    register int    offset = 3 * clusterpair;
-    register ulong  twoentries = 0;
-
     if (!Fat && !GetFat())
 	return FAT_EOF;
 
-    twoentries = Fat[offset + 0] << 0;
-    twoentries |= Fat[offset + 1] << 8;
-    twoentries |= (ulong) Fat[offset + 2] << 16;
+    if (Disk.fat16bits) {
+	return OtherEndianWord(((word *)Fat)[cluster]);
+    } else {
+	register int	offset = 3 * (cluster / 2);
+	register word	twoentries;
 
-    if (cluster & 1)
-	return twoentries >> 12;
-    else
-	return twoentries & 0xFFF;
+	if (cluster & 1) {
+	    twoentries = Fat[offset + 1] >> 4;
+	    twoentries |= Fat[offset + 2] << 4;
+	} else {
+	    twoentries = Fat[offset];
+	    twoentries |= (Fat[offset + 1] & 0x0F) << 8;
+	}
+
+	/*
+	 * Convert the special values 0xFF0 .. 0xFFF to 16 bits so they
+	 * can be checked consistently.
+	 */
+	if (twoentries >= 0xFF0)
+	    twoentries |= 0xF000;
+
+	return twoentries;
+    }
 }
 
 #ifndef READONLY
@@ -114,22 +126,26 @@ SetFatEntry(cluster, value)
 word		cluster;
 word		value;
 {
-    word	    clusterpair = cluster / 2;
-    register int    offset = 3 * clusterpair;
 
     debug(("SetFatEntry %d to %d\n", cluster, value));
 
     if (!Fat && !GetFat())
 	return;
 
-    if (cluster & 1) {          /* 123 kind of entry */
-	Fat[offset + 2] = value >> 4;
-	Fat[offset + 1] &= 0x0F;
-	Fat[offset + 1] |= (value & 0x0F) << 4;
-    } else {			/* abc kind of entry */
-	Fat[offset + 0] = value;
-	Fat[offset + 1] &= 0xF0;
-	Fat[offset + 1] |= (value >> 8) & 0x0F;
+    if (Disk.fat16bits) {
+	((word *)Fat)[cluster] = OtherEndianWord(value);
+    } else {
+	register int	offset = 3 * (cluster / 2);
+
+	if (cluster & 1) {          /* 123 kind of entry */
+	    Fat[offset + 2] = value >> 4;
+	    Fat[offset + 1] &= 0x0F;
+	    Fat[offset + 1] |= (value & 0x0F) << 4;
+	} else {		    /* abc kind of entry */
+	    Fat[offset + 0] = value;
+	    Fat[offset + 1] &= 0xF0;
+	    Fat[offset + 1] |= (value >> 8) & 0x0F;
+	}
     }
 
     FatDirty = TRUE;
