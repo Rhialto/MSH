@@ -1,6 +1,10 @@
 /*-
- * $Id: devio2.c,v 1.51 92/04/17 15:42:39 Rhialto Rel $
+ * $Id: devio2.c,v 1.53 92/10/25 02:13:45 Rhialto Rel $
  * $Log:	devio2.c,v $
+ * Revision 1.53  92/10/25  02:13:45  Rhialto
+ * Add TD_Getgeometry, TD_Eject. Fix some prototypes.
+ *  Better read error checking.
+ *
  * Revision 1.51  92/04/17  15:42:39  Rhialto
  * Freeze for MAXON3. Change cyl+side units to track units.
  *
@@ -38,9 +42,8 @@
 -*/
 
 #include "device.h"
-#include <functions.h>
 
-/*#undef DEBUG			/**/
+/*#undef DEBUG			*/
 #ifdef DEBUG
 #   include "syslog.h"
 #else
@@ -81,18 +84,21 @@ Prototype word CalculateGapLength(int sectors);
 Prototype int InitWrite(DEV *dev);
 Prototype void FreeBuffer(DEV *dev);
 Prototype void Internal_Update(struct IOStdReq *ioreq, UNIT *unit);
-Prototype __stkargs void EncodeTrack(byte *TrackBuffer, byte *Rawbuffer, word *Crcs, long Cylinder, long Side, long GapLen, long NumSecs);
+Prototype __stkargs void EncodeTrack(byte *TrackBuffer, byte *Rawbuffer, word *Crcs, long Cylinder, long Side, long GapLen, long NumSecs, long WriteLen);
 /* should become  ... word Cylinder, word Side, word GapLen, word NumSecs */
 #endif
 
 __stkargs word DataCRC(byte *buffer);
 __stkargs void IndexIntCode(void);
 __stkargs void DskBlkIntCode(void);
-int HardwareIO(DEV *dev, UNIT *unit, int dskwrite, struct IOStdReq *ioreq);
+struct tasksig;
+int HardwareCommon(DEV *dev, UNIT *unit, struct tasksig *tasksig);
+int HardwareRead(DEV *dev, UNIT *unit, struct IOStdReq *ioreq);
+int HardwareWrite(DEV *dev, UNIT *unit, struct IOStdReq *ioreq);
 int DecodeTrack(DEV *dev, UNIT *unit);
 __stkargs word DecodeTrack0(DEV *dev, UNIT *unit);
 __stkargs void SafeEnableICR(long bits);
-__stkargs byte DecodeByte(byte *mfmdecode, word mfm);
+byte DecodeByte(byte *mfmdecode, word mfm);
 
 extern __far struct Custom custom;
 extern __far struct CIA ciab;
@@ -122,6 +128,8 @@ byte		MfmEncode[16] = {
     0x2a, 0x29, 0x24, 0x25, 0x12, 0x11, 0x14, 0x15,
     0x4a, 0x49, 0x44, 0x45, 0x52, 0x51, 0x54, 0x55
 };
+
+word		MfmEncodeWord[256];
 
 #define SYNC	0x4489
 #define TLEN	12500	    /* In BYTES */
@@ -159,50 +167,23 @@ byte		MfmEncode[16] = {
 
 /* INDENT ON */
 
-int
-HardwareIO(dev, unit, dskwrite, ioreq)
+struct tasksig {
+    struct Task *task;
+    ulong signal;
+};
+
+HardwareCommon(dev, unit, tasksig)
 DEV	       *dev;
-REGISTER UNIT  *unit;
-int		dskwrite;
-struct IOStdReq *ioreq;
+UNIT	       *unit;
+struct tasksig *tasksig;
 {
-    struct {
-	struct Task *task;
-	ulong signal;
-    } tasksig;
+    tasksig->task = FindTask(NULL);
+    tasksig->signal = 1L << unit->mu_DmaSignal;
 
-    debug(("Disk buffer is at %lx\n", dev->md_Rawbuffer));
-
-#ifndef NONCOMM
-    if (dev->md_UseRawWrite && dskwrite) {
-	REGISTER struct IOExtTD *tdreq = unit->mu_DiskIOReq;
-
-	tdreq->iotd_Req.io_Command = TD_RAWWRITE;
-	tdreq->iotd_Req.io_Flags = IOTDF_INDEXSYNC;
-	tdreq->iotd_Req.io_Length = WLEN;
-	tdreq->iotd_Req.io_Data = (APTR)dev->md_Rawbuffer;
-	if ((ioreq->io_Flags & IOMDF_40TRACKS) &&
-	    (unit->mu_NumTracks == TRACKS(80))) {
-	    tdreq->iotd_Req.io_Offset = 2 * unit->mu_CurrentTrack -
-					TRK2SIDE(unit->mu_CurrentTrack);
-	} else {
-	    tdreq->iotd_Req.io_Offset = unit->mu_CurrentTrack;
-	}
-	debug(("TDRawWrite %ld\n", tdreq->iotd_Req.io_Offset));
-	MyDoIO((struct IORequest *)tdreq);
-
-	return tdreq->iotd_Req.io_Error;
-    }
-#endif
-
-    tasksig.task = FindTask(NULL);
-    tasksig.signal = 1L << unit->mu_DmaSignal;
-
-    unit->mu_DRUnit.dru_Index.is_Data = (APTR) ((WLEN >> 1)|DSKDMAEN| dskwrite);
-    unit->mu_DRUnit.dru_DiscBlock.is_Data = (APTR) &tasksig;
+    unit->mu_DRUnit.dru_DiscBlock.is_Data = (APTR) tasksig;
 
     /* Clear signal bit */
-    SetSignal(0L, tasksig.signal);
+    SetSignal(0L, tasksig->signal);
 
     /* Allocate drive and install index and block interrupts */
     GetDrive(&unit->mu_DRUnit);
@@ -211,7 +192,7 @@ struct IOStdReq *ioreq;
     custom.intreq = INTF_DSKBLK;
 
     /* Select correct drive and side */
-    ciab.ciaprb = 0xff & ~CIAF_DSKMOTOR;    /* See hardware manual p229 */
+    ciab.ciaprb = 0xff & ~CIAF_DSKMOTOR;    /* See hardware manual p244 (2nd ed: p229) */
     ciab.ciaprb = 0xff & ~CIAF_DSKMOTOR
 		       & ~(CIAF_DSKSEL0 << unit->mu_UnitNr)
 		       & ~(TRK2SIDE(unit->mu_CurrentTrack) << CIAB_DSKSIDE);
@@ -234,9 +215,6 @@ struct IOStdReq *ioreq;
 	if (unit->mu_CurrentTrack > (unit->mu_NumTracks >> 1)) {
 	    adk |= ADKF_PRECOMP0;
 	}
-	/* Do we need wordsync ? */
-	if (!dskwrite)
-	    adk |= ADKF_WORDSYNC;
 	custom.adkcon = adk;
     }
 
@@ -245,21 +223,52 @@ struct IOStdReq *ioreq;
 
     /* Enable disk DMA */
     custom.dmacon = DMAF_SETCLR | DMAF_MASTER | DMAF_DISK;
+}
 
-    if (dskwrite) {
-	/* Enable disk index interrupt to start the whole thing. */
-	SafeEnableICR(CIAICRF_FLG);
-    } else {
-	/* Set the sync word */
-	custom.dsksync = SYNC;
+int
+HardwareRead(dev, unit, ioreq)
+DEV	       *dev;
+REGISTER UNIT  *unit;
+struct IOStdReq *ioreq;
+{
+    struct tasksig  tasksig;
 
-	/* Do the same as the disk index interrupt would */
-	custom.dsklen = DSKDMAOFF;
-	custom.dsklen = (RLEN >> 1) | DSKDMAEN;
-	custom.dsklen = (RLEN >> 1) | DSKDMAEN;
+    debug(("Disk buffer is at %lx\n", dev->md_Rawbuffer));
 
-	custom.intena = INTF_SETCLR | INTF_DSKBLK;
+#ifndef NONCOMM
+    if (dev->md_System_2_04) {
+	REGISTER struct IOExtTD *tdreq = unit->mu_DiskIOReq;
+
+	tdreq->iotd_Req.io_Command = TD_RAWREAD;
+	tdreq->iotd_Req.io_Flags = IOTDF_WORDSYNC;
+	tdreq->iotd_Req.io_Length = unit->mu_ReadLen;
+	tdreq->iotd_Req.io_Data = (APTR)dev->md_Rawbuffer;
+	if ((ioreq->io_Flags & IOMDF_40TRACKS) &&
+	    (unit->mu_NumTracks == TRACKS(80))) {
+	    tdreq->iotd_Req.io_Offset = 2 * unit->mu_CurrentTrack -
+					TRK2SIDE(unit->mu_CurrentTrack);
+	} else {
+	    tdreq->iotd_Req.io_Offset = unit->mu_CurrentTrack;
+	}
+	debug(("TDRawRead %ld\n", tdreq->iotd_Req.io_Offset));
+	MyDoIO((struct IORequest *)tdreq);
+
+	return tdreq->iotd_Req.io_Error;
     }
+#endif
+
+    HardwareCommon(dev, unit, &tasksig);
+
+    /* Enable Wordsync and set the sync word */
+    custom.adkcon = ADKF_SETCLR | ADKF_WORDSYNC;
+    custom.dsksync = SYNC;
+
+    /* Do the same as the disk index interrupt would */
+    custom.dsklen = DSKDMAOFF;
+    custom.dsklen = (unit->mu_ReadLen >> 1) | DSKDMAEN;
+    custom.dsklen = (unit->mu_ReadLen >> 1) | DSKDMAEN;
+
+    custom.intena = INTF_SETCLR | INTF_DSKBLK;
 
     Wait(tasksig.signal);
 
@@ -267,11 +276,59 @@ struct IOStdReq *ioreq;
     return TDERR_NoError;
 }
 
+int
+HardwareWrite(dev, unit, ioreq)
+DEV	       *dev;
+REGISTER UNIT  *unit;
+struct IOStdReq *ioreq;
+{
+    struct tasksig  tasksig;
+
+    debug(("Disk buffer is at %lx\n", dev->md_Rawbuffer));
+
+#ifndef NONCOMM
+    if (dev->md_System_2_04) {
+	REGISTER struct IOExtTD *tdreq = unit->mu_DiskIOReq;
+
+	tdreq->iotd_Req.io_Command = TD_RAWWRITE;
+	tdreq->iotd_Req.io_Flags = IOTDF_INDEXSYNC;
+	tdreq->iotd_Req.io_Length = unit->mu_WriteLen;
+	tdreq->iotd_Req.io_Data = (APTR)dev->md_Rawbuffer;
+	if ((ioreq->io_Flags & IOMDF_40TRACKS) &&
+	    (unit->mu_NumTracks == TRACKS(80))) {
+	    tdreq->iotd_Req.io_Offset = 2 * unit->mu_CurrentTrack -
+					TRK2SIDE(unit->mu_CurrentTrack);
+	} else {
+	    tdreq->iotd_Req.io_Offset = unit->mu_CurrentTrack;
+	}
+	debug(("TDRawWrite %ld\n", tdreq->iotd_Req.io_Offset));
+	MyDoIO((struct IORequest *)tdreq);
+
+	return tdreq->iotd_Req.io_Error;
+    }
+#endif
+
+    HardwareCommon(dev, unit, &tasksig);
+    unit->mu_DRUnit.dru_Index.is_Data = (APTR)
+	((unit->mu_WriteLen >> 1)| DSKDMAEN | DSKWRITE);
+
+    /* Enable disk index interrupt to start the whole thing. */
+    SafeEnableICR(CIAICRF_FLG);
+
+    Wait(tasksig.signal);
+
+    FreeDrive();
+    return TDERR_NoError;
+}
+
+
 #if 0
 #define ID_ADDRESS_MARK     0xFE
 #define MFM_ID		    0x5554
 #define DATA_ADDRESS_MARK   0xFB
 #define MFM_DATA	    0x5545
+
+byte DecodeByte(byte *mfmdecode, word mfm);
 
 byte
 DecodeByte(mfmdecode, mfm)
@@ -289,7 +346,8 @@ UNIT	       *unit;
 {
     REGISTER word  *rawbuf = (word *)dev->md_Rawbuffer; /*  a2 */
     word	   *rawend = (word *)
-			     ((byte *)rawbuf + RLEN - (MS_BPS+2)*sizeof(word));
+			     ((byte *)rawbuf + unit->mu_ReadLen -
+			      (MS_BPS+2)*sizeof(word));
     byte	   *trackbuf = unit->mu_TrackBuffer;
     REGISTER byte  *decode = dev->md_MfmDecode; 	/*  a3 */
     word	   *oldcrc = unit->mu_CrcBuffer;
@@ -452,6 +510,13 @@ REGISTER byte  *decode;
     do {
 	decode[MfmEncode[i]] = i;
     } while (++i < 0x10);
+
+    /* This does not belong here!! */
+    for (i = 0; i < 256; i++) {
+	MfmEncodeWord[i] = MfmEncode[i & 0x0F] | MfmEncode[i >> 4] << 8 |
+			   ((i & 0x18) ? 0 : 0x80);
+	/*		   %0001 1000  %1000 0000 */
+    }
 }
 
 #ifndef NONCOMM
@@ -582,7 +647,7 @@ int		track;
 	}
 	unit->mu_CurrentTrack = track;
 	ObtainSemaphore(&dev->md_HardwareUse);
-	HardwareIO(dev, unit, 0, NULL); /* ioreq not needed */
+	HardwareRead(dev, unit, ioreq);
 	i = DecodeTrack(dev, unit);
 	ReleaseSemaphore(&dev->md_HardwareUse);
 	debug(("DecodeTrack returns %ld\n", (long)i));
@@ -605,8 +670,6 @@ CheckChanged(ioreq, unit)
 struct IOExtTD *ioreq;
 REGISTER UNIT  *unit;
 {
-    REGISTER struct IOExtTD *tdreq;
-
     if ((ioreq->iotd_Req.io_Command & TDF_EXTCOM) &&
 	ioreq->iotd_Count < unit->mu_ChangeNum) {
 diskchanged:
@@ -632,8 +695,7 @@ REGISTER UNIT  *unit;
 	ioreq->iotd_Count < unit->mu_ChangeNum) {
 diskchanged:
 	ioreq->iotd_Req.io_Error = TDERR_DiskChanged;
-error:
-	return 1;
+	return TDERR_DiskChanged;
     }
     /*
      * if (ioreq->iotd_Req.io_Offset + ioreq->iotd_Req.io_Length >
@@ -663,7 +725,7 @@ error:
     if (STRIP(ioreq->iotd_Req.io_Command) != CMD_READ) {
 	if (!(unit->mu_DiskState & STATEF_WRITABLE)) {
 	    ioreq->iotd_Req.io_Error = TDERR_WriteProt;
-	    goto error;
+	    return TDERR_WriteProt;
 	}
     }
     return 0;
@@ -702,7 +764,7 @@ REGISTER UNIT  *unit;
     ioreq->io_Actual = 0;
     error = TDERR_NoError;
 
-    if (length <= 0 || CheckRequest((struct IOExtTD *)ioreq, unit))
+    if (length <= 0 || error = CheckRequest((struct IOExtTD *)ioreq, unit))
 	goto end;
 
     retrycount = 0;
@@ -849,19 +911,25 @@ int
 DevInit(dev)
 REGISTER DEV   *dev;
 {
+    debug(("Open disk.resource\n"));
     if (!(DRResource = OpenResource(DISKNAME)))
 	goto abort;
 
+    debug(("Open cia.resource\n"));
     if (!(CiaBResource = OpenResource(CIABNAME)))
 	goto abort;
 
 #ifndef READONLY
+    debug(("init write\n"));
     if (!InitWrite(dev))
 	goto abort;
 #endif
 
+    debug(("init decoding\n"));
     InitDecoding(dev->md_MfmDecode);
+    debug(("init semaphore\n"));
     InitSemaphore(&dev->md_HardwareUse);
+    debug(("done init\n"));
     return 1;			/* Initializing succeeded */
 
 abort:
@@ -916,8 +984,8 @@ ulong		UnitNr;
 	tdreq->iotd_Req.io_Device = NULL;
 	goto abort;
     }
-    if (tdreq->iotd_Req.io_Device->dd_Library.lib_Version >= SYS2_0)
-	dev->md_UseRawWrite = 1;
+    if (tdreq->iotd_Req.io_Device->dd_Library.lib_Version >= SYS2_04)
+	dev->md_System_2_04 = 1;
 
     dcr = (void *) CreateExtIO(&unit->mu_DiskReplyPort, (long) sizeof (*dcr));
     if (dcr) {
@@ -941,6 +1009,8 @@ ulong		UnitNr;
     unit->mu_TrackChanged = 0;
     unit->mu_InitSectorStatus = CRC_UNCHECKED;
     unit->mu_SectorsPerTrack = MS_SPT;
+    unit->mu_ReadLen = RLEN;
+    unit->mu_WriteLen = WLEN;
 
     unit->mu_DRUnit.dru_Message.mn_ReplyPort = &unit->mu_DiskReplyPort;
     unit->mu_DRUnit.dru_Index.is_Node.ln_Pri = 32; /* high pri for index int */
@@ -1030,7 +1100,7 @@ REGISTER struct IOStdReq *ioreq;
 REGISTER UNIT  *unit;
 {
     Disable();
-    AddTail((struct List *)&unit->mu_ChangeIntList, &ioreq->io_Message.mn_Node);
+    Enqueue((struct List *)&unit->mu_ChangeIntList, &ioreq->io_Message.mn_Node);
     Enable();
     ioreq->io_Flags &= ~IOF_QUICK;	/* So we call ReplyMsg instead of
 					 * TermIO */
@@ -1178,11 +1248,11 @@ UNIT	       *unit;
     spt = unit->mu_SectorsPerTrack;
     track = offset / spt;
     sector = offset % spt;
-    debug(("T=%ld Si=%ld Se=%ld\n", (long)track / MS_NSIDES, (long)side % MS_NSIDES, (long)sector));
+    debug(("T=%ld Si=%ld Se=%ld\n", (long)track / MS_NSIDES, (long)track % MS_NSIDES, (long)sector));
 
     ioreq->io_Actual = 0;
 
-    if (length <= 0 || CheckRequest((struct IOExtTD *)ioreq, unit))
+    if (length <= 0 || error = CheckRequest((struct IOExtTD *)ioreq, unit))
 	goto end;
 
     error = GetTrack(ioreq, track);
@@ -1255,20 +1325,24 @@ REGISTER UNIT  *unit;
 	    tdreq = unit->mu_DiskIOReq;
 	    SectorGap = CalculateGapLength(unit->mu_CurrentSectors);
 
-	    ObtainSemaphore(&dev->md_HardwareUse);
-	    EncodeTrack(unit->mu_TrackBuffer, dev->md_Rawbuffer,
-			unit->mu_CrcBuffer,
-			TRK2CYL(unit->mu_CurrentTrack),  /* cylinder */
-			TRK2SIDE(unit->mu_CurrentTrack), /* side */
-			SectorGap, unit->mu_CurrentSectors);
-
 	    TDMotorOn(tdreq);
 	    if (TDSeek(unit, ioreq, unit->mu_CurrentTrack)) {
 		debug(("Seek error\n"));
 		ioreq->io_Error = TDERR_SeekError;
 		goto end;
 	    }
-	    HardwareIO(dev, unit, DSKWRITE, ioreq);
+
+	    ObtainSemaphore(&dev->md_HardwareUse);
+	    EncodeTrack(unit->mu_TrackBuffer,
+			dev->md_Rawbuffer,
+			unit->mu_CrcBuffer,
+			TRK2CYL(unit->mu_CurrentTrack),  /* cylinder */
+			TRK2SIDE(unit->mu_CurrentTrack), /* side */
+			SectorGap,
+			unit->mu_CurrentSectors,
+			unit->mu_WriteLen);
+
+	    HardwareWrite(dev, unit, ioreq);
 
 	    ReleaseSemaphore(&dev->md_HardwareUse);
 	    unit->mu_TrackChanged = 0;
@@ -1359,10 +1433,14 @@ found_spt:
 	    }
 	}
 	ObtainSemaphore(&dev->md_HardwareUse);
-	EncodeTrack(userbuf, dev->md_Rawbuffer, unit->mu_CrcBuffer,
+	EncodeTrack(userbuf,
+		    dev->md_Rawbuffer,
+		    unit->mu_CrcBuffer,
 		    TRK2CYL(track),     /* cylinder */
 		    TRK2SIDE(track),    /* side */
-		    gaplen, spt);
+		    gaplen,
+		    spt,
+		    unit->mu_WriteLen);
 
 	TDMotorOn(tdreq);
 	if (TDSeek(unit, ioreq, track)) {
@@ -1371,7 +1449,7 @@ found_spt:
 	    break;
 	}
 	unit->mu_CurrentTrack = track;
-	HardwareIO(dev, unit, DSKWRITE, ioreq);
+	HardwareWrite(dev, unit, ioreq);
 
 	ReleaseSemaphore(&dev->md_HardwareUse);
 
