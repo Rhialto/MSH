@@ -1,6 +1,9 @@
 /*-
- * $Id: hanfile.c,v 1.3 90/01/23 00:39:04 Rhialto Exp Locker: Rhialto $
+ * $Id: hanfile.c,v 1.4 90/01/23 02:32:23 Rhialto Exp Locker: Rhialto $
  * $Log:	hanfile.c,v $
+ * Revision 1.4  90/01/23  02:32:23  Rhialto
+ * Add 16-bit FAT support.
+ *
  * Revision 1.3  90/01/23  00:39:04  Rhialto
  * Always return -1 on MSWrite error.
  *
@@ -483,7 +486,7 @@ register long	size;
 		    fh->msfh_Cluster = NextCluster(fh->msfh_Cluster);
 		if (fh->msfh_SeekPos > fl->msfl_Msd.msd_Filesize)
 		    fl->msfl_Msd.msd_Filesize = fh->msfh_SeekPos;
-		fl->msfl_Msd.msd_Attributes &= ~ATTR_ARCHIVED;
+		fl->msfl_Msd.msd_Attributes |= ATTR_ARCHIVED;
 		UpdateFileLock(fl);
 	    } else {		/* Write error. */
 	error:
