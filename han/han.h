@@ -1,6 +1,9 @@
 /*-
- *  $Id: han.h,v 1.53 92/10/25 02:44:29 Rhialto Rel $
- *  $Log:	han.h,v $
+ *  $Id: han.h,v 1.54 1993/06/24 05:12:49 Rhialto Exp $
+ *  $Log: han.h,v $
+ * Revision 1.54  1993/06/24  05:12:49	Rhialto
+ * DICE 2.07.54R.
+ *
  * Revision 1.53  92/10/25  02:44:29  Rhialto
  * Add PrivateInfo. #define magic cookie.
  *
@@ -54,6 +57,8 @@ extern struct ExecBase *SysBase;
 #define CONVERSIONS
 #undef	NONCOMM
 #undef	READONLY
+#undef	INPUTDEV
+#define CREATIONDATE_ONLY
 
 /*----- End configuration section -----*/
 
@@ -81,6 +86,21 @@ extern struct ExecBase *SysBase;
 #define DIR_DELETED	    0xE5
 #define DIR_DELETED_MASK    0x80
 
+#if LONGNAMES
+struct MsDirEntry {
+    word	    msd_Time;
+    word	    msd_Date;
+    word	    msd_Cluster;
+    ulong	    msd_Filesize;
+    byte	    msd_Attributes;
+    byte	    msd_Name[21];	    /* Note: odd aligned */
+};
+#define 	    L_8 	21
+#define 	    L_3 	0
+#define 	    OtherEndianMsd(e)
+#define 	    msd_CreationTime(e) (*(word *)(&(e).msd_Name[17]))
+#define 	    msd_CreationDate(e) (*(word *)(&(e).msd_Name[19]))
+#else
 /*
  * This structure has its byte order wrong, when it is on the disk.
  */
@@ -97,6 +117,12 @@ struct MsDirEntry {
     word	    msd_Cluster;
     ulong	    msd_Filesize;
 };
+#define 	    L_8 	8
+#define 	    L_3 	3
+void  OtherEndianMsd(struct MsDirEntry *msd);
+#define 	    msd_CreationTime(e) ((e).msd_CreationTime)
+#define 	    msd_CreationDate(e) ((e).msd_CreationTime)
+#endif
 
 #define ATTR_READONLY	    0x01
 #define ATTR_HIDDEN	    0x02
@@ -135,7 +161,6 @@ struct DiskParam {
     word	    datablock;	/* first block available for files &c */
     word	    bpc;	/* bytes per cluster */
     word	    freeclusts; /* amount of free space */
-    long	    lowcyl;	/* offset to lowcyl */
     struct DirEntry vollabel;	/* copy of volume label */
     word	    fat16bits;	/* Is the FAT 16 bits/entry? */
 };
@@ -144,6 +169,12 @@ struct DiskParam {
 #define CHECK_SANITY	0x02	/* check Bios Parameter Block */
 #define CHECK_SAN_DEFAULT 0x04	/* use default values when bpb not ok */
 #define CHECK_USE_DEFAULT 0x08	/* always use default values */
+
+struct Partition {
+    long	    offset;	/* offset to sector 0 in bytes */
+    int 	    spt_dd;	/* normal #sectors/track */
+    int 	    spt_hd;	/* #s/t for HD floppies */
+};
 
 #define NICE_TO_DFx	(1L<<16)/* flag bit in de_Interleave */
 #define PROMISE_NOT_TO_DIE  (1L<<17)/* flag bit in de_Interleave */
