@@ -1,6 +1,9 @@
 /*-
- * $Id$
- * $Log$
+ * $Id: support.c,v 1.1 89/12/17 19:57:50 Rhialto Exp Locker: Rhialto $
+ * $Log:	support.c,v $
+ * Revision 1.1  89/12/17  19:57:50  Rhialto
+ * Initial revision
+ *
 -*/
 
 #include "dos.h"
@@ -54,9 +57,12 @@ register ulong	bytes;
     register ulong *ptr;
 
     bytes += sizeof (*ptr);
-    ptr = AllocMem(bytes, MEMF_PUBLIC | MEMF_CLEAR);
-    *ptr = bytes;
-    return (ptr + 1);
+    if (ptr = AllocMem(bytes, MEMF_PUBLIC | MEMF_CLEAR)) {
+	*ptr = bytes;
+	return (ptr + 1);
+    }
+
+    return NULL;
 }
 
 dosfree(ptr)
