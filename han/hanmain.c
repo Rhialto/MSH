@@ -1,6 +1,9 @@
 /*-
- * $Id: hanmain.c,v 1.42 91/06/13 23:50:21 Rhialto Exp $
+ * $Id: hanmain.c,v 1.43 91/09/28 01:40:24 Rhialto Exp $
  * $Log:	hanmain.c,v $
+ * Revision 1.43  91/09/28  01:40:24  Rhialto
+ * Changed to newer syslog stuff.
+ *
  * Revision 1.42  91/06/13  23:50:21  Rhialto
  * DICE conversion
  *
@@ -32,6 +35,9 @@
 #include <string.h>
 #include "han.h"
 #include "dos.h"
+#ifdef CONVERSIONS
+#   include "hanconv.h"
+#endif
 
 #ifdef HDEBUG
 #   include "syslog.h"
@@ -39,14 +45,16 @@
 #   define	debug(x)
 #endif
 
+#define CONV_SEP    ';'
+
 extern int	CheckBootBlock;
 extern char	DotDot[1 + 8 + 3];
 struct Library *IntuitionBase;
-static char RCSId[] = "Messydos filing system $Revision: 1.42 $ $Date: 91/06/13 23:50:21 $, by Olaf Seibert";
+static char RCSId[] = "Messydos filing system $Revision: 1.43 $ $Date: 91/09/28 01:40:24 $, by Olaf Seibert";
 
 byte
 ToUpper(ch)
-register byte	ch;
+byte		ch;
 {
     if (ch >= 'a' && ch <= 'z')
 	return ch + ('A' - 'a');
@@ -65,7 +73,7 @@ long		a,
 
 byte	       *
 ZapSpaces(begin, end)
-register byte  *begin,
+byte	       *begin,
 	       *end;
 {
     while (end > begin && end[-1] == ' ')
@@ -85,11 +93,11 @@ register byte  *begin,
 byte	       *
 ToMSName(dest, source)
 byte	       *dest;
-register byte  *source;
+byte	       *source;
 {
     byte	   *dotp;
     byte	   *slashp;
-    register int    i,
+    int 	    i,
 		    len;
 
     if (*source == '/') {       /* parentdir */
@@ -107,17 +115,17 @@ register byte  *source;
      * Find dot and slash which are delimiters of name and extension.
      */
     {
-	register byte  *cp;
+	byte	       *cp;
 
 	cp = source;
 	while (*cp) {
-	    if (*cp == '.' || *cp == '/')
+	    if (*cp == '.' || *cp == '/' || *cp == CONV_SEP)
 		break;
 	    cp++;
 	}
 	dotp = cp;
 	while (*cp) {
-	    if (*cp == '/')
+	    if (*cp == '/' || *cp == CONV_SEP)
 		break;
 	    cp++;
 	}
@@ -147,6 +155,20 @@ register byte  *source;
 	*dest++ = ' ';
     }
 
+    if (slashp[0] == CONV_SEP && slashp[1]) {
+	int		c;
+
+	slashp++;
+#ifdef CONVERSIONS
+	c = slashp[0] & 31;
+	if (c >= ConvFence)
+	    c = ConvNone;
+	ConversionImbeddedInFileName = c;
+#endif /* CONVERSIONS */
+
+	while (*slashp && *slashp != '/')
+	    slashp++;
+    }
     return slashp;
 }
 
@@ -191,7 +213,7 @@ struct InfoData *infodata;
 
 void
 MSDiskInserted(locks, cookie)
-register struct LockList **locks;
+struct LockList **locks;
 void	       *cookie;
 {
     debug(("MSDiskInserted %08lx\n", cookie));
@@ -217,7 +239,7 @@ void	       *cookie;
 
 int
 MSDiskRemoved(locks)
-register struct LockList **locks;
+struct LockList **locks;
 {
 #ifndef READONLY
     if (FatDirty || (DelayState & DELAY_DIRTY))
@@ -265,13 +287,16 @@ void
 HanCloseDown()
 {
 #ifdef HDEBUG
-    register struct MSFileLock *fl;
+    struct MSFileLock *fl;
 
     while (LockList && (fl = (struct MSFileLock *) GetHead(&LockList->ll_List))) {
 	debug(("UNLOCKING %08lx: ", fl));
 	PrintDirEntry((struct DirEntry *)&fl->msfl_Msd);
 	MSUnLock(fl);           /* Remove()s it from this List */
     }
+#endif
+#ifdef CONVERSIONS
+    ConvCleanUp();
 #endif
     if (DiskIOReq) {
 	if (DiskIOReq->iotd_Req.io_Unit) {
@@ -318,7 +343,7 @@ HanOpenUp()
     if (!(DiskReplyPort = CreatePort("MSH:disk.replyport", -1L)))
 	goto abort;
 #else
-    if (!(DiskReplyPort = CreatePort(NULL, -1L)))
+    if (!(DiskReplyPort = CreatePort(NULL, 0L)))
 	goto abort;
 #endif
 
@@ -411,7 +436,7 @@ byte	       *newname;
 		 */
 		byte	       *fromsec;
 		byte	       *tosec;
-		register struct MsDirEntry *dir;
+		struct MsDirEntry *dir;
 
 		fromsec = GetSec(Disk.rootdir);
 		tosec = GetSec(new->msfl_DirSector);
@@ -442,8 +467,8 @@ byte	       *newname;
 	 * The easy part: Copy the name to Disk.vollabel and RootLock.
 	 */
 	{
-	    register int    i;
-	    register byte  *s,
+	    int 	    i;
+	    byte	   *s,
 			   *d;
 
 	    s = newname;
