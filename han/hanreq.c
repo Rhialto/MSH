@@ -1,6 +1,9 @@
 /*-
- * $Id: hanreq.c,v 1.40 91/03/03 17:54:07 Rhialto Rel $
+ * $Id: hanreq.c,v 1.42 91/06/13 23:47:15 Rhialto Exp $
  * $Log:	hanreq.c,v $
+ * Revision 1.42  91/06/13  23:47:15  Rhialto
+ * DICE conversion
+ *
  * Revision 1.40  91/03/03  17:54:07  Rhialto
  * Freeze for MAXON
  *
@@ -29,10 +32,7 @@
 #endif
 
 #ifdef HDEBUG
-#   define	debug(x)  syslog x
-    void initsyslog(void);
-    void syslog(char *, ...);
-    void uninitsyslog(void);
+#   include "syslog.h"
 #else
 #   define	debug(x)
 #endif

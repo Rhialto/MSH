@@ -1,6 +1,9 @@
 /*-
- * $Id: hanmain.c,v 1.40 91/03/03 17:46:39 Rhialto Rel $
+ * $Id: hanmain.c,v 1.42 91/06/13 23:50:21 Rhialto Exp $
  * $Log:	hanmain.c,v $
+ * Revision 1.42  91/06/13  23:50:21  Rhialto
+ * DICE conversion
+ *
  * Revision 1.40  91/03/03  17:46:39  Rhialto
  * Freeze for MAXON
  *
@@ -31,10 +34,7 @@
 #include "dos.h"
 
 #ifdef HDEBUG
-#   define	debug(x)  syslog x
-    void initsyslog(void);
-    void syslog(char *, ...);
-    void uninitsyslog(void);
+#   include "syslog.h"
 #else
 #   define	debug(x)
 #endif
@@ -42,7 +42,7 @@
 extern int	CheckBootBlock;
 extern char	DotDot[1 + 8 + 3];
 struct Library *IntuitionBase;
-static char RCSId[] = "Messydos filing system $Revision: 1.40 $ $Date: 91/03/03 17:46:39 $, by Olaf Seibert";
+static char RCSId[] = "Messydos filing system $Revision: 1.42 $ $Date: 91/06/13 23:50:21 $, by Olaf Seibert";
 
 byte
 ToUpper(ch)

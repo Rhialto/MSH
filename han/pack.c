@@ -1,6 +1,9 @@
 /*-
- * $Id: pack.c,v 1.40 91/03/03 17:45:09 Rhialto Rel $
+ * $Id: pack.c,v 1.42 91/06/13 23:46:21 Rhialto Exp $
  * $Log:	pack.c,v $
+ * Revision 1.42  91/06/13  23:46:21  Rhialto
+ * DICE conversion
+ *
  * Revision 1.40  91/03/03  17:45:09  Rhialto
  * Freeze for MAXON
  *
@@ -43,10 +46,7 @@
 #include "dos.h"
 
 #ifdef HDEBUG
-#   define	debug(x)  syslog x
-    void initsyslog(void);
-    void syslog(char *, ...);
-    void uninitsyslog(void);
+#   include "syslog.h"
 #else
 #   define	debug(x)
 #endif
@@ -634,13 +634,25 @@ struct MSFileLock *msfl;
 struct FileLock *fl;
 {
     struct FileLock *newlock;
-    DEVLIST *volnode;
+    DEVLIST *volnode = NULL;
 
     if (fl) {
 	volnode = BTOC(fl->fl_Volume);
-    } else {
-	volnode = VolNode;
     }
+    if (volnode == NULL) {
+	volnode = VolNode;
+	debug(("volnode 0->%lx\n", volnode));
+    }
+#ifdef HDEBUG
+    if (volnode != VolNode) {
+	debug(("volnode != VolNode %lx != %lx\n",
+	    volnode, VolNode));
+    }
+    if (volnode->dl_Task != DosPort) {
+	debug(("volnode->dl_Task != DosPort %lx != %lx\n",
+	    volnode->dl_Task, DosPort));
+    }
+#endif
 
     if (newlock = dosalloc((ulong)sizeof (*newlock))) {
 	newlock->fl_Key = (ulong) msfl;

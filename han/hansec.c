@@ -1,6 +1,9 @@
 /*-
- * $Id: hansec.c,v 1.40 91/03/03 18:36:08 Rhialto Rel $
+ * $Id: hansec.c,v 1.42 91/06/13 23:48:16 Rhialto Exp $
  * $Log:	hansec.c,v $
+ * Revision 1.42  91/06/13  23:48:16  Rhialto
+ * DICE conversion; fix cache bug
+ *
  * Revision 1.40  91/03/03  18:36:08  Rhialto
  * Freeze for MAXON
  *
@@ -37,10 +40,7 @@
 #include "dos.h"
 
 #ifdef HDEBUG
-#   define	debug(x)  syslog x
-    void initsyslog(void);
-    void syslog(char *, ...);
-    void uninitsyslog(void);
+#   include "syslog.h"
 #else
 #   define	debug(x)
 #endif
@@ -599,17 +599,30 @@ byte	       *buffer;
 {
     register struct CacheSec *sec;
 
-    if (sec = FindSecByBuffer(buffer)) {
+    if (buffer) {
+	sec = FindSecByBuffer(buffer);
 #ifdef HDEBUG
 	if (sec->sec_Number == 0) {
 	    debug(("************ FreeSec(0) ***************\n"));
 	}
 #endif
+#ifdef notdef
 	if (--sec->sec_Refcount == 0) { /* Implies not SEC_DIRTY */
 	    if (CurrentCache > MaxCache) {
 		FreeCacheSector(sec);
 	    }
 	}
+#else
+	--sec->sec_Refcount;
+	/*
+	 * If we need to dump cache then dump some long-unused sector.
+	 */
+	if (CurrentCache > MaxCache &&
+	    (sec = LRU_TO_SEC(GetTail(&CacheList.LRUList))) &&
+	    (sec->sec_Refcount & ~SEC_DIRTY) == 0) {
+	    FreeCacheSector(sec);
+	}
+#endif
     }
 }
 
@@ -621,7 +634,8 @@ byte	       *buffer;
 {
     register struct CacheSec *sec;
 
-    if (sec = FindSecByBuffer(buffer)) {
+    if (buffer) {
+	sec = FindSecByBuffer(buffer);
 	sec->sec_Refcount |= SEC_DIRTY;
 	DelayState |= DELAY_DIRTY;
 	StartTimer();
