@@ -1,5 +1,8 @@
-; $Id: device1.a,v 1.53 92/10/25 02:08:55 Rhialto Rel $
+; $Id: device1.a,v 1.54 1993/06/24 04:56:00 Rhialto Exp $
 ; $Log: device1.a,v $
+; Revision 1.54  1993/06/24  04:56:00  Rhialto
+; Switch to RTF_AUTOINIT, saves a few bytes. DICE 2.07.54R.
+;
 ; Revision 1.53  92/10/25  02:08:55  Rhialto
 ; Import UNITB_ACTIVE and HANDLE_IO_QUICK.
 ;
@@ -28,7 +31,7 @@ RTPRI	    equ 	0
 
 	section text,code
 
-	moveq.l #20,d0
+	moveq.l #-1,d0
 	rts
 
 ;;;;
@@ -52,7 +55,6 @@ _RomTag:
 	dc.l	_idString	; rt_IdString
 	dc.l	Init		; rt_Init
 
-	xref	_InitTable
 	xref	@Init
 Init:
 	dc.l	md_SIZEOF	; size of data portion of Device
