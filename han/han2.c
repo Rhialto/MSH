@@ -1,6 +1,8 @@
 /*-
- * $Id: han2.c,v 1.46 91/10/06 18:26:04 Rhialto Rel $
+ * $Id: han2.c,v 1.52 92/09/06 00:20:34 Rhialto Exp $
  * $Log:	han2.c,v $
+ * Revision 1.52  92/09/06  00:20:34  Rhialto
+ *
  * Revision 1.46  91/10/06  18:26:04  Rhialto
  *
  * Freeze for MAXON
@@ -15,11 +17,10 @@
  *
  * New functions to make 2.0 stuff work.
  *
- * This code is (C) Copyright 1991 by Olaf Seibert. All rights reserved. May
- * not be used or copied without a licence.
+ * This code is (C) Copyright 1991-1992 by Olaf Seibert. All rights reserved.
+ * May not be used or copied without a licence.
 -*/
 
-#include <amiga.h>
 #include <functions.h>
 #include "han.h"
 #include "dos.h"
@@ -98,20 +99,26 @@ struct MSFileLock *
 MSDupLockFromFH(msfh)
 struct MSFileHandle *msfh;
 {
-    if (CheckLock(msfh->msfh_FileLock))
+    if (CheckLock(msfh->msfh_FileLock) == 0) {
+	debug(("MSDupLockFromFH\n"));
 	return MSDupLock(msfh->msfh_FileLock);
-    else
+    } else {
+	debug(("MSDupLockFromFH, fails\n"));
 	return NULL;
+    }
 }
 
 struct MSFileLock *
 MSParentOfFH(msfh)
 struct MSFileHandle *msfh;
 {
-    if (CheckLock(msfh->msfh_FileLock))
+    if (CheckLock(msfh->msfh_FileLock) == 0) {
+	debug(("MSParentOfFH\n"));
 	return MSParentDir(msfh->msfh_FileLock);
-    else
+    } else {
+	debug(("MSParentOfFH, fails\n"));
 	return NULL;
+    }
 }
 
 long
@@ -122,6 +129,15 @@ struct FileInfoBlock *fib;
     return MSExamine(msfh->msfh_FileLock, fib);
 }
 
+/*
+ * MSSetFileSize.
+ *
+ * For the case that we shorten a file and invalidate existing seek pointer,
+ * there is a test in MSRead(), MSWrite() and MSSeek() which detects this
+ * condition. It is not worth (yet?) to keep a list of file handles
+ * so we can do the same test here.
+ */
+
 long
 MSSetFileSize(msfh, pos, mode)
 struct MSFileHandle *msfh;
@@ -131,35 +147,63 @@ long		mode;
     long	    oldclusters,
 		    newclusters;
     struct MSFileLock *msfl;
-    long	    success = FALSE;
+    long	    success = DOSFALSE;
 
     msfl = msfh->msfh_FileLock;
 
     if (msfl->msfl_Msd.msd_Attributes & ATTR_READONLY) {
+	debug(("MSSetFileSize on writeprotected file\n"));
 	error = ERROR_WRITE_PROTECTED;
-	return ;
+	return DOSFALSE;
     }
 
+    AdjustSeekPos(msfh);
     pos = FilePos(msfh, pos, mode);
+
+    if (pos < 0) {
+	error = ERROR_SEEK_ERROR;
+	return DOSFALSE;
+    }
 
     oldclusters = (msfl->msfl_Msd.msd_Filesize + Disk.bpc - 1) / Disk.bpc;
     newclusters = (pos + Disk.bpc - 1) / Disk.bpc;
 
+    debug(("MSSetFileSize to %ld (%ld clusters from %ld)\n",
+	    pos, newclusters, oldclusters));
     if (newclusters == oldclusters) {
 	/* do nothing */
-	success = TRUE;
     } else if (newclusters > oldclusters) {
 	/* extend the file */
 	word	    cluster;
 
-	if ((newclusters - oldclusters) <= (Disk.nsectsfree / Disk.spc)) {
-	    while (oldclusters < newclusters) {
-		cluster = ExtendClusterChain(cluster);
-		oldclusters++;
-	    }
-	    success = TRUE;
-	} else
+	newclusters -= oldclusters;
+	if (newclusters > Disk.freeclusts) {
+	    /* Make file as long as will fit on the disk */
+	    newclusters = Disk.freeclusts;
+	    pos = (oldclusters + newclusters) * Disk.bpc;
+	    debug(("File growth reduced to %d clusters\n", newclusters));
 	    error = ERROR_DISK_FULL;
+	}
+
+	cluster = msfl->msfl_Msd.msd_Cluster;
+	debug(("Begin with cluster %d\n", cluster));
+
+	if (oldclusters == 0 && newclusters > 0) {
+	    cluster = FindFreeCluster(0);
+	    debug(("  initial cluster %d\n", cluster));
+	    msfl->msfl_Msd.msd_Cluster = cluster;
+	    newclusters--;
+	}
+	while (newclusters > 0) {
+	    cluster = ExtendClusterChain(cluster);
+	    debug(("  add cluster %d\n", cluster));
+	    newclusters--;
+	}
+    } else if (newclusters == 0) {
+	/* make the file empty */
+
+	FreeClusterChain(msfl->msfl_Msd.msd_Cluster);
+	msfl->msfl_Msd.msd_Cluster = 0;
     } else {
 	/* shorten the file. This may invalidate seek pointers...  */
 	word	    cluster;
@@ -171,17 +215,16 @@ long		mode;
 	    oldclusters++;
 	}
 	if (cluster != FAT_EOF) {
-	    FreeClusterChain(cluster);
+	    FreeClusterChain(NextCluster(cluster));
 	    SetFatEntry(cluster, FAT_EOF);
 	}
-	success = TRUE;
     }
 
-    if (success) {
-	msfl->msfl_Msd.msd_Filesize = pos;
-	UpdateFileLock(msfl);
-    }
-    return msfl->msfl_Msd.msd_Filesize;
+    msfl->msfl_Msd.msd_Filesize = pos;
+    UpdateFileLock(msfl);
+    AdjustSeekPos(msfh);
+
+    return DOSTRUE;
 }
 
 long
@@ -198,6 +241,7 @@ long		newmode;
 	    object->msfl_Refcount = -1;
 	    return DOSTRUE;
 	}
+	error = ERROR_OBJECT_IN_USE;
     } else { /* SHARED_LOCK */
 	if (object->msfl_Refcount == -1) {
 	    object->msfl_Refcount = 1;
@@ -213,10 +257,10 @@ MSChangeModeFH(object, newmode)
 struct MSFileHandle *object;
 long		newmode;
 {
-    if (newmode == MODE_OLDFILE)
-	newmode = SHARED_LOCK;
-    else
+    if (newmode == MODE_NEWFILE)
 	newmode = EXCLUSIVE_LOCK;
+    else    /* MODE_OLDFILE, MODE_READWRITE */
+	newmode = SHARED_LOCK;
 
     return MSChangeModeLock(object->msfh_FileLock, newmode);
 }
@@ -292,25 +336,5 @@ struct ExAllControl *eac;
 }
 
 #endif
-
-long
-MSLockRecords()
-{
-}
-
-long
-MSUnLockRecords()
-{
-}
-
-MSStartNotify(req)
-struct NotifyRequest *req;
-{
-}
-
-MSEndNotify(req)
-struct NotifyRequest *req;
-{
-}
 
 #endif /* ACTION_COMPARE_LOCK */
