@@ -1,6 +1,11 @@
 /*-
- * $Id: devio2.c,v 1.54 1993/06/24 04:56:00 Rhialto Exp $
+ * $Id: devio2.c,v 1.55 1993/12/30 22:45:10 Rhialto Rel $
  * $Log: devio2.c,v $
+ * Revision 1.55  1993/12/30  22:45:10	Rhialto
+ * Make DMA buffer variable size, depending on largest size needed so far.
+ * Remove hardware constants (are now in layout.h).
+ * For the new unit #s, the flag value moved to the Unit.
+ *
  * Revision 1.54  1993/06/24  04:56:00	Rhialto
  * split read and write functions; always use RAWREAD/RAWWRITE
  * under 2.04+. DICE 2.07.54R.
@@ -714,12 +719,16 @@ REGISTER UNIT  *unit;
 
     UpdateOpenFlags(&ioreq->iotd_Req, unit);
 
+
     if ((ioreq->iotd_Req.io_Command & TDF_EXTCOM) &&
 	ioreq->iotd_Count < unit->mu_ChangeNum) {
 diskchanged:
 	ioreq->iotd_Req.io_Error = TDERR_DiskChanged;
+	debug(("CheckRequest cmd=%04lx iotd_Count=%ld mu_ChangeNum=%ld -> TDERR_DiskChanged\n",
+	       ioreq->iotd_Req.io_Command, ioreq->iotd_Count, unit->mu_ChangeNum));
 	return TDERR_DiskChanged;
     }
+
 #if 0
     if (ioreq->iotd_Req.io_Offset + ioreq->iotd_Req.io_Length >
 	(unit->mu_NumTracks * MS_SPT * MS_BPS)) {
@@ -792,7 +801,7 @@ REGISTER UNIT  *unit;
     ioreq->io_Actual = 0;
     error = TDERR_NoError;
 
-    if (length <= 0 || error = CheckRequest((struct IOExtTD *)ioreq, unit))
+    if ((length <= 0) || (error = CheckRequest((struct IOExtTD *)ioreq, unit)))
 	goto end;
 
     retrycount = 0;
@@ -1016,7 +1025,8 @@ UnitInit(DEV *dev, ulong UnitNr, ulong Flags)
     if (!(unit->mu_TrackBuffer = AllocMem(MS_SPT_MAX*MS_BPS, MEMF_ANY)))
 	goto abort;
 
-    if (!(tdreq = CreateExtIO(&unit->mu_DiskReplyPort, (long) sizeof (*tdreq)))) {
+    if (!(tdreq = (struct IOExtTD *)
+		  CreateExtIO(&unit->mu_DiskReplyPort, (long) sizeof (*tdreq)))) {
 	goto abort;
     }
     unit->mu_DiskIOReq = tdreq;
@@ -1032,7 +1042,7 @@ UnitInit(DEV *dev, ulong UnitNr, ulong Flags)
 	unit->mu_DiskChangeReq = dcr;
 	unit->mu_DiskChangeInt.is_Node.ln_Pri = 32;
 	unit->mu_DiskChangeInt.is_Data = (APTR) unit;
-	unit->mu_DiskChangeInt.is_Code = DiskChangeHandler;
+	unit->mu_DiskChangeInt.is_Code = (void(*)())DiskChangeHandler;
 	/* Clone IO request part */
 	dcr->io_Device = tdreq->iotd_Req.io_Device;
 	dcr->io_Unit = tdreq->iotd_Req.io_Unit;
@@ -1157,11 +1167,13 @@ TD_Addchangeint(ioreq, unit)
 REGISTER struct IOStdReq *ioreq;
 REGISTER UNIT  *unit;
 {
+    debug(("TD_Addchangeint() entering\n"));
     Disable();
     Enqueue((struct List *)&unit->mu_ChangeIntList, &ioreq->io_Message.mn_Node);
     Enable();
     ioreq->io_Flags &= ~IOF_QUICK;	/* So we call ReplyMsg instead of
 					 * TermIO */
+    debug(("TD_Addchangeint() done - no TermIO()\n"));
     /* Note no TermIO */
 }
 
@@ -1176,7 +1188,7 @@ REGISTER UNIT  *unit;
     Disable();
     Remove(&intreq->io_Message.mn_Node);
     Enable();
-    ReplyMsg(&intreq->io_Message);      /* Quick bit always cleared */
+    ReplyMsg(&intreq->io_Message);	/* Quick bit always cleared */
     ioreq->io_Error = 0;
     TermIO(ioreq);
 }
@@ -1190,9 +1202,17 @@ __A1 UNIT      *unit;
 
     unit->mu_DiskState = STATEF_UNKNOWN;
     unit->mu_ChangeNum++;
-    unit->mu_SectorsPerTrack =
-    unit->mu_CurrentSectors = MS_SPT_DD;
-
+    unit->mu_SectorsPerTrack = MS_SPT_DD;
+#if 0
+    /*
+     * Theoretically, one should clear the buffer when the disk changes.
+     * However, this makes an ETD_UPDATE go wrong if the disk is changed
+     * and the command retried...
+     * However, above we already reset mu_CurrentSectors...
+     */
+    unit->mu_CurrentTrack = -1;
+    unit->mu_TrackChanged = 0;
+#endif
     for (ioreq = (struct IOStdReq *) unit->mu_ChangeIntList.mlh_Head;
 	 next = (struct IOStdReq *) ioreq->io_Message.mn_Node.ln_Succ;
 	 ioreq = next) {
@@ -1297,7 +1317,7 @@ void
 FreeRawBuffer(dev)
 DEV	       *dev;
 {
-    if (dev->md_Rawbuffer) {    /* OIS */
+    if (dev->md_Rawbuffer) {	/* OIS */
 	debug(("FreeRawBuffer: free %08lx\n", dev->md_Rawbuffer));
 	FreeMem(dev->md_Rawbuffer, dev->md_RawbufferSize + 8);
     }
@@ -1337,7 +1357,7 @@ UNIT	       *unit;
 
     ioreq->io_Actual = 0;
 
-    if (length <= 0 || error = CheckRequest((struct IOExtTD *)ioreq, unit))
+    if ((length <= 0) || (error = CheckRequest((struct IOExtTD *)ioreq, unit)))
 	goto end;
 
     error = GetTrack(ioreq, track);
@@ -1387,7 +1407,6 @@ REGISTER UNIT  *unit;
 	    unit->mu_CurrentSectors = unit->mu_SectorsPerTrack;
 
 	/*
-
 	 * Only recalculate the CRC on changed sectors. This way, a
 	 * sector with a bad CRC won't suddenly be ``repaired''.
 	 */
@@ -1559,8 +1578,8 @@ found_spt:
 	EncodeTrack(userbuf,
 		    dev->md_Rawbuffer,
 		    unit->mu_CrcBuffer,
-		    TRK2CYL(track),     /* cylinder */
-		    TRK2SIDE(track),    /* side */
+		    TRK2CYL(track),	/* cylinder */
+		    TRK2SIDE(track),	/* side */
 		    gaplen,
 		    spt,
 		    unit->mu_WriteLen);
