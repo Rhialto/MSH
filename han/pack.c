@@ -1,6 +1,9 @@
 /*-
- * $Id: pack.c,v 1.53 92/10/25 02:23:50 Rhialto Rel $
- * $Log:	pack.c,v $
+ * $Id: pack.c,v 1.54 1993/06/24 05:12:49 Rhialto Exp $
+ * $Log: pack.c,v $
+ * Revision 1.54  1993/06/24  05:12:49	Rhialto
+ * DICE 2.07.54R.
+ *
  * Revision 1.53  92/10/25  02:23:50  Rhialto
  * Add 2.0 stuff.
  *
@@ -70,7 +73,9 @@ Prototype long	    UnitNr;
 Prototype char	   *DevName;
 Prototype ulong     DevFlags;
 Prototype long	    Interleave;
+Prototype struct DosEnvec *Environ;
 Prototype struct DosPacket *DosPacket;
+Prototype short     Inhibited;
 
 Prototype struct DeviceList *NewVolNode(char *name, struct DateStamp *date);
 Prototype int	    MayFreeVolNode(struct DeviceList *volnode);
@@ -79,7 +84,9 @@ Prototype struct FileLock *NewFileLock(struct MSFileLock *msfl, struct FileLock 
 Prototype long	    FreeFileLock(struct FileLock *lock);
 Prototype int	    DiskRemoved(void);
 Prototype void	    DiskInserted(struct DeviceList *volnode);
+Prototype void	    CheckDriveType(void);
 Prototype struct DeviceList *WhichDiskInserted(void);
+Prototype void	    DiskChange(void);
 Prototype int	    CheckRead(struct FileLock *lock);
 Prototype int	    CheckWrite(struct FileLock *lock);
 
@@ -87,7 +94,6 @@ __stkargs /*__geta4*/ void ChangeIntHand(void);
 __stkargs void ChangeIntHand0(void);
 char *rega4(void);
 Local void NewVolNodeName(void);
-Local void DiskChange(void);
 Local BPTR MakeFileLock(struct MSFileLock *msfl, struct FileLock *fl, long mode);
 
 /*
@@ -111,6 +117,7 @@ long		UnitNr; 	/* From */
 char	       *DevName;	/*   the */
 ulong		DevFlags;	/*     mountlist */
 long		Interleave;
+struct DosEnvec *Environ;
 struct DosPacket *DosPacket;	/* For the SystemRequest pr_WindowPtr */
 long		OpenCount;	/* How many open files/locks there are */
 short		WriteProtect;	/* Are we software-writeprotected? */
@@ -155,11 +162,9 @@ messydoshandler(void)
     msg = GetMsg(DosPort);
     packet = (struct DosPacket *) msg->mn_Node.ln_Name;
 
-
     DevNode = BTOC(PArg3);
     {
 	struct FileSysStartupMsg *fssm;
-	ulong *environ;
 	ulong Reserved;
 
 	DevName = "messydisk.device";
@@ -168,10 +173,10 @@ messydoshandler(void)
 
 	MaxCache = 5;
 	BufMemType = MEMF_PUBLIC;
-	Disk.nsides = MS_NSIDES;
-	Disk.spt = MS_SPT;
-	Disk.bps = MS_BPS;
-	Disk.lowcyl = 0;
+	DefaultDisk.nsides = MS_NSIDES;
+	DefaultDisk.spt = MS_SPT;
+	DefaultDisk.bps = MS_BPS;
+	Partition.offset = 0;
 	Reserved = 0;
 	Interleave = 0;
 
@@ -182,31 +187,50 @@ messydoshandler(void)
 		DevName = (char *)BTOC(fssm->fssm_Device)+1;
 	    DevFlags = fssm->fssm_Flags;
 
-	    if (environ = BTOC(fssm->fssm_Environ)) {
-		debug(("environ size %ld\n", environ[0]));
-#define get(xx,yy)  if (environ[DE_TABLESIZE] >= yy) xx = environ[yy];
+	    if (Environ = (void *)BTOC(fssm->fssm_Environ)) {
+		debug(("Environ size %ld\n", Environ->de_TableSize));
 
-		get(MaxCache, DE_NUMBUFFERS);
-		get(BufMemType, DE_MEMBUFTYPE);
-		get(Disk.nsides, DE_NUMHEADS);
-		get(Disk.spt, DE_BLKSPERTRACK);
-		get(Disk.bps, DE_SIZEBLOCK);
-		Disk.bps *= 4;
-		debug(("Disk.bps %ld\n", (long)Disk.bps));
-		get(Disk.lowcyl, DE_LOWCYL);
-		get(Reserved, DE_RESERVEDBLKS);
-		/* Compatibility with old DosType = 1 */
-		get(Interleave, DE_DOSTYPE);
-		if (Interleave == 1) {
-		    Interleave = NICE_TO_DFx;
-		} else {
-		    get(Interleave, DE_INTERLEAVE) else Interleave = 0;
-		}
+		if (Environ->de_TableSize >= DE_NUMBUFFERS) {
+		    MaxCache = Environ->de_NumBuffers;
+
+		    DefaultDisk.nsides = Environ->de_Surfaces;
+		    DefaultDisk.spt = Environ->de_BlocksPerTrack;
+		    DefaultDisk.bps = Environ->de_SizeBlock * 4;
+		    debug(("DefaultDisk.bps %ld\n", (long)DefaultDisk.bps));
+
+		    Partition.offset = Environ->de_LowCyl;
+		    Reserved = Environ->de_Reserved;
+
+		    /* Compatibility with old DosType = 1 */
+		    Interleave = Environ->de_DosType;
+		    if (Interleave == 1) {
+			Interleave = NICE_TO_DFx;
+		    } else {
+			Interleave = Environ->de_Interleave;
+		    }
+#define get(xx,yy)  if (Environ->de_TableSize >= yy) xx = ((ULONG*)Environ)[yy];
+		    get(BufMemType, DE_MEMBUFTYPE);
+		} else
+		    Environ = NULL;
 #undef get
 	    }
 	}
-	Disk.lowcyl *= (long)MS_BPS * Disk.spt * Disk.nsides;
-	Disk.lowcyl += (long)MS_BPS * Reserved;
+	Disk = DefaultDisk;
+
+	Partition.offset *= Disk.bps * Disk.spt * Disk.nsides;
+	Partition.offset += Disk.bps * Reserved;
+
+	/* These values are used only for floppies (i.e. DRIVE*) */
+	if (Disk.spt <= MS_SPT_MAX_DD) {
+	    Partition.spt_dd = Disk.spt;
+	    Partition.spt_hd = Disk.spt * 2;
+	} else {
+	    Partition.spt_hd = Disk.spt;
+	    Partition.spt_dd = Disk.spt / 2;
+	}
+
+	debug(("offset %x, spt_dd %d, spt_hd %d\n",
+	       Partition.offset, Partition.spt_dd, Partition.spt_hd));
     }
 
     if (DOSBase && HanOpenUp()) {
@@ -233,6 +257,9 @@ messydoshandler(void)
 
     PortMask = 1L << DosPort->mp_SigBit;
     VolNode = NULL;
+    WaitMask = PortMask | (1L << DiskReplyPort->mp_SigBit);
+    ChangeInt.is_Data = rega4();        /* for PURE code */
+    TDAddChangeInt(&ChangeInt);
     OpenCount = 0;
     Inhibited = 0;
 
@@ -240,9 +267,6 @@ messydoshandler(void)
     WaitPort(DosPort);
     msg = GetMsg(DosPort);
     done = -1;
-    WaitMask = PortMask | (1L << DiskReplyPort->mp_SigBit);
-    ChangeInt.is_Data = rega4();        /* for PURE code */
-    TDAddChangeInt(&ChangeInt);
     DiskInserted(WhichDiskInserted());
 
     goto entry;
@@ -263,8 +287,8 @@ top:
 	while (msg = GetMsg(DosPort)) {
 	    byte	    buf[256];	/* Max length of BCPL strings is
 					 * 255 + 1 for \0. */
-
     entry:
+
 	    if (DiskChanged)
 		DiskChange();
 	    packet = (PACKET *) msg->mn_Node.ln_Name;
@@ -438,8 +462,10 @@ top:
 		PRes1 = MSDiskInfo(BTOC(PArg1));
 		break;
 	    case ACTION_INFO:	/* Lock,InfoData	       Bool:TRUE     */
+#if 0
 		if (CheckRead(BTOC(PArg1)))
 		    break;
+#endif
 		PRes1 = MSDiskInfo(BTOC(PArg2));
 		break;
 	    case ACTION_FLUSH:		/* writeout bufs, disk motor off     */
@@ -490,11 +516,11 @@ top:
 
 		    fl1 = BTOC(PArg1);
 		    fl2 = BTOC(PArg2);
-		    if (fl1->fl_Task == fl2->fl_Task) {
+		    if (fl1->fl_Volume == fl2->fl_Volume) {
 			PRes1 = MSSameLock(MSFL(fl1->fl_Key),
 					   MSFL(fl2->fl_Key));
 		    } else {
-			PRes1 = LOCK_DIFFERENT;
+			PRes1 = DOSFALSE;
 			error = ERROR_DEVICE_NOT_MOUNTED;
 		    }
 		}
@@ -554,6 +580,10 @@ top:
 		} else
 		    PRes1 = MSSeek(MSFH(PArg1), PArg2, PArg3);
 		break;
+	    case ACTION_FORMAT: /* vol,type			Bool:success */
+		btos((byte *)PArg1, buf);
+		PRes1 = MSFormat(buf, PArg2);
+		break;
 #ifdef ACTION_SET_FILE_SIZE
 	    case ACTION_SET_FILE_SIZE:
 		PRes1 = MSSetFileSize(MSFH(PArg1), PArg2, PArg3);
@@ -603,23 +633,23 @@ top:
 		break;
 #endif
 #ifdef ACTION_IS_FILESYSTEM
-		case ACTION_IS_FILESYSTEM:
-		    PRes1 = DOSTRUE;
-		    break;
+	    case ACTION_IS_FILESYSTEM:
+		PRes1 = DOSTRUE;
+		break;
 #endif
 #ifdef ACTION_CHANGE_MODE
-		case ACTION_CHANGE_MODE:
-		    switch (PArg1) {
-		    case CHANGE_FH:
-			PRes1 = MSChangeModeFH(MSFH(((struct FileHandle *)
-				    BTOC(PArg2))->fh_Arg1), PArg3);
-			break;
-		    case CHANGE_LOCK:
-			PRes1 = MSChangeModeLock(MSFL(((struct FileLock *)
-				    BTOC(PArg2))->fl_Key), PArg3);
-			break;
-		    }
+	    case ACTION_CHANGE_MODE:
+		switch (PArg1) {
+		case CHANGE_FH:
+		    PRes1 = MSChangeModeFH(MSFH(((struct FileHandle *)
+				BTOC(PArg2))->fh_Arg1), PArg3);
 		    break;
+		case CHANGE_LOCK:
+		    PRes1 = MSChangeModeLock(MSFL(((struct FileLock *)
+				BTOC(PArg2))->fl_Key), PArg3);
+		    break;
+		}
+		break;
 #endif
 #ifdef ACTION_COPY_DIR_FH
 	    case ACTION_COPY_DIR_FH:	/* fh_Arg1		   Lock      */
@@ -652,19 +682,14 @@ top:
 /*	    case ACTION_WAIT_CHAR:     / * Timeout, ticks	   Bool      */
 /*	    case ACTION_RAWMODE:       / * Bool(-1:RAW 0:CON)      OldState  */
 	    default:
+		PRes1 = DOSFALSE;
 		error = ERROR_ACTION_NOT_KNOWN;
 		break;
 	    } /* end switch */
 	    if (packet) {
-		if (error) {
-		    debug(("ERR=%ld\n", (long)error));
+		if (error)
 		    PRes2 = error;
-		}
-#ifdef HDEBUG
-		else {
-		    debug(("RES=%06lx\n", PRes1));
-		}
-#endif
+		debug(("RES=%06lx, ERR=%ld\n", PRes1, error));
 		returnpacket(packet);
 		DosPacket = NULL;
 	    }
@@ -689,7 +714,6 @@ top:
 
 #ifdef HDEBUG
     debug(("Can we remove ourselves? "));
-    Delay(50L);                 /* I wanna even see the debug message! */
 #endif				/* HDEBUG */
     Forbid();
     if (OpenCount || packetsqueued()) {
@@ -887,11 +911,17 @@ struct DateStamp *date;
 	    volnode->dl_VolumeDate = *date;
 	    volnode->dl_MSFileLockList = NULL;
 
-	    Forbid();
-	    volnode->dl_Next = di->di_DevInfo;
-	    di->di_DevInfo = (long) CTOB(volnode);
-	    Permit();
+	    if (DOSBase->dl_lib.lib_Version >= 37) {
+		if (AddDosEntry((struct DosList *)volnode) == DOSFALSE)
+		    goto error;
+	    } else {
+		Forbid();
+		volnode->dl_Next = di->di_DevInfo;
+		di->di_DevInfo = (long) CTOB(volnode);
+		Permit();
+	    }
 	} else {
+	error:
 	    dosfree((ulong *)volnode);
 	    volnode = NULL;
 	}
@@ -912,9 +942,9 @@ NewVolNodeName()
     if (VolNode) {
 	register char *volname = BTOC(VolNode->dl_Name);
 
-	strncpy(volname + 1, Disk.vollabel.de_Msd.msd_Name, 8+3);
-	volname[1+8+3] = '\0';      /* Make sure \0 terminated */
-	ZapSpaces(volname + 1, volname + 1 + 8+3);
+	strncpy(volname + 1, Disk.vollabel.de_Msd.msd_Name, L_8+L_3);
+	volname[1+L_8+L_3] = '\0';      /* Make sure \0 terminated */
+	ZapSpaces(volname + 1, volname + 1 + L_8+L_3);
 	volname[0] = strlen(volname+1);
     }
 }
@@ -928,30 +958,39 @@ void
 FreeVolNode(volnode)
 struct DeviceList *volnode;
 {
-    struct DosInfo *di = BTOC(((struct RootNode *) DOSBase->dl_Root)->rn_Info);
-    register struct DeviceList *dl;
-    register void  *dlp;
-
     debug(("FreeVolNode %08lx\n", volnode));
 
     if (volnode == NULL)
 	return;
 
-    dlp = &di->di_DevInfo;
-    Forbid();
-    for (dl = BTOC(di->di_DevInfo); dl && dl != volnode; dl = BTOC(dl->dl_Next))
-	dlp = &dl->dl_Next;
-    if (dl == volnode) {
-	*(BPTR *) dlp = dl->dl_Next;
-	dosfree(BTOC(dl->dl_Name));
-	dosfree((ulong *)dl);
-    }
+    if (DOSBase->dl_lib.lib_Version >= 37) {
+	struct DosList *dl;
+
+	dl = LockDosList(LDF_VOLUMES | LDF_WRITE);
+	(void)RemDosEntry((struct DosList *)volnode);
+	UnLockDosList(LDF_VOLUMES | LDF_WRITE);
+    } else {
+	struct DosInfo *di = BTOC(((struct RootNode *) DOSBase->dl_Root)->rn_Info);
+	register struct DeviceList *dl;
+	register void  *dlp;
+
+	dlp = &di->di_DevInfo;
+	Forbid();
+	for (dl = BTOC(di->di_DevInfo); dl && dl != volnode; dl = BTOC(dl->dl_Next))
+	    dlp = &dl->dl_Next;
+	if (dl == volnode) {
+	    *(BPTR *) dlp = dl->dl_Next;
+	}
 #ifdef HDEBUG
-    else {
-	debug(("****PANIC: Unable to find volume node\n"));
-    }
+	else {
+	    debug(("****PANIC: Unable to find volume node\n"));
+	}
 #endif				/* HDEBUG */
-    Permit();
+	Permit();
+    }
+
+    dosfree(BTOC(volnode->dl_Name));
+    dosfree((ulong *)volnode);
 
     if (volnode == VolNode)
 	VolNode = NULL;
@@ -1024,6 +1063,11 @@ DiskRemoved()
 {
     debug(("DiskRemoved %08lx\n", VolNode));
 
+#ifdef INPUTDEV
+    if (IDDiskType != ID_NO_DISK_PRESENT)
+	InputDiskRemoved();
+#endif
+
     if (VolNode == NULL) {
 	IDDiskType = ID_NO_DISK_PRESENT;/* really business of MSDiskRemoved */
 	return DOSTRUE;
@@ -1058,6 +1102,76 @@ struct DeviceList *volnode;
 	MSDiskInserted(&volnode->dl_MSFileLockList, volnode);
 	volnode->dl_MSFileLockList = NULL;
     }
+#ifdef INPUTDEV
+    if (IDDiskType != ID_NO_DISK_PRESENT)
+	InputDiskInserted();
+#endif
+}
+
+/*
+ * Test if we have a DD or HD floppy right now.
+ * If the TD_GETDRIVETYPE fails or produces weird values, do nothing.
+ * Otherwise, select the correct sectors/track value, originally
+ * derived from the mountlist.
+ */
+void
+CheckDriveType(void)
+{
+    struct IOExtTD *req = DiskIOReq;
+
+    req->iotd_Req.io_Command = TD_GETDRIVETYPE;
+    /*
+     * If this fails or gives weird values, it probably is not
+     * a floppy drive, and we don't mess with the defaults.
+     */
+    if (MyDoIO(&req->iotd_Req) == 0) {
+	int		spt;
+
+	switch (req->iotd_Req.io_Actual) {
+	case DRIVE3_5:
+	case DRIVE5_25:
+	    debug(("DD floppy\n"));
+	    spt = Partition.spt_dd;
+	    break;
+	case DRIVE3_5_150RPM:
+	    debug(("HD floppy\n"));
+	    spt = Partition.spt_hd;
+	    break;
+	default:
+	    debug(("strange drive type: %d\n", req->iotd_Req.io_Actual));
+	    goto no_floppy;
+	}
+	DefaultDisk.spt = spt;
+	if (Environ)
+	    Environ->de_BlocksPerTrack = spt;
+	DefaultDisk.nsects = (Environ->de_HighCyl - Environ->de_LowCyl + 1) *
+			     DefaultDisk.nsides * spt;
+
+	/*
+	 * Suggest a minimum value for the number of FAT sectors.
+	 * Here we assume all sectors are to be used for clusters, which is not
+	 * really true, but simpler, and gives a conservative value. Besides,
+	 * the number of available sectors also depends on the FAT size, so
+	 * the whole calculation (if done correctly) would be recursive. In
+	 * practice, it may occasionally suggest one sector too much.
+	 */
+	{
+	    long	    nclusters;
+	    long	    nbytes;
+
+	    nclusters = MS_FIRSTCLUST + (DefaultDisk.nsects+DefaultDisk.spc-1)/
+					 DefaultDisk.spc;
+	    if (nclusters > 0xFF7) /* 16-bit FAT entries */
+		nbytes = nclusters * 2;
+	    else		  /* 12-bit FAT entries */
+		nbytes = (nclusters * 3 + 1) / 2;
+	    DefaultDisk.spf = (nbytes + DefaultDisk.bps - 1) / DefaultDisk.bps;
+	    /* Hack for floppies */
+	    if (DefaultDisk.spf < MS_SPF)
+		DefaultDisk.spf = MS_SPF;
+	}
+    }
+no_floppy:;
 }
 
 struct DeviceList *
@@ -1066,6 +1180,8 @@ WhichDiskInserted()
     char name[34];
     struct DateStamp date;
     register struct DeviceList *dl = NULL;
+
+    CheckDriveType();
 
     if (!Inhibited && IdentifyDisk(name, &date) == 0) {
 	struct DosInfo *di = BTOC(((struct RootNode *) DOSBase->dl_Root)->rn_Info);
@@ -1089,7 +1205,7 @@ WhichDiskInserted()
 }
 
 void
-DiskChange()
+DiskChange(void)
 {
     debug(("DiskChange\n"));
     DiskChanged = 0;
