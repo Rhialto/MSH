@@ -1,6 +1,9 @@
 /*-
- *  $Id: device.h,v 1.3 90/03/11 17:43:50 Rhialto Rel $
- *  $Log$
+ *  $Id: device.h,v 1.30 90/06/04 23:19:28 Rhialto Rel $
+ *  $Log:	device.h,v $
+ * Revision 1.34  91/01/24  00:13:57  Rhialto
+ * Use TD_RAWWRITE under AmigaOS 2.0.
+ *
  *  This code is (C) Copyright 1989 by Olaf Seibert. All rights reserved. May
  *  not be used or copied without a licence.
  *
@@ -19,6 +22,7 @@ RTPRI	    equ 	0
 #define REVISION	16
 
 struct MessyDevice {
+    long	    md_UseRawWrite;
     struct MessyUnit *md_Unit[MD_NUMUNITS];
     long	    md_System_2_04;
     struct SignalSemaphore md_HardwareUse;
@@ -44,7 +48,7 @@ struct MessyUnit {
     ulong	    mu_ChangeNum;
     ulong	    mu_OpenFlags;
     byte	    mu_DiskState;
-    short	    mu_CurrentTrack;	/* Position of the head, and */
+    short	    mu_CurrentCylinder; /* Position of the head, and */
     short	    mu_CurrentSide;	/* what's in the track buffer */
     short	    mu_CurrentSectors;	/* The current #sectors on this track */
     short	    mu_TrackChanged;
@@ -71,6 +75,10 @@ struct MessyUnit {
 #define UNITF_WAKETASK	(1<<3)
 
 #define STATEF_PRESENT	(1<<1)
+#define STATEF_WRITABLE (1<<2)
+#define STATEF_HIGHDENSITY (1<<3)
+
+#define SYS1_3		34	/* System version 1.3 */
 /* Some constants related to #defines */
 #asm
 MS_BPS		    equ 512
@@ -177,6 +185,7 @@ extern byte    *index(), *rindex();
 extern int	ReadTrack();
 extern void	InitDecoding();
 extern int	TDSeek();
+extern long	MyDoIO();
 extern int	TDMotorOn();
 extern int	TDMotorOff();
 extern int	TDGetNumCyls();
