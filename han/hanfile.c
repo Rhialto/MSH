@@ -1,6 +1,12 @@
 /*-
- * $Id: hanfile.c,v 1.54 1993/06/24 05:12:49 Rhialto Exp $
+ * $Id: hanfile.c,v 1.55 1993/12/30 23:28:00 Rhialto Rel $
  * $Log: hanfile.c,v $
+ * Revision 1.55  1993/12/30  23:28:00	Rhialto
+ * Freeze for MAXON5.
+ * Check Write() size to see it it will all fit.
+ * Optionally, update time of file on creation only.
+ * Lots of small changes for LONGNAMES option.
+ *
  * Revision 1.54  1993/06/24  05:12:49	Rhialto
  * MSCreateDir gave you an exclusive lock contrary to our liberal policy.
  * DICE 2.07.54R.
@@ -53,10 +59,10 @@
 #include "dos.h"
 #include <string.h>
 
-#ifdef CONVERSIONS
+#if CONVERSIONS
 #   include "hanconv.h"
 #endif
-#ifdef HDEBUG
+#if HDEBUG
 #   include "syslog.h"
 #else
 #   define	debug(x)
@@ -103,7 +109,7 @@ GetFat()
 	    FreeSec(secptr);
 	} else {
 	    /* q&d way to set the entire FAT to FAT_EOF */
-	    setmem(Fat + i * Disk.bps, (int) Disk.bps, FAT_EOF);        /* 0xFF */
+	    setmem(Fat + i * Disk.bps, (int) Disk.bps, FAT_EOF);	/* 0xFF */
 	}
     }
 
@@ -121,6 +127,7 @@ GetFat()
 void
 FreeFat()
 {
+    debug(("FreeFat()\n"));
     if (Fat) {
 	FreeMem(Fat, (long) Disk.bps * Disk.spf);
 	Fat = NULL;
@@ -148,8 +155,8 @@ word		cluster;
     if (Disk.fat16bits) {
 	return OtherEndianWord(((word *)Fat)[cluster]);
     } else {
-	register int	offset = 3 * (cluster / 2);
-	register word	twoentries;
+	int	offset = 3 * (cluster / 2);
+	word	twoentries;
 
 	if (cluster & 1) {
 	    twoentries = Fat[offset + 1] >> 4;
@@ -170,7 +177,7 @@ word		cluster;
     }
 }
 
-#ifndef READONLY
+#if ! READONLY
 
 void
 SetFatEntry(cluster, value)
@@ -183,9 +190,9 @@ word		value;
     if (Disk.fat16bits) {
 	((word *)Fat)[cluster] = OtherEndianWord(value);
     } else {
-	register int	offset = 3 * (cluster / 2);
+	int	offset = 3 * (cluster / 2);
 
-	if (cluster & 1) {          /* 123 kind of entry */
+	if (cluster & 1) {	    /* 123 kind of entry */
 	    Fat[offset + 2] = value >> 4;
 	    Fat[offset + 1] &= 0x0F;
 	    Fat[offset + 1] |= (value & 0x0F) << 4;
@@ -213,14 +220,14 @@ word
 FindFreeCluster(prev)
 word		prev;
 {
-    register word   i;
+    word   i;
 
     if (prev == 0 || prev == FAT_EOF)
 	prev = MS_FIRSTCLUST - 1;
 
     if (Disk.freeclusts > 0) {
 	for (i = prev + 1; i != prev; i++) {
-	    if (i > Disk.maxclst)       /* Wrap around */
+	    if (i > Disk.maxclst)	/* Wrap around */
 		i = MS_FIRSTCLUST;
 	    if (GetFatEntry(i) == FAT_UNUSED) {
 		SetFatEntry(i, FAT_EOF);
@@ -241,9 +248,9 @@ word		prev;
 
 word
 ExtendClusterChain(cluster)
-register word	cluster;
+word	cluster;
 {
-    register word   nextcluster;
+    word   nextcluster;
 
     /*
      * Find the end of the cluster chain to tack the new cluster on to.
@@ -264,9 +271,9 @@ register word	cluster;
 
 void
 FreeClusterChain(cluster)
-register word	cluster;
+word	cluster;
 {
-    register word   nextcluster;
+    word   nextcluster;
 
     while (cluster != FAT_EOF) {
 	nextcluster = NextCluster(cluster);
@@ -289,7 +296,7 @@ long		mode;
 	error = ERROR_OBJECT_WRONG_TYPE;
 	fh = NULL;
     } else if (fh = AllocMem((long) sizeof (*fh), MEMF_PUBLIC)) {
-#ifndef READONLY
+#if ! READONLY
 	/* Do we need to truncate the file? */
 	if ((mode == MODE_NEWFILE) && fl->msfl_Msd.msd_Cluster) {
 	    FreeClusterChain(fl->msfl_Msd.msd_Cluster);
@@ -301,7 +308,7 @@ long		mode;
 	fh->msfh_Cluster = fl->msfl_Msd.msd_Cluster;
 	fh->msfh_SeekPos = 0;
 	fh->msfh_FileLock = fl;
-#ifdef CONVERSIONS
+#if CONVERSIONS
 	fh->msfh_Conversion = ConvNone;
 #endif
     } else {
@@ -335,14 +342,14 @@ long		mode;
 	lockmode = SHARED_LOCK;
     }
 
-#ifdef CONVERSIONS
+#if CONVERSIONS
     ConversionImbeddedInFileName = DefaultConversion;
 #endif
     if (fl = MSLock(parentdir, name, lockmode)) {
 makefh:
 	fh = MakeMSFileHandle(fl, mode);
 	if (fh) {
-#ifdef CONVERSIONS
+#if CONVERSIONS
 	    fh->msfh_Conversion = ConversionImbeddedInFileName;
 #endif
 	} else {
@@ -351,7 +358,7 @@ makefh:
 
 	return fh;
     }
-#ifndef READONLY
+#if ! READONLY
     /*
      * If the file was not found, see if we can make a new one. Therefore
      * we need to have an empty spot in the desired directory, and create
@@ -363,7 +370,7 @@ makefh:
 	EmptyFileLock = NULL;
 	fl->msfl_Msd.msd_Attributes = ATTR_ARCHIVED;
 	UpdateFileLock(fl);
-#ifndef CREATIONDATE_ONLY
+#if ! CREATIONDATE_ONLY
 	UpdateFileLock(fl->msfl_Parent);
 #endif
 
@@ -380,7 +387,7 @@ makefh:
 
 long
 MSClose(fh)
-register struct MSFileHandle *fh;
+struct MSFileHandle *fh;
 {
     if (fh) {
 	MSUnLock(fh->msfh_FileLock);
@@ -407,7 +414,7 @@ long		mode;
     }
 }
 
-#ifdef ACTION_SET_FILE_SIZE
+#if defined(ACTION_SET_FILE_SIZE)
 void
 AdjustSeekPos(fh)
 struct MSFileHandle *fh;
@@ -433,7 +440,7 @@ long		mode;
     word	    oldcluster;
     word	    newcluster;
 
-#ifdef ACTION_SET_FILE_SIZE
+#if defined(ACTION_SET_FILE_SIZE)
     if (fh->msfh_SeekPos > fh->msfh_FileLock->msfl_Msd.msd_Filesize) {
 	fh->msfh_SeekPos = fh->msfh_FileLock->msfl_Msd.msd_Filesize;
     }
@@ -447,10 +454,13 @@ long		mode;
     }
     newcluster = newpos / Disk.bpc;
     oldcluster = oldpos / Disk.bpc;
+    debug(("MSSeek: pos %ld mode %ld oldcluster %ld newcluster %ld\n", 
+	position, mode, oldcluster, newcluster));
 
-    if (oldcluster > newcluster) {      /* Seek backwards */
+    if (oldcluster > newcluster) {	/* Seek backwards */
 	cluster = fh->msfh_FileLock->msfl_Msd.msd_Cluster;
 	oldcluster = 0;
+	debug(("rewind: cluster %ld\n", cluster));
     }
     if (oldcluster < newcluster) {
 	if (CheckLock(fh->msfh_FileLock))
@@ -458,26 +468,28 @@ long		mode;
 	while (oldcluster < newcluster) {
 	    cluster = NextCluster(cluster);
 	    oldcluster++;
+	    debug(("forward: %ldth cluster %ld\n", oldcluster, cluster));
 	}
     }
     fh->msfh_Cluster = cluster;
     fh->msfh_SeekPos = newpos;
+    debug(("MSSeek: newpos %ld cluster %ld\n", newpos, cluster));
 
     return oldpos;
 }
 
 long
 MSRead(fh, userbuffer, size)
-register struct MSFileHandle *fh;
-register byte  *userbuffer;
-register long	size;
+struct MSFileHandle *fh;
+byte  *userbuffer;
+long	size;
 {
     long	    oldsize;
 
     if (CheckLock(fh->msfh_FileLock))
 	return -1;
 
-#ifdef ACTION_SET_FILE_SIZE
+#if defined(ACTION_SET_FILE_SIZE)
     AdjustSeekPos(fh);
 #endif
     if (fh->msfh_SeekPos + size > fh->msfh_FileLock->msfl_Msd.msd_Filesize)
@@ -497,7 +509,7 @@ register long	size;
 	    offset %= Disk.bps;
 	    tocopy = lmin(size, Disk.bps - offset);
 
-#ifdef CONVERSIONS
+#if CONVERSIONS
 	    (rd_Conv[fh->msfh_Conversion])(diskbuffer + offset, userbuffer,
 					   tocopy);
 #else
@@ -507,7 +519,8 @@ register long	size;
 	    size -= tocopy;
 	    FreeSec(diskbuffer);
 	    /* MSSeek(fh, tocopy, (long) OFFSET_CURRENT); */
-	    if ((fh->msfh_SeekPos += tocopy) % Disk.bpc == 0)
+	    fh->msfh_SeekPos += tocopy;
+	    if (fh->msfh_SeekPos % Disk.bpc == 0)
 		fh->msfh_Cluster = NextCluster(fh->msfh_Cluster);
 	} else {		/* Read error. Return amount successfully
 				 * read, if any. Else return -1 for error. */
@@ -518,16 +531,17 @@ register long	size;
 	}
     }
 
+    debug(("MSRead: SeekPos %ld\n", fh->msfh_SeekPos));
     return oldsize;
 }
 
 long
 MSWrite(fh, userbuffer, size)
-register struct MSFileHandle *fh;
-register byte  *userbuffer;
-register long	size;
+struct MSFileHandle *fh;
+byte  *userbuffer;
+long	size;
 {
-#ifdef READONLY
+#if READONLY
     return -1;
 #else
     long	    oldsize;
@@ -543,7 +557,7 @@ register long	size;
 	return -1;
     }
 
-#ifdef ACTION_SET_FILE_SIZE
+#if defined(ACTION_SET_FILE_SIZE)
     AdjustSeekPos(fh);
 #endif
     oldsize = size;
@@ -572,7 +586,7 @@ register long	size;
 	    newclust = ExtendClusterChain(prevclust);
 	    debug(("Extend with %ld\n", (long)newclust));
 	    if (newclust != FAT_EOF) {
-		if (prevclust == 0) {   /* Record first cluster in dir */
+		if (prevclust == 0) {	/* Record first cluster in dir */
 		    fl->msfl_Msd.msd_Cluster = newclust;
 		}
 		fh->msfh_Cluster = newclust;
@@ -600,7 +614,7 @@ register long	size;
 		diskbuffer = ReadSec(sector);
 
 	    if (diskbuffer != NULL) {
-#ifdef CONVERSIONS
+#if CONVERSIONS
 		(wr_Conv[fh->msfh_Conversion])(userbuffer, diskbuffer + offset, tocopy);
 #else
 		CopyMem(userbuffer, diskbuffer + offset, tocopy);
@@ -610,7 +624,8 @@ register long	size;
 		MarkSecDirty(diskbuffer);
 		FreeSec(diskbuffer);
 		/* MSSeek(fh, tocopy, (long) OFFSET_CURRENT); */
-		if ((fh->msfh_SeekPos += tocopy) % Disk.bpc == 0)
+		fh->msfh_SeekPos += tocopy;
+		if (fh->msfh_SeekPos % Disk.bpc == 0)
 		    fh->msfh_Cluster = NextCluster(fh->msfh_Cluster);
 		if (fh->msfh_SeekPos > fl->msfl_Msd.msd_Filesize)
 		    fl->msfl_Msd.msd_Filesize = fh->msfh_SeekPos;
@@ -618,10 +633,13 @@ register long	size;
 		update = 1;
 	    } else {		/* Write error. */
 	some_error:
-#ifndef CREATIONDATE_ONLY
-		if (update)
+		if (update) {
+#if CREATIONDATE_ONLY
+		    DirtyFileLock(fl);
+#else
 		    UpdateFileLock(fl);
 #endif
+		}
 #if 1
 		return -1;	/* We lose the information about how much
 				 * data we wrote, but the standard file system
@@ -636,10 +654,14 @@ register long	size;
 	}
     }
 
-#ifndef CREATIONDATE_ONLY
-    if (update)
+    if (update) {
+#if CREATIONDATE_ONLY
+	DirtyFileLock(fl);
+#else
 	UpdateFileLock(fl);
 #endif
+    }
+    debug(("MSWrite: SeekPos %ld\n", fh->msfh_SeekPos));
 
     return oldsize;
 #endif
@@ -650,10 +672,10 @@ MSDeleteFile(parentdir, name)
 struct MSFileLock *parentdir;
 byte	       *name;
 {
-#ifdef READONLY
+#if READONLY
     return DOSFALSE;
 #else
-    register struct MSFileLock *fl;
+    struct MSFileLock *fl;
 
     fl = MSLock(parentdir, name, EXCLUSIVE_LOCK);
     if (fl) {
@@ -674,8 +696,8 @@ byte	       *name;
 		error = ERROR_OBJECT_IN_USE;
 		goto some_error;
 	    }
-	    if (MSExamine(fl, &fib) &&  /* directory itself */
-		MSExNext(fl, &fib)) {   /* should fail */
+	    if (MSExamine(fl, &fib) &&	/* directory itself */
+		MSExNext(fl, &fib)) {	/* should fail */
 		if (error == 0) {
 	    not_empty:
 		    error = ERROR_DIRECTORY_NOT_EMPTY;
@@ -693,7 +715,7 @@ byte	       *name;
 	    FreeClusterChain(fl->msfl_Msd.msd_Cluster);
 	fl->msfl_Msd.msd_Name[0] = DIR_DELETED;
 	WriteFileLock(fl);
-#ifndef CREATIONDATE_ONLY
+#if ! CREATIONDATE_ONLY
 	UpdateFileLock(fl->msfl_Parent);
 #endif
 	MSUnLock(fl);
@@ -710,10 +732,10 @@ struct MSFileLock *parentdir;
 byte	       *name;
 struct DateStamp *datestamp;
 {
-#ifdef READONLY
+#if READONLY
     return DOSFALSE;
 #else
-    register struct MSFileLock *fl;
+    struct MSFileLock *fl;
 
     fl = MSLock(parentdir, name, EXCLUSIVE_LOCK);
     if (fl) {
@@ -736,10 +758,10 @@ MSCreateDir(parentdir, name)
 struct MSFileLock *parentdir;
 byte	       *name;
 {
-#ifdef READONLY
+#if READONLY
     return DOSFALSE;
 #else
-    register struct MSFileLock *fl;
+    struct MSFileLock *fl;
 
     /*
      * Go create a new file. If we fail later, we have an empty file that
@@ -789,9 +811,9 @@ byte	       *name;
 	     */
 
 	    parentdir = MSParentDir(fl);
-	    if (parentdir == NULL)      /* Cannot happen */
+	    if (parentdir == NULL)	/* Cannot happen */
 		parentdir = MSDupLock(RootLock);
-#ifndef CREATIONDATE_ONLY
+#if ! CREATIONDATE_ONLY
 	    UpdateFileLock(parentdir);
 #endif
 
@@ -860,7 +882,7 @@ byte	       *sname;
 struct MSFileLock *dlock;
 byte	       *dname;
 {
-#ifdef READONLY
+#if READONLY
     return DOSFALSE;
 #else
     struct MSFileLock *sfl;
@@ -959,7 +981,7 @@ undelete:
 		OtherEndianMsd(&dir[1]);
 		MarkSecDirty((byte *)dir);
 	    }
-#ifdef HDEBUG
+#if HDEBUG
 	    else
 		debug(("!!! No \"..\" found ??\n"));
 #endif
@@ -984,9 +1006,9 @@ undelete:
     sfl->msfl_Parent = dfl->msfl_Parent;
     dfl->msfl_Parent = NULL;
     sfl->msfl_Msd.msd_Attributes |= ATTR_ARCHIVED;
-    WriteFileLock(sfl);         /* Write the new name; the old name
+    WriteFileLock(sfl); 	/* Write the new name; the old name
 				 * already has been deleted. */
-#ifndef CREATIONDATE_ONLY
+#if ! CREATIONDATE_ONLY
     UpdateFileLock(sfl->msfl_Parent);
     UpdateFileLock(dfl->msfl_Parent);
 #endif
