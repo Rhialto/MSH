@@ -1,11 +1,11 @@
 /*-
- * $Id: devio.c,v 1.3 90/01/27 20:36:04 Rhialto Exp $
+ * $Id: devio.c,v 1.4 90/02/10 21:42:17 Rhialto Rel $
  * $Log:	devio.c,v $
+ * Revision 1.4  90/02/10  21:42:17  Rhialto
+ * Small changes
+ *
  * Revision 1.3  90/01/27  20:36:04  Rhialto
  * Variable #sectors/track!
- *
- * Revision 1.2  90/01/23  00:41:39  Rhialto
- * Remove C version of DecodeTrack.
  *
  * Revision 1.1  89/12/17  20:04:11  Rhialto
  *
@@ -1084,8 +1084,8 @@ ulong		UnitNr;
     unit->mu_NumCyls = TDGetNumCyls(tdreq);
     unit->mu_UnitNr = UnitNr;
     unit->mu_DiskState = STATEF_UNKNOWN;
-    unit->mu_TrackChanged = 0;
     unit->mu_CurrentSide = -1;
+    unit->mu_TrackChanged = 0;
     unit->mu_InitSectorStatus = CRC_UNCHECKED;
     unit->mu_SectorsPerTrack = MS_SPT;
 
@@ -1124,11 +1124,6 @@ struct IOExtTD *ioreq;
 DEV	       *dev;
 register UNIT  *unit;
 {
-#ifndef READONLY
-    if (ioreq && unit->mu_TrackChanged)
-	Internal_Update(ioreq, unit);
-#endif
-
     /*
      * Get rid of the Unit's task. We know this is safe because the unit
      * has an open count of zero, so it is 'guaranteed' not in use.
@@ -1482,16 +1477,18 @@ UNIT	       *unit;
     debug(("CMD_Format "));
 
     if (CheckRequest(ioreq, unit))
-	goto end;
+	goto termio;
 
     userbuf = (byte *) ioreq->iotd_Req.io_Data;
     length = ioreq->iotd_Req.io_Length / MS_BPS;	    /* Sector count */
     cylinder = ioreq->iotd_Req.io_Offset / MS_BPS;	    /* Sector number */
     /*
      * Now try to guess the number of sectors the user wants per track.
-     * 40 sectors is the first ambuiguous length.
+     * 40 sectors is the first ambiguous length.
      */
-    if (length < 40) {
+    if (length <= MS_SPT_MAX)
+	spt = length;
+    else if (length < 40) {
 	if (length > 0) {
 	    for (spt = 8; spt <= MS_SPT_MAX; spt++) {
 		if ((length % spt) == 0)
@@ -1502,7 +1499,7 @@ UNIT	       *unit;
 	 * Not 8, 16, 24, 32, 9, 18, 27, 36, 10, 20, or 30? That is an error.
 	 */
 	ioreq->iotd_Req.io_Error = IOERR_BADLENGTH;
-	goto end;
+	goto termio;
     } else  /* assume previous number */
 	spt = unit->mu_SectorsPerTrack;
 
@@ -1570,6 +1567,8 @@ found_spt:
     }
 end:
     unit->mu_CurrentSide = -1;
+    unit->mu_TrackChanged = 0;
+termio:
     TermIO(ioreq);
 }
 /* INDENT OFF */
@@ -1814,18 +1813,13 @@ HeaderCRC:
 ; requires:  a3 = pointer to the unencoded data
 ; returns:   d0 = CRC
 
-DataCRC:
-	movem.l  d1-d3/a3-a5,-(sp) ; save registers
-	bra.s	DataCRC1
-
 ; C entry point for DataCRC(byte *data)
 
 _DataCRC:
-	movem.l d1-d3/a3-a5,-(sp) ; save registers
+	movem.l d1-d3/a3-a5,-(sp)  ; save registers
 fp	set	(4*(3+3))+4
 data	set	0
-	move.l	fp+data(sp),a3    ; get parameter
-DataCRC1:
+	move.l	fp+data(sp),a3     ; get parameter
 	move.w	 #$e2,d0	   ; preload the CRC registers
 	move.w	 #$95,d1	   ; (CRC for $a1,$a1,$a1,$fe)
 	move.w	 #MS_BPS-1,d3	   ; a sector 512 bytes
