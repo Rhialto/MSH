@@ -1,6 +1,9 @@
 /*-
- * $Id: hancmd.c,v 1.53 92/10/25 02:42:51 Rhialto Rel $
- * $Log:	hancmd.c,v $
+ * $Id: hancmd.c,v 1.54 1993/06/24 05:12:49 Rhialto Exp $
+ * $Log: hancmd.c,v $
+ * Revision 1.54  1993/06/24  05:12:49  Rhialto
+ * DICE 2.07.54R.
+ *
  * Revision 1.53  92/10/25  02:42:51  Rhialto
  * Add default conversion. Make ::M+ work as advertised.
  *

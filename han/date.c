@@ -1,6 +1,9 @@
 /*-
- * $Id: date.c,v 1.53 92/10/25 02:43:23 Rhialto Rel $
- * $Log:	date.c,v $
+ * $Id: date.c,v 1.54 1993/06/24 05:12:49 Rhialto Exp $
+ * $Log: date.c,v $
+ * Revision 1.54  1993/06/24  05:12:49  Rhialto
+ * DICE 2.07.54R.
+ *
  * Revision 1.53  92/10/25  02:43:23  Rhialto
  * No real change.
  *

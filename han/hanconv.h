@@ -1,6 +1,9 @@
 /*-
- * $Id: hanconv.h,v 1.53 92/10/25 03:04:02 Rhialto Rel $
- * $Log:	hanconv.h,v $
+ * $Id: hanconv.h,v 1.54 1993/06/24 05:12:49 Rhialto Exp $
+ * $Log: hanconv.h,v $
+ * Revision 1.54  1993/06/24  05:12:49  Rhialto
+ * DICE 2.07.54R.
+ *
  * Revision 1.53  92/10/25  03:04:02  Rhialto
  * Moved prototypes out of header file.
  * 

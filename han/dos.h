@@ -1,7 +1,10 @@
 
 /*
- *  $Id: dos.h,v 1.53 92/10/25 02:44:02 Rhialto Rel $
- *  $Log:	dos.h,v $
+ *  $Id: dos.h,v 1.54 1993/06/24 05:12:49 Rhialto Exp $
+ *  $Log: dos.h,v $
+ * Revision 1.54  1993/06/24  05:12:49  Rhialto
+ * DICE 2.07.54R.
+ *
  * Revision 1.53  92/10/25  02:44:02  Rhialto
  * No real change.
  *

@@ -1,6 +1,9 @@
 /*-
- * $Id: hanreq.c,v 1.53 92/10/25 02:42:27 Rhialto Rel $
- * $Log:	hanreq.c,v $
+ * $Id: hanreq.c,v 1.54 1993/06/24 05:12:49 Rhialto Exp $
+ * $Log: hanreq.c,v $
+ * Revision 1.54  1993/06/24  05:12:49  Rhialto
+ * DICE 2.07.54R.
+ *
  * Revision 1.53  92/10/25  02:42:27  Rhialto
  * No real change.
  *

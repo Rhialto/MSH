@@ -1,5 +1,5 @@
 /*-
- * $Id: die.c,v 1.53 92/10/25 02:46:02 Rhialto Rel $
+ * $Id: die.c,v 1.54 1993/06/24 05:35:45 Rhialto Exp $
  *
  *  DIE.C
  *
@@ -25,7 +25,7 @@
 #include <clib/dos_protos.h>
 #endif
 
-const char	idString[] = "$VER: Die $Revision$ $Date$\r\n";
+const char	idString[] = "$VER: Die $Revision: 1.54 $ $Date: 1993/06/24 05:35:45 $\r\n";
 
 long
 dos_packet2(struct MsgPort *port, long type, long arg1, long arg2)

@@ -1,6 +1,9 @@
 /*-
- * $Id: hanconv.c,v 1.53 92/10/25 02:41:38 Rhialto Rel $
- * $Log:	hanconv.c,v $
+ * $Id: hanconv.c,v 1.54 1993/06/24 05:12:49 Rhialto Exp $
+ * $Log: hanconv.c,v $
+ * Revision 1.54  1993/06/24  05:12:49  Rhialto
+ * DICE 2.07.54R.
+ *
  * Revision 1.53  92/10/25  02:41:38  Rhialto
  * Rearrange initialisation of tables.
  *

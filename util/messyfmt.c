@@ -1,6 +1,9 @@
 /*
- * $Id: messyfmt.c,v 1.53 92/10/25 02:45:24 Rhialto Rel $
- * $Log:	messyfmt.c,v $
+ * $Id: messyfmt.c,v 1.54 1993/06/24 05:35:45 Rhialto Exp $
+ * $Log: messyfmt.c,v $
+ * Revision 1.54  1993/06/24  05:35:45  Rhialto
+ * DICE 2.07.54R.
+ *
  * Revision 1.53  92/10/25  02:45:24  Rhialto
  * No real change.
  *
@@ -41,7 +44,7 @@
 #include <signal.h>
 #include "han.h"
 
-const char	idString[] = "$VER: MessyFmt $Revision$ $Date$\r\n";
+const char	idString[] = "$VER: MessyFmt $Revision: 1.54 $ $Date: 1993/06/24 05:35:45 $\r\n";
 
 const ulong	BootBlock[] = {
     0xEB349049, 0x424D2020, 0x332E3200, 0x02020100,	/* ...IBM  3.2..... */
