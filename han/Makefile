@@ -1,4 +1,4 @@
-# $Id: Makefile,v 1.2 89/12/17 20:11:31 Rhialto Exp Locker: Rhialto $
+# $Id: Makefile,v 1.3 89/12/17 20:22:35 Rhialto Exp Locker: Rhialto $
 #
 #   Makefile for messydos file system handler and -device.
 #
@@ -11,7 +11,7 @@ HSRC =	pack.c support.c hanmain.c hansec.c hanlock.c hanfile.c hanreq.c date.c \
 DOBJ =	device.o devio.o
 DSRC =	device.c devio.c dev.h device.h
 XSRC =	messyfmt.c Makefile
-#DB =	 -DDEBUG
+DB =	-DDEBUG
 #WACK =  -W
 
 #   Options: large code, large data, no startup code, use A4
@@ -47,7 +47,7 @@ msh.man: msh.n
 	nro msh.n >msh.man
 
 ci:
-	RCS:ci $(HSRC) $(DSRC) $(XSRC)
+	RCS:ci -u $(HSRC) $(DSRC) $(XSRC)
 
 co:
 	RCS:co -l $(HSRC) $(DSRC) $(XSRC)
@@ -56,7 +56,7 @@ device.o: dev.h device.h
 devio.o:  dev.h device.h
 hanmain.o:  han.h dev.h
 hansec.o:  han.h dev.h
-hanlock.o:  han.h dev.h
-hanfile.o:  han.h dev.h
+hanlock.o:  dos.h han.h dev.h
+hanfile.o:  dos.h han.h dev.h
 support.o:  dos.h
 pack.o: dos.h han.h dev.h
