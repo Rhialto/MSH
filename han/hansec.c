@@ -1,6 +1,9 @@
 /*-
- * $Id: hansec.c,v 1.5 90/03/11 17:43:29 Rhialto Rel $
+ * $Id: hansec.c,v 1.30a $
  * $Log:	hansec.c,v $
+ * Revision 1.30  90/06/04  23:17:02  Rhialto
+ * Release 1 Patch 3
+ *
  * HANSEC.C
  *
  * The code for the messydos file system handler.
@@ -772,8 +775,8 @@ struct DateStamp *date;
 	    strncpy(name, Disk.vollabel.de_Msd.msd_Name, 8 + 3);
 	    name[8 + 3] = '\0';
 	    ZapSpaces(name, name + 8 + 3);
-	    ToDateStamp(date, Disk.vollabel.de_Msd.msd_Date,
-			Disk.vollabel.de_Msd.msd_Time);
+	    ToDateStamp(date, Disk.vollabel.de_Msd.msd_CreationDate,
+			Disk.vollabel.de_Msd.msd_CreationTime);
 	    debug(("Disk is called '%s'\n", name));
 
 	    FreeSec(dirblock);

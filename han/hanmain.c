@@ -1,6 +1,9 @@
 /*-
- * $Id: hanmain.c,v 1.5 90/03/11 17:42:29 Rhialto Rel $
- * $Log$
+ * $Id: hanmain.c,v 1.30a $
+ * $Log:	hanmain.c,v $
+ * Revision 1.30  90/06/04  23:16:50  Rhialto
+ * Release 1 Patch 3
+ *
  *  HANMAIN.C
  *
  *  The code for the messydos file system handler.
@@ -24,7 +27,7 @@
 extern int	CheckBootBlock;
 extern char	DotDot[1 + 8 + 3];
 struct Library *IntuitionBase;
-static char RCSId[] = "Messydos filing system $Revision$ $Date$, by Olaf Seibert";
+static char RCSId[] = "Messydos filing system $Revision: 1.30a $ $Date$, by Olaf Seibert";
 
 byte
 ToUpper(ch)
@@ -348,12 +351,14 @@ byte	       *newname;
 	    RootLock->msfl_Msd.msd_Name[0] = DIR_DELETED;
 	    RootLock->msfl_Msd.msd_Attributes = 0;
 	    WriteFileLock(RootLock);
-	    RootLock->msfl_Msd = FakeRootDirEntry.de_Msd;
-	    RootLock->msfl_DirSector = -1;
 	    Disk.vollabel = FakeRootDirEntry;
+	    RootLock->msfl_Msd = Disk.vollabel.de_Msd;
+	    RootLock->msfl_DirSector = Disk.vollabel.de_Sector;
+	    RootLock->msfl_DirOffset = Disk.vollabel.de_Offset;
 	}
 	return DOSTRUE;
     }
+
     /*
      * No label yet? Then we must create one, even if we need to move
      * something else for it.
@@ -362,9 +367,21 @@ byte	       *newname;
     if ((int) RootLock->msfl_DirSector < 0) {
 	struct MSFileLock *new;
 
-	new = MSLock(RootLock, "><>.\\", EXCLUSIVE_LOCK ^ MODE_CREATEFILE);
+	new = MSLock(RootLock, "OLAF-><>.\\*", EXCLUSIVE_LOCK ^ MODE_CREATEFILE);
 	if ((new == NULL) && (new = EmptyFileLock)) {
+	    struct DateStamp dateStamp;
+
 	    error = 0;
+
+	    DateStamp(&dateStamp);
+	    ToMSDate(&Disk.vollabel.de_Msd.msd_CreationDate,
+		     &Disk.vollabel.de_Msd.msd_CreationTime, &dateStamp);
+
+	    Disk.vollabel.de_Msd.msd_Date =
+		Disk.vollabel.de_Msd.msd_CreationDate;
+	    Disk.vollabel.de_Msd.msd_Time =
+		Disk.vollabel.de_Msd.msd_CreationTime;
+
 	    if (new->msfl_DirSector == Disk.rootdir) {
 		RootLock->msfl_DirSector = Disk.rootdir;
 		RootLock->msfl_DirOffset = new->msfl_DirOffset;
@@ -404,8 +421,6 @@ byte	       *newname;
 	MSUnLock(new);
     }
     if ((int) RootLock->msfl_DirSector >= Disk.rootdir) {
-	struct DateStamp dateStamp;
-
 	/*
 	 * The easy part: Copy the name to Disk.vollabel and RootLock.
 	 */
@@ -423,11 +438,8 @@ byte	       *newname;
 		    *d++ = ' ';
 	    }
 	}
-	DateStamp(&dateStamp);
-	ToMSDate(&Disk.vollabel.de_Msd.msd_Date,
-		 &Disk.vollabel.de_Msd.msd_Time, &dateStamp);
 	RootLock->msfl_Msd = Disk.vollabel.de_Msd;	/* Just for the name and
-							 * date */
+							 * dates */
 	WriteFileLock(RootLock);
 
 	return DOSTRUE;
