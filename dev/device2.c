@@ -1,6 +1,9 @@
 /*-
- * $Id: device2.c,v 1.46 91/10/06 18:22:08 Rhialto Rel $
+ * $Id: device2.c,v 1.51 92/04/17 15:41:55 Rhialto Rel $
  * $Log:	device2.c,v $
+ * Revision 1.51  92/04/17  15:41:55  Rhialto
+ * Freeze for MAXON3. Change cyl+side units to track units.
+ *
  * Revision 1.46  91/10/06  18:22:08  Rhialto
  * Freeze for MAXON; new syslog stuff
  *
@@ -62,7 +65,7 @@ Prototype const char DevName[];
 Prototype const char idString[];
 
 const char	DevName[] = "messydisk.device";
-const char	idString[] = "messydisk.device $Revision: 1.46 $ $Date: 91/10/06 18:22:08 $\r\n";
+const char	idString[] = "\0$VER: messydisk.device $Revision: 1.51 $ $Date: 92/04/17 15:41:55 $\r\n";
 
 /*
  * -30-6*X  Library vectors:
@@ -89,6 +92,7 @@ const void	(*funcTable[]) (struct IOStdReq *, UNIT *) = {
     TD_Remchangeint,
 };
 
+#define LAST_TD_COMM	    TD_REMCHANGEINT
 
 long		SysBase;	/* Argh! A global variable! */
 
@@ -264,7 +268,7 @@ __A6 DEV       *dev;
     /*
      * See if the io command is within range.
      */
-    if (STRIP(ioreq->io_Command) > TD_LASTCOMM)
+    if (STRIP(ioreq->io_Command) > LAST_TD_COMM)
 	goto NoCmd;
 
 #ifdef HANDLE_IO_QUICK
