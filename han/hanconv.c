@@ -1,6 +1,9 @@
 /*-
- * $Id: hanconv.c,v 1.48 91/11/03 00:56:34 Rhialto Exp $
+ * $Id: hanconv.c,v 1.51 92/04/17 15:38:09 Rhialto Rel $
  * $Log:	hanconv.c,v $
+ * Revision 1.51  92/04/17  15:38:09  Rhialto
+ * Freeze for MAXON.
+ *
  * Revision 1.48  91/11/03  00:56:34  Rhialto
  * Codes for s on PC/ST were swapped.
  *
@@ -22,7 +25,6 @@
  * May not be used or copied without a licence.
 -*/
 
-#include <amiga.h>
 #include <functions.h>
 #include "han.h"
 
@@ -35,12 +37,14 @@
 #   define	debug(x)
 #endif
 
-void rdwr_CopyMem(byte *from, byte *to, long fromsize);
-void rd_FromPC(byte *from, byte *to, long fromsize);
-void rd_FromST(byte *from, byte *to, long fromsize);
+unsigned char  *InitTable(unsigned char *init);
 
-void wr_ToPC(byte *from, byte *to, long fromsize);
-void wr_ToST(byte *from, byte *to, long fromsize);
+void		rdwr_CopyMem(byte *from, byte *to, long fromsize);
+void		rd_FromPC(byte *from, byte *to, long fromsize);
+void		rd_FromST(byte *from, byte *to, long fromsize);
+
+void		wr_ToPC(byte *from, byte *to, long fromsize);
+void		wr_ToST(byte *from, byte *to, long fromsize);
 
 const ConversionFunc rd_Conv[] = {
     rdwr_CopyMem, rd_FromPC, rd_FromST
@@ -57,11 +61,42 @@ const ConversionFunc wr_Conv[] = {
  * Must really protect against some race conditions with a shared semaphore.
  */
 
-int		ConversionImbeddedInFileName;
-static __shared unsigned char *Table_FromPC;
-static __shared unsigned char *Table_FromST;
-static __shared unsigned char *Table_ToPC;
-static __shared unsigned char *Table_ToST;
+Prototype short 	    ConversionImbeddedInFileName;
+Prototype short 	    DefaultConversion;
+Prototype __shared unsigned char *Table_ToPC;
+Prototype __shared unsigned char *Table_FromPC;
+Prototype __shared unsigned char *Table_ToST;
+Prototype __shared unsigned char *Table_FromST;
+Prototype void		  ConvCleanUp(void);
+
+short		  ConversionImbeddedInFileName;
+short		  DefaultConversion = ConvNone;
+__shared unsigned char *Table_ToPC;
+__shared unsigned char *Table_FromPC;
+__shared unsigned char *Table_ToST;
+__shared unsigned char *Table_FromST;
+void		ConvCleanUp(void);
+
+unsigned char  *
+InitTable(init)
+unsigned char  *init;
+{
+    unsigned char  *table;
+
+    if (table = AllocMem(256L, 0L)) {
+	int		i;
+
+	for (i = 0; i < 256; i++)
+	    table[i] = i;
+
+	do {
+	    i = *init++;
+	    table[i] = *init++;
+	} while (i != 0);
+    }
+
+    return table;
+}
 
 void
 rdwr_CopyMem(from, to, fromsize)
@@ -78,24 +113,25 @@ byte	       *from;
 byte	       *to;
 long		fromsize;
 {
-    if ((Table_FromPC == NULL) && (Table_FromPC = AllocMem(256L, 0L))) {
-	int i;
+    static unsigned char init_FromPC[] = {
+	0x81, 0xFC,   /* u */
+	0x84, 0xE4,   /* a */
+	0x94, 0xF6,   /* o */
+	0x9A, 0xDC,   /* U */
+	0x8E, 0xC4,   /* A */
+	0x99, 0xD6,   /* O */
+	0xE1, 0xDF,   /* s */
+	0, 0
+    };
 
-	for (i = 0; i < 256; i++)
-	    Table_FromPC[i] = i;
+    if (Table_FromPC == 0)
+	Table_FromPC = InitTable(init_FromPC);
 
-	Table_FromPC[0x81] = 0xFC;   /* u */
-	Table_FromPC[0x84] = 0xE4;   /* a */
-	Table_FromPC[0x94] = 0xF6;   /* o */
-	Table_FromPC[0x9A] = 0xDC;   /* U */
-	Table_FromPC[0x8E] = 0xC4;   /* A */
-	Table_FromPC[0x99] = 0xD6;   /* O */
-	Table_FromPC[0xE1] = 0xDF;   /* s */
-    }
+    if (Table_FromPC != 0) {
+	unsigned char *table = Table_FromPC;
 
-    if (Table_FromPC != NULL) {
-	for (; fromsize > 0; fromsize--)
-	    *to++ = Table_FromPC[*from++];
+	for (; fromsize > 0; fromsize--, from++, to++)
+	    *to = table[*from];
     }
 }
 
@@ -105,24 +141,25 @@ byte	       *from;
 byte	       *to;
 long		fromsize;
 {
-    if ((Table_FromST == NULL) && (Table_FromST = AllocMem(256L, 0L))) {
-	int i;
+    static unsigned char init_FromST[] = {
+	0x81, 0xFC,   /* u */
+	0x84, 0xE4,   /* a */
+	0x94, 0xF6,   /* o */
+	0x9A, 0xDC,   /* U */
+	0x8E, 0xC4,   /* A */
+	0x99, 0xD6,   /* O */
+	0x9E, 0xDF,   /* s */
+	0, 0
+    };
 
-	for (i = 0; i < 256; i++)
-	    Table_FromST[i] = i;
+    if (Table_FromST == 0)
+	Table_FromST = InitTable(init_FromST);
 
-	Table_FromST[0x81] = 0xFC;   /* u */
-	Table_FromST[0x84] = 0xE4;   /* a */
-	Table_FromST[0x94] = 0xF6;   /* o */
-	Table_FromST[0x9A] = 0xDC;   /* U */
-	Table_FromST[0x8E] = 0xC4;   /* A */
-	Table_FromST[0x99] = 0xD6;   /* O */
-	Table_FromST[0x9E] = 0xDF;   /* s */
-    }
+    if (Table_FromST != 0) {
+	unsigned char *table = Table_FromST;
 
-    if (Table_FromST != NULL) {
-	for (; fromsize > 0; fromsize--)
-	    *to++ = Table_FromST[*from++];
+	for (; fromsize > 0; fromsize--, from++, to++)
+	    *to = table[*from];
     }
 }
 
@@ -132,24 +169,25 @@ byte	       *from;
 byte	       *to;
 long		fromsize;
 {
-    if ((Table_ToPC == NULL) && (Table_ToPC = AllocMem(256L, 0L))) {
-	int i;
+    static unsigned char init_ToPC[] = {
+	0xFC, 0x81,   /* u */
+	0xE4, 0x84,   /* a */
+	0xF6, 0x94,   /* o */
+	0xDC, 0x9A,   /* U */
+	0xC4, 0x8E,   /* A */
+	0xD6, 0x99,   /* O */
+	0xDF, 0xE1,   /* s */
+	0, 0
+    };
 
-	for (i = 0; i < 256; i++)
-	    Table_ToPC[i] = i;
+    if (Table_ToPC == 0)
+	Table_ToPC = InitTable(init_ToPC);
 
-	Table_ToPC[0xFC] = 0x81;   /* u */
-	Table_ToPC[0xE4] = 0x84;   /* a */
-	Table_ToPC[0xF6] = 0x94;   /* o */
-	Table_ToPC[0xDC] = 0x9A;   /* U */
-	Table_ToPC[0xC4] = 0x8E;   /* A */
-	Table_ToPC[0xD6] = 0x99;   /* O */
-	Table_ToST[0xDF] = 0xE1;   /* s */
-    }
+    if (Table_ToPC != 0) {
+	unsigned char *table = Table_ToPC;
 
-    if (Table_ToPC != NULL) {
-	for (; fromsize > 0; fromsize--)
-	    *to++ = Table_ToPC[*from++];
+	for (; fromsize > 0; fromsize--, from++, to++)
+	    *to = table[*from];
     }
 }
 
@@ -159,24 +197,25 @@ byte	       *from;
 byte	       *to;
 long		fromsize;
 {
-    if ((Table_ToST == NULL) && (Table_ToST = AllocMem(256L, 0L))) {
-	int i;
+    static unsigned char init_ToST[] = {
+	0xFC, 0x81,   /* u */
+	0xE4, 0x84,   /* a */
+	0xF6, 0x94,   /* o */
+	0xDC, 0x9A,   /* U */
+	0xC4, 0x8E,   /* A */
+	0xD6, 0x99,   /* O */
+	0xDF, 0x9E,   /* s */
+	0, 0
+    };
 
-	for (i = 0; i < 256; i++)
-	    Table_ToST[i] = i;
+    if (Table_ToST == 0)
+	Table_ToST = InitTable(init_ToST);
 
-	Table_ToST[0xFC] = 0x81;   /* u */
-	Table_ToST[0xE4] = 0x84;   /* a */
-	Table_ToST[0xF6] = 0x94;   /* o */
-	Table_ToST[0xDC] = 0x9A;   /* U */
-	Table_ToST[0xC4] = 0x8E;   /* A */
-	Table_ToST[0xD6] = 0x99;   /* O */
-	Table_ToPC[0xDF] = 0x9E;   /* s */
-    }
+    if (Table_ToST != 0) {
+	unsigned char *table = Table_ToST;
 
-    if (Table_ToST != NULL) {
-	for (; fromsize > 0; fromsize--)
-	    *to++ = Table_ToST[*from++];
+	for (; fromsize > 0; fromsize--, from++, to++)
+	    *to = table[*from];
     }
 }
 
@@ -185,19 +224,19 @@ ConvCleanUp()
 {
     if (Table_FromPC) {
 	FreeMem(Table_FromPC, 256L);
-	Table_FromPC = NULL;
+	Table_FromPC = 0;
     }
     if (Table_FromST) {
 	FreeMem(Table_FromST, 256L);
-	Table_FromST = NULL;
+	Table_FromST = 0;
     }
     if (Table_ToPC) {
 	FreeMem(Table_ToPC, 256L);
-	Table_ToPC = NULL;
+	Table_ToPC = 0;
     }
     if (Table_ToST) {
 	FreeMem(Table_ToST, 256L);
-	Table_ToST = NULL;
+	Table_ToST = 0;
     }
 }
 
