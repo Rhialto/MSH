@@ -1,6 +1,9 @@
 /*-
- * $Id: hansec.c,v 1.31 90/11/10 02:44:35 Rhialto Exp $
+ * $Id: hansec.c,v 1.32 90/11/23 23:53:51 Rhialto Exp $
  * $Log:	hansec.c,v $
+ * Revision 1.32  90/11/23  23:53:51  Rhialto
+ * Prepare for syslog
+ *
  * Revision 1.31  90/11/10  02:44:35  Rhialto
  * Patch 3a. Changes location of disk volume date.
  *
@@ -159,6 +162,15 @@ word		sector;
 
 #ifndef READONLY
 
+/*
+ * FindFreeSector is like FindFreeCluster, but communicates in terms of
+ * sector numbers instead of cluster numbers. This is only useful for
+ * directories, since they count in sector numbers because the root
+ * directory cannot be expressed in clusters. If a new sector is allocated,
+ * the rest of its cluster is allocated as well, of course. The returned
+ * sector is always the first sector of a cluster.
+ */
+
 word
 FindFreeSector(prev)
 word		prev;
@@ -184,7 +196,7 @@ register int	number;
     register struct CacheSec *sec;
     register
 
-    debug(("FindSecByNumber %ld", (long)number));
+    debug(("FindSecByNumber %ld ", (long)number));
 
     for (sec = (void *) CacheList.mlh_Head;
 	 nextsec = (void *) sec->sec_Node.mln_Succ; sec = nextsec) {
