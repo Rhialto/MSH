@@ -1,6 +1,9 @@
 /*-
- *  $Id: han.h,v 1.5 90/03/11 17:46:58 Rhialto Rel $
- *  $Log$
+ *  $Id: han.h,v 1.30 90/06/04 23:18:28 Rhialto Rel $
+ *  $Log:	han.h,v $
+ * Revision 1.30  90/06/04  23:18:28  Rhialto
+ * Release 1 Patch 3
+ *
  *  The header file for the MESSYDOS: file system handler
  *
  *  This code is (C) Copyright 1989 by Olaf Seibert. All rights reserved. May
@@ -45,7 +48,9 @@ struct MsDirEntry {
     byte	    msd_Name[8];
     byte	    msd_Ext[3];
     byte	    msd_Attributes;
-    byte	    msd_Pad1[10];
+    word	    msd_CreationTime;	    /* vollabel only */
+    word	    msd_CreationDate;	    /* vollabel only */
+    byte	    msd_Pad1[6];
     word	    msd_Time;
     word	    msd_Date;
     word	    msd_Cluster;
