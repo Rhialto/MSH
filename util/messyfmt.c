@@ -1,6 +1,9 @@
 /*
- * $Id: MessyFmt.c,v 1.46 91/10/06 18:25:23 Rhialto Rel $
- * $Log:	MessyFmt.c,v $
+ * $Id: messyfmt.c,v 1.48 91/11/03 00:50:10 Rhialto Exp $
+ * $Log:	messyfmt.c,v $
+ * Revision 1.48  91/11/03  00:50:10  Rhialto
+ * Add command line options ASK, QUICK and BOOT.
+ *
  * Revision 1.46  91/10/06  18:25:23  Rhialto
  *
  * Freeze for MAXON
@@ -293,6 +296,7 @@ main(int argc, char **argv)
     word	    res,
 		    nfats,
 		    spf,
+		    spc,
 		    nsects,
 		    ncylinders,
 		    ndirs,
@@ -348,13 +352,36 @@ main(int argc, char **argv)
     CopyMem((char *)BootBlock, DiskTrack, (long) sizeof (BootBlock));
 
     PutWord(DiskTrack + 0x0b, bps);
-    SetByte(DiskTrack + 0x0d, "Sectors per cluster", MS_SPC);
+    spc = SetByte(DiskTrack + 0x0d, "Sectors per cluster", MS_SPC);
     res = SetWord(DiskTrack + 0x0e, "Bootsectors", MS_RES);
     nfats = SetByte(DiskTrack + 0x10, "Number of FAT copies", MS_NFATS);
     ndirs = SetWord(DiskTrack + 0x11, "Root directory entries", MS_NDIRS);
     nsects = SetWord(DiskTrack + 0x13, "Total number of sectors", spt * ncylinders * nsides);
     SetByte(DiskTrack + 0x15, "Media byte", 0xF9);
-    spf = SetWord(DiskTrack + 0x16, "Sectors per FAT", MS_SPF);
+    /*
+     * Suggest a minimum value for the number of FAT sectors.
+     * Here we assume all sectors are to be used for clusters, which is not
+     * really true, but simpler, and gives a conservative value. Besides,
+     * the number of available sectors also depends on the FAT size, so
+     * the whole calculation (if done correctly) would be recursive. In
+     * practice, it may occasionally suggest one sector too much.
+     */
+    {
+	long		nclusters;
+	long		nbytes;
+
+	nclusters = MS_FIRSTCLUST + (nsects + spc - 1) / spc;
+	if (nclusters > 0xFF7) /* 16-bit FAT entries */
+	    nbytes = nclusters * 2;
+	else		      /* 12-bit FAT entries */
+	    nbytes = (nclusters * 3 + 1) / 2;
+	spf = (nbytes + bps - 1) / bps;
+	/* Hack for floppies */
+	if (spf < MS_SPF)
+	    spf = MS_SPF;
+
+    }
+    spf = SetWord(DiskTrack + 0x16, "Sectors per FAT", spf);
     PutWord(DiskTrack + 0x18, spt);
     PutWord(DiskTrack + 0x1a, nsides);
     SetWord(DiskTrack + 0x1c, "Number of hidden sectors", 0);
