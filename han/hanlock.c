@@ -1,6 +1,9 @@
 /*-
- * $Id: hanlock.c,v 1.3 90/01/23 00:36:57 Rhialto Exp Locker: Rhialto $
+ * $Id: hanlock.c,v 1.4 90/01/27 20:22:17 Rhialto Rel $
  * $Log:	hanlock.c,v $
+ * Revision 1.4  90/01/27  20:22:17  Rhialto
+ * Added extra check when freeing MSFileLocks.
+ *
  * Revision 1.3  90/01/23  00:36:57  Rhialto
  * Add an #ifndef READONLY.
  *
@@ -20,10 +23,10 @@
  * not be used or copied without a licence.
 -*/
 
-#include "han.h"
 #include "dos.h"
+#include "han.h"
 
-#ifdef DEBUG
+#ifdef HDEBUG
 #   define	debug(x)  dbprintf x
 #else
 #   define	debug(x)
@@ -42,11 +45,11 @@ struct DirEntry FakeRootDirEntry = {
 	ATTR_VOLUMELABEL,	/* msd_Attributes */
 	{0},			/* msd_Pad1 */
 	0,			/* msd_Time */
-	0x21,			/* msd_Date, 1/1/80 */
+	DATE_MIN,		/* msd_Date, 1/1/80 */
 	0,			/* msd_Cluster */
 	0			/* msd_Filesize */
     },
-    -1, 			/* de_Sector */
+    ROOT_SEC,			/* de_Sector */
     0				/* de_Offset */
 };
 byte		DotDot[1 + 8 + 3] = "..          ";
@@ -60,16 +63,6 @@ CompareNames(dir, name)
 register struct MsDirEntry *dir;
 register byte  *name;
 {
-#ifdef DEBUG
-    if (name[0] == '\\') {
-	extern short	DBEnable;
-
-	DBEnable = name[1] & 0x0F;
-
-	return CMP_END_OF_DIR;
-    }
-#endif
-
     if (dir->msd_Name[0] & DIR_DELETED_MASK)
 	return CMP_FREE_SLOT;
 
@@ -154,7 +147,7 @@ int		createit;
     return NULL;
 }
 
-#ifdef DEBUG
+#ifdef HDEBUG
 
 void
 PrintDirEntry(de)
@@ -193,7 +186,7 @@ ulong		mode;
     if (mode != EXCLUSIVE_LOCK || (dir->de_Msd.msd_Attributes & ATTR_DIR))
 	mode = SHARED_LOCK;
 
-#ifdef DEBUG
+#ifdef HDEBUG
     debug(("MakeLock: "));
     PrintDirEntry(dir);
 #endif
@@ -208,7 +201,7 @@ ulong		mode;
     for (fl = (struct MSFileLock *) LockList->ll_List.mlh_Head;
 	 nextfl = (struct MSFileLock *) fl->msfl_Node.mln_Succ;
 	 fl = nextfl) {
-#ifdef DEBUG
+#ifdef HDEBUG
 	debug(("> "));
 	PrintDirEntry(&fl->msfl_Msd);
 #endif
@@ -276,15 +269,24 @@ ulong		mode;
     /*
      * See if we have an absolute path name (starting at the root).
      */
-
     {
 	register byte  *colon;
 
 	if (colon = index(name, ':')) {
 	    name = colon + 1;
 	    parentdir = RootLock;
+	    /*
+	     * MSH::Command or ::Command?
+	     */
+	    if (name[0] == ':') {
+		HandleCommand(name);
+		error = ERROR_OBJECT_NOT_FOUND;
+
+		return NULL;
+	    }
 	}
     }
+
 
     /*
      * Get a copy of the parent dir lock, so we can walk it over the
@@ -299,7 +301,7 @@ ulong		mode;
     sde.de_Msd = parentdir->msfl_Msd;
     sde.de_Sector = parentdir->msfl_DirSector;
     sde.de_Offset = parentdir->msfl_DirOffset;
-#ifdef DEBUG
+#ifdef HDEBUG
     debug(("pdir %08lx: ", parentdir));
     PrintDirEntry(&parentdir->msfl_Msd);
 #endif
@@ -473,7 +475,7 @@ int
 MSUnLock(fl)
 struct MSFileLock *fl;
 {
-#ifdef DEBUG
+#ifdef HDEBUG
     debug(("MSUnLock %08lx: ", fl));
     PrintDirEntry(&fl->msfl_Msd);
 #endif
@@ -521,24 +523,33 @@ ExamineDirEntry(msd, fib)
 struct MsDirEntry *msd;
 register struct FileInfoBlock *fib;
 {
-    register byte  *end,
-		   *dot;
-
-#ifdef DEBUG
+#ifdef HDEBUG
     debug(("+ "));
     PrintDirEntry(msd);
 #endif
-    strncpy(&fib->fib_FileName[1], msd->msd_Name, 8);
-    /* Keep at least one character, even a space, before the dot */
-    dot = ZapSpaces(&fib->fib_FileName[2], &fib->fib_FileName[1 + 8]);
-    dot[0] = ' ';
-    strncpy(dot + 1, msd->msd_Ext, 3);
-    dot[4] = '\0';
-    end = ZapSpaces(dot, dot + 4);
-    if (end > dot)
-	dot[0] = '.';
+    /*
+     * Special treatment when we examine the root directory
+     */
+    if (fib->fib_DiskKey == (long)ROOT_SEC << 16) {
+	strncpy(&fib->fib_FileName[1], msd->msd_Name, 8 + 3);
+	(void) ZapSpaces(&fib->fib_FileName[2], &fib->fib_FileName[1 + 8 + 3]);
+    } else {
+	register byte  *end,
+		       *dot;
+
+	strncpy(&fib->fib_FileName[1], msd->msd_Name, 8);
+	/* Keep at least one character, even a space, before the dot */
+	dot = ZapSpaces(&fib->fib_FileName[2], &fib->fib_FileName[1 + 8]);
+	dot[0] = ' ';
+	strncpy(dot + 1, msd->msd_Ext, 3);
+	dot[4] = '\0';
+	end = ZapSpaces(dot, dot + 4);
+	if (end > dot)
+	    dot[0] = '.';
+    }
     fib->fib_FileName[0] = strlen(&fib->fib_FileName[1]);
 
+    fib->fib_EntryType =
     fib->fib_DirEntryType =
 	(msd->msd_Attributes & ATTR_DIR) ? FILE_DIR : FILE_FILE;
     fib->fib_Protection = 0;
@@ -554,6 +565,15 @@ register struct FileInfoBlock *fib;
     fib->fib_Comment[0] = 0;
 }
 
+/*
+ * We remember what we should do when we call ExNext with a lock on
+ * a directory (enter or step over it) by a flag in fib_EntryType.
+ * Unfortunately, the Commodore (1.3) List and Dir commands expect
+ * that fib_EntryType contains the information that the documentation
+ * (libraries/dos.h) specifies to be in fib_DirEntrType. Therefore
+ * we use the low bit in fib_DirEntryType instead.
+ */
+
 int
 MSExamine(fl, fib)
 struct MSFileLock *fl;
@@ -563,8 +583,8 @@ register struct FileInfoBlock *fib;
 	fl = RootLock;
 
     fib->fib_DiskKey = ((ulong) fl->msfl_DirSector << 16) | fl->msfl_DirOffset;
-    fib->fib_EntryType = 0;	/* No ExNext called yet */
     ExamineDirEntry(&fl->msfl_Msd, fib);
+    /* No ExNext called yet */
 
     return DOSTRUE;
 }
@@ -581,8 +601,7 @@ register struct FileInfoBlock *fib;
     if (fl == NULL)
 	fl = RootLock;
 
-    if (fib->fib_EntryType == 0) {
-	fib->fib_EntryType = 1;
+    if (!(fib->fib_DirEntryType & 1)) {
 	if (fl->msfl_Msd.msd_Attributes & ATTR_DIR) {
 	    /* Enter subdirectory */
 	    sector = DirClusterToSector(fl->msfl_Msd.msd_Cluster);
@@ -595,24 +614,24 @@ skip:
     }
 
     if (sector != SEC_EOF) {
-	register struct MsDirEntry *msd;
+	struct MsDirEntry msd;
 
 	if (buf = GetSec(sector)) {
-	    msd = (struct MsDirEntry *) (buf + offset);
-	    if (msd->msd_Name[0] == '\0') {
+	    msd = *(struct MsDirEntry *) (buf + offset);
+	    if (msd.msd_Name[0] == '\0') {
 		FreeSec(buf);
 		goto end;
 	    }
-	    if (msd->msd_Name[0] & DIR_DELETED_MASK ||
-		msd->msd_Name[0] == '.' ||      /* Hide "." and ".." */
-		(msd->msd_Attributes & ATTR_VOLUMELABEL)) {
+	    if (msd.msd_Name[0] & DIR_DELETED_MASK ||
+		msd.msd_Name[0] == '.' ||       /* Hide "." and ".." */
+		(msd.msd_Attributes & ATTR_VOLUMELABEL)) {
 		FreeSec(buf);
 		goto skip;
 	    }
-	    OtherEndianMsd(msd);/* Get correct endianness */
+	    OtherEndianMsd(&msd);       /* Get correct endianness */
 	    fib->fib_DiskKey = ((ulong) sector << 16) | offset;
-	    ExamineDirEntry(msd, fib);
-	    OtherEndianMsd(msd);/* Get wrong endianness */
+	    ExamineDirEntry(&msd, fib);
+	    fib->fib_DirEntryType++;	/* Make it odd */
 	    FreeSec(buf);
 
 	    return DOSTRUE;
