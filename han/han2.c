@@ -1,6 +1,20 @@
 /*-
- * $Id: han2.c,v 1.54 1993/06/24 05:12:49 Rhialto Exp $
+ * $Id: han2.c,v 1.55 1993/12/30 23:28:00 Rhialto Rel $
+ *
+ * The code for the messydos file system handler.
+ *
+ * New functions to make 2.0+ stuff work.
+ *
+ * This code is (C) Copyright 1991-1994 by Olaf Seibert. All rights reserved.
+ * May not be used or copied without a licence.
+ *
  * $Log: han2.c,v $
+ * Revision 1.55  1993/12/30  23:28:00	Rhialto
+ * Freeze for MAXON5.
+ * Add MSFormat().
+ * Lots of small changes for LONGNAMES option.
+ * Fix MSSameLock(), because TADM was wrong again.
+ *
  * Revision 1.54  1993/06/24  05:12:49	Rhialto
  * DICE 2.07.54R.
  *
@@ -15,16 +29,6 @@
  *
  * Revision 1.43  91/09/28  01:30:07  Rhialto
  * Preliminary - not functional yet
- *
- *
- * HAN2.C
- *
- * The code for the messydos file system handler.
- *
- * New functions to make 2.0 stuff work.
- *
- * This code is (C) Copyright 1991-1993 by Olaf Seibert. All rights reserved.
- * May not be used or copied without a licence.
 -*/
 
 #include "han.h"
@@ -33,7 +37,7 @@
 
 #ifdef ACTION_SAME_LOCK      /* Do we have 2.0 includes? */
 
-#ifdef HDEBUG
+#if HDEBUG
 #   include "syslog.h"
 #else
 #   define	debug(x)
@@ -48,6 +52,7 @@ Prototype long	MSSetFileSize(struct MSFileHandle *msfh, long pos, long mode);
 Prototype long	MSChangeModeLock(struct MSFileLock *object, long newmode);
 Prototype long	MSChangeModeFH(struct MSFileHandle *object, long newmode);
 Prototype long	MSFormat(char *vol, long type);
+Prototype long	MSSerializeDisk(void);
 
 /*
  * We are taking great care to share lock structures between locks on
@@ -200,7 +205,11 @@ long		mode;
     }
 
     msfl->msfl_Msd.msd_Filesize = pos;
+#if CREATIONDATE_ONLY
+    DirtyFileLock(msfl);
+#else
     UpdateFileLock(msfl);
+#endif
     AdjustSeekPos(msfh);
 
     return DOSTRUE;
@@ -380,6 +389,7 @@ MSFormat(char *vol, long type)
     byte	   *sec;
     int 	    n;
     int 	    i, j;
+    ULONG	    success = DOSFALSE;
 
     CheckDriveType();
     Disk = DefaultDisk;
@@ -389,12 +399,12 @@ MSFormat(char *vol, long type)
     sec = EmptySec(n);
     memset(sec, 0, DefaultDisk.bps);
 
-    CopyMem(sec, BootBlock, sizeof(BootBlock));
+    CopyMem(BootBlock, sec, sizeof(BootBlock));
 
     debug(("%d sectors on disk, %d per track\n",
 	   DefaultDisk.nsects, DefaultDisk.spt));
 
-	  *(sec + 0x00) = 0x00;
+	  *(sec + 0x00) = 0x00; 	/* Not bootable. */
 
     PutWord(sec + 0x0b,   DefaultDisk.bps);
 	  *(sec + 0x0d) = DefaultDisk.spc;
@@ -437,10 +447,9 @@ MSFormat(char *vol, long type)
     }
 
     /* Clear entire root directory. */
-    j = n;
     for (i = (DefaultDisk.ndirs*MS_DIRENTSIZE + DefaultDisk.bps-1) / DefaultDisk.bps;
 	 i > 0; i--) {
-	debug(("MSFormat: getting root dir sector\n"));
+	debug(("MSFormat: getting root dir sector %d\n", n));
 	sec = EmptySec(n++);
 	memset(sec, 0, DefaultDisk.bps);
 	MarkSecDirty(sec);
@@ -456,16 +465,44 @@ MSFormat(char *vol, long type)
 
 	Inhibited = 0;
 	Interleave &= ~NICE_TO_DFx;
-	MSUpdate(1);    /* Normally implied by DiskChange(), but because we
+	MSUpdate(1);	/* Normally implied by DiskChange(), but because we
 			 * may be Inhibit()ed, this may not happen. */
 	DiskChange();
 	if (RootLock)
-	    MSRelabel(vol);
+	    success = MSRelabel(vol);
 	else
 	    debug(("*** No root lock yet!\n"));
 	Inhibited = old_inhibited;
 	Interleave = old_interleave;
+	DiskChange();
     }
+
+    return success;
+}
+
+long
+MSSerializeDisk(void)
+{
+    int 	    old_inhibited = Inhibited;
+    long	    old_interleave = Interleave;
+    ULONG	    success = DOSFALSE;
+
+    Inhibited = 0;
+    Interleave &= ~NICE_TO_DFx;
+    DiskChange();
+    if (RootLock) {
+	char name[L_8 + L_3 + 1];
+	strncpy(name, Disk.vollabel.de_Msd.msd_Name, L_8 + L_3);
+
+	/* Relabel with the same name... ugly. */
+	success = MSRelabel(name);
+    } else
+	debug(("*** No root lock yet!\n"));
+    Inhibited = old_inhibited;
+    Interleave = old_interleave;
+    DiskChange();
+
+    return success;
 }
 
 #endif /* ACTION_COMPARE_LOCK */
