@@ -1,0 +1,41 @@
+head	1.1;
+access;
+symbols;
+locks;
+comment	@ * @;
+
+
+1.1
+date	94.10.24.20.36.30;	author Rhialto;	state Exp;
+branches;
+next	;
+
+
+desc
+@Shell command to send a message to syslogd.
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@/*-
+ * $Id$
+ * $Log$
+ *
+ * LOG A MESSAGE
+-*/
+
+#include "syslog.h"
+
+main(argc, argv)
+int		argc;
+char	      **argv;
+{
+    initsyslog();
+    syslog0("%s: %s\n", argv[0], argv[1]);
+    uninitsyslog();
+}
+@

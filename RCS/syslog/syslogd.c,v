@@ -1,0 +1,493 @@
+head	1.1;
+access;
+symbols;
+locks;
+comment	@ * @;
+
+
+1.1
+date	94.10.24.20.36.30;	author Rhialto;	state Exp;
+branches;
+next	;
+
+
+desc
+@The system log deamon.
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@/*-
+ * $Id$
+ * $Log$
+ *
+ * DEBUGGING LOG DEAMON
+-*/
+
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+#ifndef EXEC_TASKS_H
+#include <exec/tasks.h>
+#endif
+#ifndef EXEC_MEMORY_H
+#include <exec/memory.h>
+#endif
+#ifndef LIBRARIES_DOSEXTENS_H
+#include <libraries/dosextens.h>
+#endif
+#include <clib/exec_protos.h>
+#include <clib/dos_protos.h>
+#include "syslog_private.h"
+
+Local char *TaskName(struct Process *task);
+Local void Logger(void);
+Local struct LogPort *CreateLogPort(void);
+Local void DeleteLogPort(struct LogPort *logport);
+Local void OpenFile(int number, char *name);
+Local void CloseFile(int number);
+Local void CloseFiles(void);
+Local void ShowFile(int number);
+Local void ShowFiles(void);
+Local void putgetmsg(struct LogMsg *msg);
+Local void QuitLogging(void);
+
+
+#define MODE_READWRITE	    1004L
+#define DISABLE 	    /* Disable(); */
+#define ENABLE		    /* Enable(); */
+
+
+struct LogPort *LogPort;
+char		logportname[] = "syslog";
+int		OurLogPort;
+char		nullstring[] = "(null)";
+
+#ifdef MANX_C
+/*
+ * vsprintf implementatation for Manx C compiler 3.x
+ */
+
+static char    *sbuffer;
+
+static int
+putchr(ch)
+int		ch;
+{
+    return (unsigned char) (*sbuffer++ = ch);
+}
+
+int
+vsprintf(s, fmt, arg)
+char	       *s;
+char	       *fmt;
+void	       *arg;
+{
+    int 	    result,
+		    format();
+
+    sbuffer = s;
+    result = format(putchr, fmt, arg);
+    *sbuffer = '\0';
+
+    return result;
+}
+#endif
+
+/*
+ * TaskName(). Returns the name of a task, including CLI command name
+ * if applicable.
+ *
+ * The result is a static buffer which is overwritten on each call.
+ */
+
+char	       *
+TaskName(task)
+struct Process *task;
+{
+    static char     name[128];
+    char	   *s;
+
+    strncpy(name, "Task ", sizeof(name));
+
+    s = task->pr_Task.tc_Node.ln_Name;
+    if (s == NULL)
+	s = nullstring;
+    strncat(name, s, sizeof(name));
+
+    if (task->pr_Task.tc_Node.ln_Type == NT_PROCESS) {
+	strncpy(name, "Proc", 4);
+	if (task->pr_CLI) {
+	    struct CommandLineInterface *cli;
+	    int 	    len;
+
+	    strncpy(name, "CLI ", 4);
+	    strncat(name, ", ", sizeof(name));
+
+	    cli = (struct CommandLineInterface *) BADDR(task->pr_CLI);
+	    s = (char *) BADDR(cli->cli_CommandName);
+	    if (s) {
+		len = strlen(name) + (unsigned char) *s;
+		s++;
+	    } else {
+		s = nullstring;
+		len = strlen(name) + strlen(s);
+	    }
+	    len++;
+	    if (len > sizeof(name))
+		len = sizeof(name);
+	    strncat(name, s, len);
+	}
+    }
+
+    name[sizeof(name) - 1] = '\0';
+    return name;
+}
+
+
+char		logmessage[512];
+
+void
+Logger()
+{
+    register struct LogMsg *msg;
+    struct Process *sigtask;
+    int 	    done;
+    long	    len;
+
+
+    done = 0;
+    while (!done) {
+	WaitPort(&LogPort->lp_MsgPort);
+	msg = (struct LogMsg *) GetMsg(&LogPort->lp_MsgPort);
+	sigtask = (struct Process *)msg->lm_Msg.mn_ReplyPort;
+
+	switch (msg->lm_Msg.mn_Length) {
+	case SYSLOG_PRINT:
+	    sprintf(logmessage, "%08lx: ", sigtask);
+	    len = 10 + vsprintf(logmessage + 10,
+				msg->lm_Format, msg->lm_Args);
+
+	    break;
+	case SYSLOG_START:
+	    LogPort->lp_OpenCount++;
+	    len = sprintf(logmessage, "%08lx start (%s)\n", sigtask,
+			  TaskName(sigtask));
+	    break;
+	case SYSLOG_END:
+	    LogPort->lp_OpenCount--;
+	    len = sprintf(logmessage, "%08lx end   (%s)\n", sigtask,
+			  TaskName(sigtask));
+	    break;
+	case SYSLOG_QUIT:
+	    if (LogPort->lp_OpenCount == 0) {
+		done = 1;
+	    }
+	    len = sprintf(logmessage, "%08lx quit  (%s) (%s)\n", sigtask,
+			  TaskName(sigtask),
+			  done ? "done" : "not done");
+	    break;
+	default:
+	    len = sprintf(logmessage, "%08lx unknown request %d (%s)\n",
+			  sigtask, msg->lm_Msg.mn_Length,
+			  TaskName(sigtask));
+	    break;
+	}
+	if (len) {
+	    int 	    i;
+	    struct LogFile *lf;
+
+	    for (i = 0, lf = LogPort->lp_LogFile; i < MAXLOGS; i++, lf++) {
+		if ((lf->lf_FileHandle != 0) &&
+		    !(lf->lf_Flags & LF_DISABLED)) {
+		    Write(lf->lf_FileHandle, logmessage, len);
+		}
+	    }
+	}
+	/*
+	 * Sort-of Reply the message to the sender.
+	 */
+
+	msg->lm_Msg.mn_Node.ln_Type = NT_REPLYMSG;
+	Signal((struct Task *)sigtask, DEBUGSIGMASK);
+    }
+
+    RemPort(&LogPort->lp_MsgPort);
+}
+
+struct LogPort *
+CreateLogPort()
+{
+    BYTE	    sigbit;
+    struct LogPort *logport;
+
+    if (logport = (struct LogPort *) FindPort(logportname)) {
+	OurLogPort = 0;
+	return logport;
+    }
+
+    if ((sigbit = AllocSignal(-1L)) == -1) {
+	return NULL;
+    }
+    logport = AllocMem((long) sizeof (*logport), MEMF_CLEAR | MEMF_PUBLIC);
+    if (logport == NULL) {
+	FreeSignal(sigbit);
+	return NULL;
+    }
+    logport->lp_MsgPort.mp_Node.ln_Name = logportname;
+    logport->lp_MsgPort.mp_Node.ln_Pri = 0;
+    logport->lp_MsgPort.mp_Node.ln_Type = NT_MSGPORT;
+
+    logport->lp_MsgPort.mp_Flags = PA_SIGNAL;
+    logport->lp_MsgPort.mp_SigBit = sigbit;
+    logport->lp_MsgPort.mp_SigTask = FindTask(NULL);
+
+    OurLogPort = 1;
+    AddPort(&logport->lp_MsgPort);
+
+    return logport;
+}
+
+void
+DeleteLogPort(logport)
+struct LogPort *logport;
+{
+    struct LogMsg *msg;
+
+    while (msg = GetMsg(&LogPort->lp_MsgPort)) {
+	struct Task    *sigtask;
+
+	sigtask = (struct Task *)msg->lm_Msg.mn_ReplyPort;
+	msg->lm_Msg.mn_Node.ln_Type = NT_REPLYMSG;
+	Signal(sigtask, DEBUGSIGMASK);
+    }
+
+    logport->lp_MsgPort.mp_Node.ln_Type = 0xFF;
+    logport->lp_MsgPort.mp_MsgList.lh_Head = (struct Node *) - 1;
+
+    FreeSignal(logport->lp_MsgPort.mp_SigBit);
+
+    FreeMem(logport, (long) sizeof (*logport));
+}
+
+void
+OpenFile(number, name)
+int		number;
+char	       *name;
+{
+    struct LogFile *lf;
+
+    if (number < 0) {
+	int		i;
+
+	for (i = 0, lf = LogPort->lp_LogFile; i < MAXLOGS; i++, lf++) {
+	    if (lf->lf_FileHandle == NULL) {
+		number = i;
+		break;
+	    }
+	}
+    }
+    if (number >= 0 && number < MAXLOGS) {
+	BPTR		fh;
+
+	lf = &LogPort->lp_LogFile[number];
+	fh = lf->lf_FileHandle;
+	if (fh) {
+	    Close(fh);
+	}
+	strncpy(lf->lf_FileName, name, sizeof(lf->lf_FileName) - 1);
+	fh = Open(name, MODE_READWRITE);
+	if (fh == 0) {
+	    fh = Open(name, MODE_NEWFILE);
+	}
+	if (fh) {
+	    Seek(fh, 0L, OFFSET_END);
+	}
+	lf->lf_FileHandle = fh;
+    }
+}
+
+void
+CloseFile(number)
+int		number;
+{
+    if (number >= 0 && number < MAXLOGS) {
+	BPTR		fh;
+
+	fh = LogPort->lp_LogFile[number].lf_FileHandle;
+	if (fh) {
+	    Close(fh);
+	    LogPort->lp_LogFile[number].lf_FileHandle = 0;
+	}
+    }
+}
+
+void
+CloseFiles()
+{
+    int 	    i;
+
+    for (i = 0; i < MAXLOGS; i++) {
+	CloseFile(i);
+    }
+}
+
+void
+ShowFile(number)
+int		number;
+{
+    struct LogFile *lf;
+
+    if (number >= 0 && number < MAXLOGS) {
+	char *filename;
+
+	lf = &LogPort->lp_LogFile[number];
+	filename = lf->lf_FileName;
+	if (filename == NULL)
+	    filename = nullstring;
+
+	printf("File %2d FileHandle: %8lx Flags: %02lx Name: '%s'\n",
+	       number, lf->lf_FileHandle, lf->lf_Flags, filename);
+    }
+}
+
+void
+ShowFiles()
+{
+    int 	    i;
+
+    for (i = 0; i < MAXLOGS; i++) {
+	ShowFile(i);
+    }
+}
+
+static void
+putgetmsg(msg)
+struct LogMsg *msg;
+{
+    long	    OldSignal;
+
+    msg->lm_Msg.mn_ReplyPort = (void *)FindTask(NULL);
+    /* Get original state of the signal, and clear it */
+    DISABLE();
+    OldSignal = SetSignal(0L, DEBUGSIGMASK);
+    ENABLE();
+    PutMsg(&LogPort->lp_MsgPort, &msg->lm_Msg);
+    for (;;) {
+	Wait(DEBUGSIGMASK);
+	if (msg->lm_Msg.mn_Node.ln_Type == NT_REPLYMSG)
+	    break;
+	/* The signal was not for us, so set it when we're finished */
+	OldSignal = DEBUGSIGMASK;
+    }
+    /* Restore would-have-been state of the signal */
+    SetSignal(OldSignal, DEBUGSIGMASK);
+}
+
+void
+QuitLogging(void)
+{
+    struct LogMsg   logmsg;
+
+    logmsg.lm_Msg.mn_Length = SYSLOG_QUIT;
+
+    putgetmsg(&logmsg);
+}
+
+int
+main(argc, argv)
+int		argc;
+char	      **argv;
+{
+    int 	    ac;
+    char	  **av;
+    char	   *avv;
+    int 	    filenr;
+    int 	    i;
+
+    LogPort = CreateLogPort();
+    if (OurLogPort) {
+	OpenFile(0, "*");
+    }
+
+    ac = --argc;
+    av = ++argv;
+
+    filenr = -1;
+
+    while (ac) {
+	if (av[0][0] == '-') {
+	    avv = &av[0][1];
+	    while (avv[0]) {
+		switch (avv[0]) {
+		case 'c':
+		    i = atoi(&avv[1]);
+		    if (0 < i && i < MAXLOGS) {
+			CloseFile(i);
+		    }
+		    break;
+		case 'd':
+		    i = atoi(&avv[1]);
+		    if (0 <= i && i < MAXLOGS) {
+			LogPort->lp_LogFile[i].lf_Flags ^= LF_DISABLED;
+		    }
+		    break;
+		case 'l':
+		    ShowFiles();
+		    break;
+		case 'q':
+		    if (OurLogPort) {
+			RemPort(&LogPort->lp_MsgPort);
+		    } else {
+			QuitLogging();
+		    }
+		    goto quit;
+		case 'r':
+		    i = atoi(&avv[1]);
+		    if (0 <= i && i < MAXLOGS) {
+			LogPort->lp_LogFile[i].lf_Flags = 0;
+		    }
+		    break;
+		case '-':
+		    filenr = -1;
+		    break;
+		default:
+		    if ('0' <= avv[0] && avv[0] <= '9') {
+			filenr = atoi(avv);
+			goto break_options;
+		    }
+		}
+		avv++;
+	    }
+	} else {
+	    /*
+	     * Assume all other non-option arguments
+	     * are file names to be opened
+	     */
+	    OpenFile(filenr, av[0]);
+	    if (filenr >= 0) {
+		filenr++;
+	    }
+	}
+break_options:
+	av++;
+	ac--;
+    }
+
+    if (OurLogPort) {
+	Logger();
+    }
+
+quit:
+    if (OurLogPort) {
+	CloseFiles();
+	DeleteLogPort(LogPort);
+    }
+
+    return 0;
+}
+@

@@ -1,0 +1,41 @@
+head	1.1;
+access;
+symbols;
+locks;
+comment	@ * @;
+
+
+1.1
+date	94.10.24.20.38.56;	author Rhialto;	state Exp;
+branches;
+next	;
+
+
+desc
+@Public information about the system logger.
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@/*-
+ * $Id$
+ * $Log$
+ *
+ * DEBUGGING LOG DEAMON PUBLIC DEFINITIONS
+-*/
+
+#define Prototype   extern
+#define Local	    static
+
+#ifdef __STDC__
+Prototype void initsyslog(void);
+Prototype void uninitsyslog(void);
+Prototype void syslog0(char *format, ...);
+#endif
+
+#define debug(args) syslog0 args
+@
