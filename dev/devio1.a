@@ -1,10 +1,14 @@
 ;;;;
 ;
-; $Id: devio1.a,v 1.44 91/10/02 21:06:58 Rhialto Exp $
-; $Log:	devio1.a,v $
+; $Id: devio1.a,v 1.46 91/10/06 18:27:12 Rhialto Rel $
+; $Log: devio1.a,v $
+; Revision 1.46  91/10/06  18:27:12  Rhialto
+;
+; Freeze for MAXON
+;
 ; Revision 1.44  91/10/02  21:06:58  Rhialto
 ; Fix bug that sectors with number 0 are accepted and crash.
-; 
+;
 ; Revision 1.43  91/09/28  01:31:11  Rhialto
 ; Split out asm for DICE conversion.
 ;
@@ -101,6 +105,7 @@ _SafeEnableICR: 		    ; the argument is passed as a long for now
 
 	xdef	_IndexIntCode
 _IndexIntCode:
+	lea	custom,a0	    ; not guaranteed already there
 	move.w	#dskdmaoff,Dsklen(a0)
 	move.w	a1,Dsklen(a0)
 	move.w	a1,Dsklen(a0)       ; this enables the DMA
@@ -117,6 +122,7 @@ _IndexIntCode:
 
 	xdef	_DskBlkIntCode
 _DskBlkIntCode:
+	lea	custom,a0	    ; not guaranteed already there
 	move.w	#dskdmaoff,Dsklen(a0)   ; disable disk DMA
 	move.w	#intf_dskblk,Intena(a0) ; disable the interrupt
 	move.w	#intf_dskblk,Intreq(a0) ; clear 'diskblock finished' flag
