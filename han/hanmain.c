@@ -1,9 +1,6 @@
 /*-
- * $Id: hanmain.c,v 1.4 90/01/27 20:13:00 Rhialto Rel $
- * $Log:	hanmain.c,v $
- * Revision 1.4  90/01/27  20:13:00  Rhialto
- * Revision 1.1  89/12/17  20:02:31  Rhialto
- *
+ * $Id: hanmain.c,v 1.5 90/03/11 17:42:29 Rhialto Rel $
+ * $Log$
  *  HANMAIN.C
  *
  *  The code for the messydos file system handler.
@@ -24,9 +21,10 @@
 #   define	debug(x)
 #endif
 
+extern int	CheckBootBlock;
 extern char	DotDot[1 + 8 + 3];
 struct Library *IntuitionBase;
-static char RCSId[] = "Messydos filing system $Revision: 1.4 $ $Date: 90/01/27 20:13:00 $, by Olaf Seibert";
+static char RCSId[] = "Messydos filing system $Revision$ $Date$, by Olaf Seibert";
 
 byte
 ToUpper(ch)
@@ -293,6 +291,7 @@ HanOpenUp()
     IDDiskType = ID_NO_DISK_PRESENT;
     DelayState = DELAY_OFF;
     Disk.bps = MS_BPS;
+    CheckBootBlock = 1;
     InitCacheList();
 
     TimeIOReq = NULL;

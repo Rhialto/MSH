@@ -1,6 +1,7 @@
 
 /*
- *  $Id: dos.h,v 1.2 90/01/27 20:29:53 Rhialto Rel $
+ *  $Id: dos.h,v 1.3 90/03/11 17:45:55 Rhialto Rel $
+ *  $Log$
  */
 
 #ifndef EXEC_TYPES_H
@@ -51,8 +52,14 @@
 #define ACTION_CLOSE	    1007L
 #define ACTION_SEEK	    1008L
 
+#ifndef FIBB_HIDDEN
 #define FIBB_HIDDEN 7L
 #define FIBF_HIDDEN (1L<<FIBB_HIDDEN)
+#endif
+
+#ifndef DE_DOSTYPE
+#define DE_DOSTYPE	    16L
+#endif
 
 #define CTOB(x) (void *)(((long)(x))>>2)    /*  BCPL conversion */
 #define BTOC(x) (void *)(((long)(x))<<2)

@@ -1,12 +1,6 @@
 /*-
- * $Id: support.c,v 1.2 90/02/03 17:01:19 Rhialto Rel $
+ * $Id: support.c,v 1.3 90/03/11 17:44:51 Rhialto Rel $
  * $Log:	support.c,v $
- * Revision 1.2  90/02/03  17:01:19  Rhialto
- * Add error checking in dosalloc()
- *
- * Revision 1.1  89/12/17  19:57:50  Rhialto
- * Initial revision
- *
 -*/
 
 #include "dos.h"

@@ -1,15 +1,6 @@
 /*-
- * $Id: device.c,v 1.5 90/01/27 20:34:43 Rhialto Rel $
- * $Log:	device.c,v $
- * Revision 1.5  90/01/27  20:34:43  Rhialto
- * Commented out #undef DEBUG
- *
- * Revision 1.4  90/01/23  00:24:50  Rhialto
- * io_Error=0 for immediate commands
- *
- * Revision 1.3  89/12/17  21:29:37  Rhialto
- * Revision 1.1  89/12/17  20:03:55  Rhialto
- *
+ * $Id: device.c,v 1.6 90/03/11 17:42:06 Rhialto Rel $
+ * $Log$
  * DEVICE.C
  *
  * The messydisk.device code that makes it a real Exec .device.
@@ -66,7 +57,7 @@ _RomTag:
 /* INDENT ON */
 
 char		DevName[] = "messydisk.device";
-char		idString[] = "messydisk.device $Revision: 1.5 $ $Date: 90/01/27 20:34:43 $\r\n";
+char		idString[] = "messydisk.device $Revision: 1.6 $ $Date: 90/03/11 17:42:06 $\r\n";
 
 /*
  * -30-6*X  Library vectors:

@@ -1,16 +1,6 @@
 /*-
- * $Id: pack.c,v 1.3 90/02/03 17:02:05 Rhialto Rel $
- * $Log:	pack.c,v $
- * Revision 1.3  90/02/03  17:02:05  Rhialto
- * Add error checking wrt dosalloc()
- *
- * Revision 1.2  89/12/17  23:06:54  Rhialto
- * Add ACTION_SET_PROTECT
- *
- * Revision 1.1  89/12/17  19:53:24  Rhialto
- * Initial revision
- *
- *
+ * $Id: pack.c,v 1.4 90/03/11 17:45:27 Rhialto Rel $
+ * $Log$
  *  Originally:
  *
  *	DOSDEVICE.C	    V1.10   2 November 1987
@@ -64,6 +54,7 @@ short		Inhibited;	/* Are we inhibited (ACTION_INHIBIT)? */
 long		UnitNr; 	/* From */
 char	       *DevName;	/*   the */
 ulong		DevFlags;	/*     mountlist */
+long		DosType;
 PACKET	       *DosPacket;	/* For the SystemRequest pr_WindowPtr */
 
 void ChangeIntHand(), DiskChange();
@@ -151,6 +142,7 @@ messydoshandler()
 		debug(("Disk.bps %d\n", Disk.bps));
 		get(Disk.lowcyl, DE_LOWCYL);
 		get(Reserved, DE_RESERVEDBLKS);
+		get(DosType, DE_DOSTYPE);
 #undef get
 	    }
 	}
@@ -172,7 +164,7 @@ messydoshandler()
 	PRes2 = 0;
     } else {		    /* couldn't open dos.library  */
 	PRes1 = DOSFALSE;
-	PRes2 = ERROR_NO_FREE_STORE;	/* no better message available */
+	PRes2 = ERROR_DEVICE_NOT_MOUNTED;   /* no better message available */
 	returnpacket(packet);
 	goto exit;		/* exit process    */
     }

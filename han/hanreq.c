@@ -1,9 +1,6 @@
 /*-
- * $Id: hanreq.c,v 1.1 89/12/17 20:03:24 Rhialto Rel Locker: Rhialto $
+ * $Id: hanreq.c,v 1.2 90/03/11 17:46:08 Rhialto Rel $
  * $Log:	hanreq.c,v $
- * Revision 1.1  89/12/17  20:03:24  Rhialto
- * Initial revision
- *
  *  HANREQ.C
  *
  *  The code for the messydos file system handler.
@@ -15,6 +12,7 @@
 -*/
 
 #include "dos.h"
+#include "han.h"
 #include <intuition/intuition.h>
 
 #ifdef HDEBUG
@@ -23,21 +21,23 @@
 #   define	debug(x)
 #endif
 
-struct IntuiText Positive = {
+short		Cancel = 0;	/* Cancel all R/W errors */
+
+static struct IntuiText Positive = {
     AUTOFRONTPEN, AUTOBACKPEN, AUTODRAWMODE,
     AUTOLEFTEDGE, AUTOTOPEDGE, AUTOITEXTFONT,
     (UBYTE *)"Retry",
     AUTONEXTTEXT
 };
 
-struct IntuiText Negative = {
+static struct IntuiText Negative = {
     AUTOFRONTPEN, AUTOBACKPEN, AUTODRAWMODE,
     AUTOLEFTEDGE, AUTOTOPEDGE, AUTOITEXTFONT,
     (UBYTE *)"Cancel",
     AUTONEXTTEXT
 };
 
-struct IntuiText RwError[] = {
+static struct IntuiText RwError[] = {
     {
 	AUTOFRONTPEN, AUTOBACKPEN, AUTODRAWMODE,
 	16,	      5,	   AUTOITEXTFONT,
@@ -79,22 +79,21 @@ struct IntuiText MustReplace[] = {
     },
 };
 
-long AutoRequest();
-extern struct DosPacket *DosPacket;
-extern struct DeviceList *VolNode;
-extern short DiskChanged;
-
 long
 RetryRwError(req)
 struct IOExtTD *req;
 {
     register struct Window *window;
-    struct MsgPort *port;
-    struct Process *proc;
     struct IntuiText *text;
-    long result;
+    long	    result;
+
+    if (Cancel)
+	goto fail;
 
     if (DosPacket != NULL) { /* A user-requested action */
+	struct MsgPort *port;
+	struct Process *proc;
+
 	port = DosPacket->dp_Port;
 	if ((port->mp_Flags & PF_ACTION) != PA_SIGNAL)
 	    goto fail;

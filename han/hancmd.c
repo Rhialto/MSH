@@ -1,7 +1,6 @@
 /*-
- * $Id$
- * $Log$
- *
+ * $Id: hancmd.c,v 1.1 90/03/11 18:10:50 Rhialto Rel $
+ * $Log:	hancmd.c,v $
  * HANCMD.C
  *
  * The code for the messydos file system handler
@@ -20,6 +19,8 @@
 #   define	debug(x)
 #endif
 
+extern int	CheckBootBlock;
+
 void
 HandleCommand(cmd)
 register char  *cmd;
@@ -31,7 +32,9 @@ register char  *cmd;
 	DBEnable = name[2] & 0x0F;
     } else
 #endif
-    if (cmd[1] == 'F') {
+    if (cmd[1] == 'B') {
+	CheckBootBlock = atoi(&cmd[2]);
+    } else if (cmd[1] == 'F') {
 	if (cmd[2] == '+')
 	    DiskIOReq->iotd_Req.io_Flags |= IOMDF_40TRACKS;
 	else if (cmd[2] == '-')

@@ -1,17 +1,6 @@
 /*-
- * $Id: hanlock.c,v 1.4 90/01/27 20:22:17 Rhialto Rel $
+ * $Id: hanlock.c,v 1.5 90/03/11 17:46:19 Rhialto Rel $
  * $Log:	hanlock.c,v $
- * Revision 1.4  90/01/27  20:22:17  Rhialto
- * Added extra check when freeing MSFileLocks.
- *
- * Revision 1.3  90/01/23  00:36:57  Rhialto
- * Add an #ifndef READONLY.
- *
- * Revision 1.2  89/12/17  23:05:33  Rhialto
- * Add MSSetProtect
- *
- * Revision 1.1  89/12/17  20:03:01  Rhialto
- *
  * HANLOCK.C
  *
  * The code for the messydos file system handler
@@ -570,8 +559,8 @@ register struct FileInfoBlock *fib;
  * a directory (enter or step over it) by a flag in fib_EntryType.
  * Unfortunately, the Commodore (1.3) List and Dir commands expect
  * that fib_EntryType contains the information that the documentation
- * (libraries/dos.h) specifies to be in fib_DirEntrType. Therefore
- * we use the low bit in fib_DirEntryType instead.
+ * (libraries/dos.h) specifies to be in fib_DirEntryType. Therefore
+ * we use the low bit in fib_DiskKey instead. Yech.
  */
 
 int
@@ -582,9 +571,10 @@ register struct FileInfoBlock *fib;
     if (fl == NULL)
 	fl = RootLock;
 
-    fib->fib_DiskKey = ((ulong) fl->msfl_DirSector << 16) | fl->msfl_DirOffset;
+    fib->fib_DiskKey = ((ulong) fl->msfl_DirSector << 16) |
+		       fl->msfl_DirOffset +
+		       1;	/* No ExNext called yet */
     ExamineDirEntry(&fl->msfl_Msd, fib);
-    /* No ExNext called yet */
 
     return DOSTRUE;
 }
@@ -601,13 +591,15 @@ register struct FileInfoBlock *fib;
     if (fl == NULL)
 	fl = RootLock;
 
-    if (!(fib->fib_DirEntryType & 1)) {
+    if (offset & 1) {
 	if (fl->msfl_Msd.msd_Attributes & ATTR_DIR) {
 	    /* Enter subdirectory */
 	    sector = DirClusterToSector(fl->msfl_Msd.msd_Cluster);
 	    offset = 0;
-	} else
+	} else {
+	    offset--;		/* Remember, it was odd */
 	    NextDirEntry(&sector, &offset);
+	}
     } else {
 skip:
 	NextDirEntry(&sector, &offset);
@@ -618,21 +610,18 @@ skip:
 
 	if (buf = GetSec(sector)) {
 	    msd = *(struct MsDirEntry *) (buf + offset);
+	    FreeSec(buf);
 	    if (msd.msd_Name[0] == '\0') {
-		FreeSec(buf);
 		goto end;
 	    }
 	    if (msd.msd_Name[0] & DIR_DELETED_MASK ||
 		msd.msd_Name[0] == '.' ||       /* Hide "." and ".." */
 		(msd.msd_Attributes & ATTR_VOLUMELABEL)) {
-		FreeSec(buf);
 		goto skip;
 	    }
 	    OtherEndianMsd(&msd);       /* Get correct endianness */
 	    fib->fib_DiskKey = ((ulong) sector << 16) | offset;
 	    ExamineDirEntry(&msd, fib);
-	    fib->fib_DirEntryType++;	/* Make it odd */
-	    FreeSec(buf);
 
 	    return DOSTRUE;
 	}

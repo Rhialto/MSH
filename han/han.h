@@ -1,16 +1,18 @@
 /*-
- *  $Id: han.h,v 1.4 90/01/27 20:33:22 Rhialto Rel $
- *
+ *  $Id: han.h,v 1.5 90/03/11 17:46:58 Rhialto Rel $
+ *  $Log$
  *  The header file for the MESSYDOS: file system handler
  *
+ *  This code is (C) Copyright 1989 by Olaf Seibert. All rights reserved. May
+ *  not be used or copied without a licence.
 -*/
 
 #include "dev.h"
 
 #define MODE_READWRITE	1004L
 #define MODE_CREATEFILE (1L<<31)
-#define FILE_DIR     2		/* Must be even and > 0 */
-#define FILE_FILE   -2		/* Must be even and < -1 */
+#define FILE_DIR     2
+#define FILE_FILE   -3
 
 /* #define MS_BPS      512	/* Bytes per sector */
 #define MS_SPC	    2		/* Sectors per cluster */
@@ -44,7 +46,7 @@ struct MsDirEntry {
     byte	    msd_Ext[3];
     byte	    msd_Attributes;
     byte	    msd_Pad1[10];
-    word	    msd_Time;	/* in 2s of seconds since begin of the day */
+    word	    msd_Time;
     word	    msd_Date;
     word	    msd_Cluster;
     ulong	    msd_Filesize;
@@ -167,13 +169,18 @@ extern struct IOExtTD *CreateExtIO();
 extern void    *AllocMem(), FreeMem();
 extern byte    *index(), *rindex();
 extern void    *CheckIO();
+extern long	AutoRequest();
 
 /*
  * PACK.C
  */
-extern char *DevName;
-extern long UnitNr;
-extern ulong DevFlags;
+extern char    *DevName;
+extern long	UnitNr;
+extern long	DosType;
+extern ulong	DevFlags;
+extern struct DosPacket *DosPacket;
+extern struct DeviceList *VolNode;
+extern short	DiskChanged;
 
 /*
  * HANMAIN.C
@@ -285,6 +292,12 @@ extern long	MSWrite();
 extern long	MSDeleteFile();
 extern long	MSSetDate();
 extern struct MSFileLock *MSCreateDir();
+
+/*
+ * HANREQ.C
+ */
+extern short	Cancel; 	/* Cancel all R/W errors */
+extern long	RetryRwError();
 
 /*
  * HANCMD.C

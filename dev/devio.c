@@ -1,14 +1,6 @@
 /*-
- * $Id: devio.c,v 1.4 90/02/10 21:42:17 Rhialto Rel $
+ * $Id: devio.c,v 1.5 90/03/11 17:44:05 Rhialto Rel $
  * $Log:	devio.c,v $
- * Revision 1.4  90/02/10  21:42:17  Rhialto
- * Small changes
- *
- * Revision 1.3  90/01/27  20:36:04  Rhialto
- * Variable #sectors/track!
- *
- * Revision 1.1  89/12/17  20:04:11  Rhialto
- *
  * DEVIO.C
  *
  * The messydisk.device code that does the real work.
@@ -62,7 +54,12 @@ byte		MfmEncode[16] = {
 #define RLEN	(TLEN+1324) /* 1 sector extra */
 #define WLEN	(TLEN+20)   /* 20 bytes more than the theoretical track size */
 
-#define INDEXGAP	60  /* All these values are in WORDS */
+#define INDEXGAP	40  /* All these values are in WORDS */
+#define INDXGAP 	12
+#define INDXSYNC	 3
+#define INDXMARK	 1
+#define INDEXGAP2	40
+#define INDEXLEN	(INDEXGAP+INDXGAP+INDXSYNC+INDXMARK+INDEXGAP2)
 
 #define IDGAP2		12  /* Sector header: 22 words */
 #define IDSYNC		 3
@@ -82,14 +79,13 @@ byte		MfmEncode[16] = {
 
 #define BLOCKLEN	(IDLEN+DATALEN)     /* Total: 574 words */
 
-#define TAILGAP 	50
-
 /* INDENT OFF */
 #asm
 
 ; Some hardware data:
 
-SYNC		equ $4489
+INDEXSYNC	equ $5224	; special sync for index
+SYNC		equ $4489	; normal sector sync
 TLEN		equ 12500	; 2 miscrosecs/bit, 200 ms/track -> 100000 bits
 WLEN		equ TLEN+20
 
@@ -97,7 +93,11 @@ WLEN		equ TLEN+20
 ;
 ;   The following lengths are all in unencoded bytes (or encoded words)
 
-INDEXGAP	equ 60
+INDEXGAP	equ 40
+INDXGAP 	equ 12
+INDXSYNC	equ  3
+INDXMARK	equ  1
+INDEXGAP2	equ 40
 
 IDGAP2		equ 12
 IDSYNC		equ  3
@@ -1033,7 +1033,7 @@ DEV	       *dev;
  * Calculate the length between the sectors, given the length of the track
  * and the number of sectors that must fit on it.
  * The proper formula would be
- * (((TLEN/2) - INDEXGAP - TAILGAP) / unit->mu_SectorsPerTrack) - BLOCKLEN;
+ * (((TLEN/2) - INDEXLEN) / unit->mu_SectorsPerTrack) - BLOCKLEN;
  */
 
 word
@@ -1619,10 +1619,27 @@ numsecs set	18
 	move.l	fp+trackbf(sp),a5  ; pointer to unencoded data
 	lea	_MfmEncode,a2	   ; pointer to MFM lookup table
 
-	move.w	#$9254,d0	   ; a track starts with a gap
-	moveq	#INDEXGAP-1,d6	   ; (60 * $4e)
-ingl	move.w	d0,(a0)+           ; mfmencoded = $9254
-	dbf	d6,ingl
+	move.w	#$9254,d0	   ; a track starts with a gap ($4e)
+	moveq	#INDEXGAP-1,d6
+ingl1	move.w	d0,(a0)+           ; mfmencoded = $9254
+	dbf	d6,ingl1
+
+	move.w	#$aaaa,d0	   ; a track index starts with a gap containing
+	moveq	#INDXGAP-1,d6	   ; 12 * 0 (mfm = $aaaa)
+ingl2	move.w	d0,(a0)+
+	dbf	d6,ingl2
+
+	move.w	#INDEXSYNC,d0	   ; The INDEX field begins here, starting
+	move.w	d0,(a0)+           ; with 3 syncs (3 * $c2) with a missing
+	move.w	d0,(a0)+           ; clock bit
+	move.w	d0,(a0)+
+
+	move.w	#$5552,(a0)+       ; INDEX mark ($fc)
+
+	move.w	#$9254,d0	   ; more gap
+	moveq	#INDEXGAP2-1,d6
+ingl3	move.w	d0,(a0)+           ; mfmencoded = $9254
+	dbf	d6,ingl3
 
 	lea	-6(sp),sp          ; Reserve room for SectorHeader
 fp	set	fp+6
@@ -1705,7 +1722,7 @@ dg3l	move.w	d0,(a0)+
 fp	set	fp-6
 
 	move.l	fp+rawbf(sp),d6    ; pointer to mfmencoded buffer
-	add.l	#WLEN,d6	   ; end of encoded buffer
+	add.l	#WLEN-2,d6	   ; end of encoded buffer (-2 for dbf)
 	move.l	a0,d0		   ; (I really want to   sub.l a0,d6 )
 	sub.l	d0,d6		   ; length of the remains
 	lsr.l	#1,d6		   ; turn into words

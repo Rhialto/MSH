@@ -1,4 +1,4 @@
-# $Id: Makefile,v 1.5 90/02/10 22:38:29 Rhialto Rel $
+# $Id: Makefile,v 1.6 90/03/11 17:48:07 Rhialto Rel $
 #
 # Makefile for messydos file system handler and -device, for use with the
 # Manx C compiler version 3.6.
@@ -12,35 +12,36 @@ HSRC =	pack.c support.c hanmain.c hansec.c hanlock.c hanfile.c hanreq.c \
 	hancmd.c date.c dos.h han.h
 DOBJ =	device.o devio.o
 DSRC =	device.c devio.c dev.h device.h
-XSRC =	messyfmt.c Makefile
+XSRC =	messyfmt.c Makefile ignore.c die.c
 #DB =	 -DDEBUG -DHDEBUG
+#DB =	 -DHDEBUG
 #WACK =  -W
 
 #   Options: large code, large data, no startup code, use A4
 .c.o:
 	cc +Iamiga.syms +cdbrx3,5 $(DB) $*.c -o $@
 
-all:	msh messydisk.device
+all:	MessyFileSystem messydisk.device
 utils:	die ignore messyfmt
 doc:	dev.man msh.man
 
 messydisk.device: $(DOBJ)
 	ln -o $@ $(WACK) $(DOBJ) -lcl
 
-msh:	$(HOBJ)
+MessyFileSystem:    $(HOBJ)
 	ln -o $@ $(WACK) $(HOBJ) -lcl
 
-die:	die.c
+Die:	die.c
 	cc +Iamiga.syms +x3,5 die.c
-	ln die.o -lcl
+	ln Die.o -lcl
 
-ignore: ignore.c dev.h device.h
+Ignore: ignore.c dev.h device.h
 	cc +Iamiga.syms +x3,5 ignore.c
-	ln ignore.o -lcl
+	ln Ignore.o -lcl
 
-messyfmt:
+MessyFmt:
 	cc +Iamiga.syms +x3,5 messyfmt.c
-	ln messyfmt.o -lcl
+	ln MessyFmt.o -lcl
 
 dev.man: dev.n
 	nro dev.n >dev.man

@@ -1,12 +1,6 @@
 /*-
- * $Id: date.c,v 1.2 90/02/03 17:00:25 Rhialto Rel $
+ * $Id: date.c,v 1.3 90/03/11 17:47:11 Rhialto Rel $
  * $Log:	date.c,v $
- * Revision 1.2  90/02/03  17:00:25  Rhialto
- * 0x21 -> DATE_MIN
- * 
- * Revision 1.1  89/12/17  20:03:37  Rhialto
- * Initial revision
- *
  * DATE.C
  *
  * Two date conversion routines: DateStamp <-> MSDOS date/time.

@@ -1,24 +1,6 @@
 /*-
- * $Id: hanfile.c,v 1.6 90/02/10 21:38:26 Rhialto Rel $
+ * $Id: hanfile.c,v 1.7 90/03/11 17:45:06 Rhialto Rel $
  * $Log:	hanfile.c,v $
- * Revision 1.6  90/02/10  21:38:26  Rhialto
- * Optimized 12-bit fat unpacking.
- *
- * Revision 1.5  90/01/27  20:26:51  Rhialto
- * Fixed ATTR_ARCHIVED bit in MSWrite()
- *
- * Revision 1.4  90/01/23  02:32:23  Rhialto
- * Add 16-bit FAT support.
- *
- * Revision 1.3  90/01/23  00:39:04  Rhialto
- * Always return -1 on MSWrite error.
- *
- * Revision 1.2  89/12/17  23:04:39  Rhialto
- * Add ATTR_READONLY support
- *
- * Revision 1.1  89/12/17  20:03:11  Rhialto
- * Initial revision
- *
  * HANFILE.C
  *
  * The code for the messydos file system handler.
@@ -640,7 +622,7 @@ byte	       *name;
 	    /*
 	     * Turn the file into a directory.
 	     */
-	    fl->msfl_Msd.msd_Attributes = ATTR_DIRECTORY;
+	    fl->msfl_Msd.msd_Attributes = ATTR_DIRECTORY | ATTR_ARCHIVED;
 	    UpdateFileLock(fl);
 
 	    /*
@@ -665,7 +647,7 @@ byte	       *name;
 	     */
 	    direntry = parentdir->msfl_Msd;
 	    strncpy(direntry.msd_Name, DotDot, 8 + 3);
-	    direntry.msd_Attributes = ATTR_DIRECTORY;
+	    direntry.msd_Attributes = ATTR_DIRECTORY | ATTR_ARCHIVED;
 	    OtherEndianMsd(&direntry);
 	    ((struct MsDirEntry *) sec)[1] = direntry;
 

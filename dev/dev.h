@@ -1,6 +1,6 @@
 /*-
- *  $Id: dev.h,v 1.2 90/01/27 20:38:18 Rhialto Rel $
- *
+ *  $Id: dev.h,v 1.3 90/03/11 17:46:47 Rhialto Rel $
+ *  $Log$
  *  Include file for users of the messydisk.device
 -*/
 

@@ -1,6 +1,6 @@
 /*-
- *  $Id: device.h,v 1.2 90/01/27 20:39:10 Rhialto Rel $
- *
+ *  $Id: device.h,v 1.3 90/03/11 17:43:50 Rhialto Rel $
+ *  $Log$
  *  This code is (C) Copyright 1989 by Olaf Seibert. All rights reserved. May
  *  not be used or copied without a licence.
  *
@@ -8,7 +8,7 @@
 
 #define TRACKS(cyls)    ((cyls) * NUMHEADS)
 #define VERSION 	34L
-#define REVISION	5
+#define REVISION	8
 
 #asm
 VERSION     equ 	34
@@ -85,7 +85,7 @@ MS_SPT_MAX	    equ 10
 
 typedef struct MessyDevice DEV;
 typedef struct MessyUnit   UNIT;
-#define TASKSTACK   2048L
+
 
 #define TASKPRI     5L
 #define TASKSTACK   1024L

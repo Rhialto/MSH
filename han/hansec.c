@@ -1,18 +1,6 @@
 /*-
- * $Id: hansec.c,v 1.4 90/02/10 21:30:54 Rhialto Rel $
+ * $Id: hansec.c,v 1.5 90/03/11 17:43:29 Rhialto Rel $
  * $Log:	hansec.c,v $
- * Revision 1.4  90/02/10  21:30:54  Rhialto
- * Tuned cache a bit.
- *
- * Revision 1.3  90/01/27  20:20:16  Rhialto
- * Sorted sectors when flushing cache
- *
- * Revision 1.2  90/01/23  02:31:50  Rhialto
- * Add 16-bit FAT support.
- *
- * Revision 1.1  89/12/17  20:02:49  Rhialto
- * Initial revision
- *
  * HANSEC.C
  *
  * The code for the messydos file system handler.
@@ -48,18 +36,17 @@ long		IDDiskType;	/* InfoData.id_DiskType */
 struct timerequest *TimeIOReq;	/* For motor-off delay */
 struct MinList	CacheList;	/* Sector cache */
 int		CurrentCache;	/* How many cached buffers do we have */
-int		MaxCache = 5;	/* Maximum amount of cached buffers */
+int		MaxCache;	/* Maximum amount of cached buffers */
 long		CacheBlockSize; /* Size of disk block + overhead */
 ulong		BufMemType;
 int		DelayState;
-
-byte	       *Word8086;
+short		CheckBootBlock; /* Do we need to check the bootblock? */
 
 word
-Get8086Word(offset)
-register int	offset;
+Get8086Word(Word8086)
+register byte  *Word8086;
 {
-    return Word8086[offset] | Word8086[offset + 1] << 8;
+    return Word8086[0] | Word8086[1] << 8;
 }
 
 word
@@ -429,6 +416,12 @@ int		sector;
 {
     struct CacheSec *sec;
 
+#ifdef HDEBUG
+    if (sector == 0) {
+	debug(("************ GetSec(0) ***************\n"));
+    }
+#endif
+
     if (sec = FindSecByNumber(sector)) {
 	sec->sec_Refcount++;
 
@@ -471,6 +464,11 @@ int		sector;
     byte	   *buffer;
     register struct CacheSec *sec;
 
+#ifdef HDEBUG
+    if (sector == 0) {
+	debug(("************ EmptySec(0) ***************\n"));
+    }
+#endif
     if (sec = FindSecByNumber(sector)) {
 	sec->sec_Refcount++;
 
@@ -522,6 +520,11 @@ byte	       *buffer;
     register struct CacheSec *sec;
 
     if (sec = FindSecByBuffer(buffer)) {
+#ifdef HDEBUG
+	if (sec->sec_Number == 0) {
+	    debug(("************ FreeSec(0) ***************\n"));
+	}
+#endif
 	if (--sec->sec_Refcount == 0) { /* Implies not SEC_DIRTY */
 	    if (CurrentCache > MaxCache) {
 		FreeCacheSector(sec);
@@ -571,6 +574,51 @@ WriteFat()
 #endif
 
 int
+AwaitDFx()
+{
+    debug(("AwaitDFx\n"));
+    if (DosType) {
+	static char	dfx[] = "DFx:";
+	void	       *dfxProc,
+		       *DeviceProc();
+	char		xinfodata[sizeof(struct InfoData) + 3];
+	struct InfoData *infoData;
+	int		triesleft;
+
+	dfx[2] = '0' + UnitNr;
+	infoData = (struct InfoData *)(((long)&xinfodata[3]) & ~3L);
+
+	for (triesleft = 10; triesleft; triesleft--) {
+	    debug(("AwaitDFx %d\n", triesleft));
+	    if ((dfxProc = DeviceProc(dfx)) == NULL)
+		break;
+
+	    dos_packet(dfxProc, ACTION_DISK_INFO, CTOB(infoData));
+	    debug(("AwaitDFx %lx\n", infoData->id_DiskType));
+	    if (infoData->id_DiskType == ID_NO_DISK_PRESENT) {
+		/* DFx has not noticed yet. Wait a bit. */
+		WaitIO(TimeIOReq);
+		TimeIOReq->tr_node.io_Command = TR_ADDREQUEST;
+		TimeIOReq->tr_time.tv_secs = 0;
+		TimeIOReq->tr_time.tv_micro = 750000L;	/* .75 s */
+		SendIO(TimeIOReq);
+		continue;
+	    }
+	    if (infoData->id_DiskType == ID_DOS_DISK) {
+		/* DFx: understands it, so it is not for us. */
+		return 1;
+	    }
+	    /*
+	     * All (well, most) other values mean that DFx: does not
+	     * understand it, so we can give it a try.
+	     */
+	    break;
+	}
+    }
+    return 0;
+}
+
+int
 ReadBootBlock()
 {
     int protstatus;
@@ -579,28 +627,43 @@ ReadBootBlock()
     FreeFat();                  /* before disk parameters change */
     TDClear();
 
-    if ((protstatus = TDProtStatus()) >= 0) {
+    if (TDProtStatus() >= 0) {
+	register byte *bootblock;
+	short	    oldCancel;
+
+	oldCancel = Cancel;
+
+	if (AwaitDFx())
+	    goto bad_disk;
+	if ((protstatus = TDProtStatus()) < 0)
+	    goto no_disk;
+
 	TDChangeNum();
 	debug(("Changenumber = %ld\n", DiskIOReq->iotd_Count));
-	if (Word8086 = GetSec(0)) {
+
+	Cancel = 1;
+	if (bootblock = GetSec(0)) {
 	    word bps;
 
-	    /* 8086 ml for a jump */
-	    if (Word8086[0] != 0xE9 && Word8086[0] != 0xEB) {
-		goto nodisk;
+	    if (CheckBootBlock &&
+				/* Atari: empty or 68000 JMP */
+		/*bootblock[0] != 0x00 && bootblock[0] != 0x4E &&*/
+				/* 8086 ml for a jump */
+		bootblock[0] != 0xE9 && bootblock[0] != 0xEB) {
+		goto bad_disk;
 	    }
-	    bps = Get8086Word(0x0b);
-	    Disk.spc = Word8086[0x0d];
-	    Disk.res = Get8086Word(0x0e);
-	    Disk.nfats = Word8086[0x10];
-	    Disk.ndirs = Get8086Word(0x11);
-	    Disk.nsects = Get8086Word(0x13);
-	    Disk.media = Word8086[0x15];
-	    Disk.spf = Get8086Word(0x16);
-	    Disk.spt = Get8086Word(0x18);
-	    Disk.nsides = Get8086Word(0x1a);
-	    Disk.nhid = Get8086Word(0x1c);
-	    FreeSec(Word8086);
+	    bps = Get8086Word(bootblock + 0x0b);
+	    Disk.spc = bootblock[0x0d];
+	    Disk.res = Get8086Word(bootblock + 0x0e);
+	    Disk.nfats = bootblock[0x10];
+	    Disk.ndirs = Get8086Word(bootblock + 0x11);
+	    Disk.nsects = Get8086Word(bootblock + 0x13);
+	    Disk.media = bootblock[0x15];
+	    Disk.spf = Get8086Word(bootblock + 0x16);
+	    Disk.spt = Get8086Word(bootblock + 0x18);
+	    Disk.nsides = Get8086Word(bootblock + 0x1a);
+	    Disk.nhid = Get8086Word(bootblock + 0x1c);
+	    FreeSec(bootblock);
 
 	    /*
 	     *	Maybe the sector size just changed. Who knows?
@@ -660,16 +723,18 @@ ReadBootBlock()
 	    GetFat();
 	} else {
 	    debug(("Can't read %d.\n", DiskIOReq->iotd_Req.io_Error));
-	nodisk:
+	bad_disk:
 	    FreeCacheList();
 	    error = ERROR_NO_DISK;
 	    IDDiskType = ID_UNREADABLE_DISK;
 	    IDDiskState = ID_WRITE_PROTECTED;
 	}
+	Cancel = oldCancel;
     }
 #ifdef HDEBUG
     else debug(("No disk inserted %d.\n", DiskIOReq->iotd_Req.io_Error));
 #endif
+no_disk:
     return 1;
 }
 
