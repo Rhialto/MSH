@@ -1,7 +1,11 @@
 /*-
- * $Id: fmtmain.c,v 1.54 1993/06/24 05:35:45 Rhialto Exp $
+ * $Id: fmtmain.c,v 1.55 1993/12/30 23:28:00 Rhialto Rel $
  * $Log: fmtmain.c,v $
- * Revision 1.54  1993/06/24  05:35:45  Rhialto
+ * Revision 1.55  1993/12/30  23:28:00	Rhialto
+ * Freeze for MAXON5.
+ * New GadToolBox (2.0c), and use font-sensitive option.
+ *
+ * Revision 1.54  1993/06/24  05:35:45	Rhialto
  * changing SPT,NSIDES,NCYLS didn't update SPF.
  * DICE 2.07.54R.
  *
@@ -71,7 +75,7 @@ unsigned long	DevFlags;
 const char	OkString[] = "Ok";
 const char	AbortString[] = "Abort";
 const char	PanicString[] = "Panic!";
-const char	RCSId[] = "\0$VER: MSH-Format $Revision: 1.54 $ $Date: 1993/06/24 05:35:45 $, by Olaf Seibert";
+const char	RCSId[] = "\0$\VER: MSH-Format $Revision: 1.55 $ $Date: 1993/12/30 23:28:00 $, by Olaf Seibert";
 
 void		Show(void);
 void		Hide(void);
@@ -342,7 +346,7 @@ ForgetAllDevices(void)
     struct Node    *n,
 		   *nn;
 
-    n = MSHList.mlh_Head;
+    n = (struct Node *)MSHList.mlh_Head;
     while (nn = n->ln_Succ) {
 	FreeVec(n);
 	n = nn;
@@ -425,7 +429,7 @@ GetNode(struct MinList *l, int num)
     struct Node    *n,
 		   *nn;
 
-    n = l->mlh_Head;
+    n = (struct Node *)l->mlh_Head;
     while (num > 0 && (nn = n->ln_Succ)) {
 	num--;
 	n = nn;
@@ -494,7 +498,7 @@ UpdateStrings(void)
 	return;
     }
 
-    for (i = 0; i < GDX_OK; i++) {      /* 0 == GDX_BPS */
+    for (i = 0; i < GDX_OK; i++) {	/* 0 == GDX_BPS */
 	UpdateString(i);
     }
 }
@@ -523,7 +527,7 @@ IgnoreAbortRetry(char *fmt, ...)
     er.es_TextFormat = fmt;
     va_start(va, fmt);
       return EasyRequestArgs(MainWnd, &er, NULL, va);
-    va_end(va)          /* produces error if it doesn't expand to empty */
+    va_end(va)		/* produces error if it doesn't expand to empty */
 }
 
 int
@@ -532,7 +536,7 @@ Confirm(char *fmt, char *buttons, ...)
     static struct EasyStruct er0 = {
 	sizeof er0, 0, "MSH Format",
 	NULL,
-	NULL,
+	NULL
     };
     struct EasyStruct er;
     va_list	    va;
@@ -542,7 +546,7 @@ Confirm(char *fmt, char *buttons, ...)
     er.es_GadgetFormat = buttons;
     va_start(va, buttons);
       return EasyRequestArgs(MainWnd, &er, NULL, va);
-    va_end(va)          /* produces error if it doesn't expand to empty */
+    va_end(va)		/* produces error if it doesn't expand to empty */
 }
 
 /*
@@ -656,7 +660,7 @@ DoFormat(void)
 	DisplayBeep(NULL);
 	goto abort1;
     }
-    if (!(TDReq = CreateExtIO(port, (long) sizeof (*TDReq)))) {
+    if (!(TDReq = (struct IOExtTD *)CreateExtIO(port, (long) sizeof(*TDReq)))) {
 	DisplayBeep(NULL);
 	goto abort2;
     }
@@ -676,17 +680,17 @@ DoFormat(void)
     }
     CopyMem((char *)BootBlock, DiskTrack, (long) sizeof (BootBlock));
 
-    PutWord(DiskTrack + 0x0b,   BPS);
+    PutWord(DiskTrack + 0x0b,	BPS);
 	  *(DiskTrack + 0x0d) = SPC;
-    PutWord(DiskTrack + 0x0e,   RESERVED);
+    PutWord(DiskTrack + 0x0e,	RESERVED);
 	  *(DiskTrack + 0x10) = NFATS;
-    PutWord(DiskTrack + 0x11,   NDIRS);
-    PutWord(DiskTrack + 0x13,   NSECTS);
+    PutWord(DiskTrack + 0x11,	NDIRS);
+    PutWord(DiskTrack + 0x13,	NSECTS);
 	  *(DiskTrack + 0x15) = MEDIA;
-    PutWord(DiskTrack + 0x16,   SPF);
-    PutWord(DiskTrack + 0x18,   SPT);
-    PutWord(DiskTrack + 0x1a,   NSIDES);
-    PutWord(DiskTrack + 0x1c,   NHID);
+    PutWord(DiskTrack + 0x16,	SPF);
+    PutWord(DiskTrack + 0x18,	SPT);
+    PutWord(DiskTrack + 0x1a,	NSIDES);
+    PutWord(DiskTrack + 0x1c,	NHID);
 
     Break = Confirm("Insert disk to be formatted in\n%s unit %ld",
 	    "Cancel|Format",
@@ -730,16 +734,16 @@ DoFormat(void)
 	diskBlock[0] = 0xF9;
 	diskBlock[1] = 0xFF;
 	diskBlock[2] = 0xFF;
-	diskBlock = MaybeWrite(diskBlock + BPS * SPF);  /* Next FAT */
+	diskBlock = MaybeWrite(diskBlock + BPS * SPF);	/* Next FAT */
     }
 
     /* Clear entire directory */
     diskBlock = MaybeWrite(diskBlock + NDIRS * MS_DIRENTSIZE);
-    MaybeWrite(DiskTrack + TrackSize);  /* Force a write */
+    MaybeWrite(DiskTrack + TrackSize);	/* Force a write */
 
     if (FormatWhat == WHOLE_DISK) {
 	while (Track < EndTrack) {
-	    MaybeWrite(DiskTrack + TrackSize);  /* Write an empty track */
+	    MaybeWrite(DiskTrack + TrackSize);	/* Write an empty track */
 	    if (Break)
 		break;
 	}
@@ -975,7 +979,7 @@ top:
     }
 }
 
-void chkabort(void) {}      /* DICE specific. */
+void chkabort(void) {}	    /* DICE specific. */
 
 int
 main(int argc, char **argv)

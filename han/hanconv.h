@@ -1,6 +1,9 @@
 /*-
- * $Id: hanconv.h,v 1.54 1993/06/24 05:12:49 Rhialto Exp $
+ * $Id: hanconv.h,v 1.55 1993/12/30 23:28:00 Rhialto Rel $
  * $Log: hanconv.h,v $
+ * Revision 1.55  1993/12/30  23:28:00  Rhialto
+ * Freeze for MAXON5.
+ *
  * Revision 1.54  1993/06/24  05:12:49  Rhialto
  * DICE 2.07.54R.
  *
@@ -23,7 +26,7 @@
  * May not be used or copied without a licence.
 -*/
 
-#ifdef CONVERSIONS
+#if CONVERSIONS
 
 typedef void (*ConversionFunc)(byte *from, byte *to, long fromsize);
 extern const ConversionFunc rd_Conv[];

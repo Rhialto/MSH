@@ -1,6 +1,12 @@
 /*-
- *  $Id: han.h,v 1.54 1993/06/24 05:12:49 Rhialto Exp $
- *  $Log: han.h,v $
+ * $Id: han.h,v 1.55 1993/12/30 23:28:00 Rhialto Rel $
+ *
+ * $Log: han.h,v $
+ * Revision 1.55  1993/12/30  23:28:00	Rhialto
+ * Freeze for MAXON5.
+ * Add compile time options LONGNAMES and CREATIONDATE_ONLY.
+ * Move lowcyl from Disk to Partition.
+ *
  * Revision 1.54  1993/06/24  05:12:49	Rhialto
  * DICE 2.07.54R.
  *
@@ -41,6 +47,8 @@
  *  not be used or copied without a licence.
 -*/
 
+#define SysBase_DECLARED
+
 #include "dev.h"
 
 #ifndef CLIB_EXEC_PROTOS_H
@@ -54,15 +62,15 @@ extern struct ExecBase *SysBase;
 
 /*----- Configuration section -----*/
 
-#define CONVERSIONS
-#undef	NONCOMM
-#undef	READONLY
-#undef	INPUTDEV
-#define CREATIONDATE_ONLY
+#define CONVERSIONS		1
+#define NONCOMM 		0
+#define READONLY		0
+#define INPUTDEV		1
+#define CREATIONDATE_ONLY	1
+#define TASKWAIT		1
 
 /*----- End configuration section -----*/
 
-/* #define MODE_READWRITE  1004L */
 #define MODE_CREATEFILE (1L<<31)
 #define FILE_DIR     2
 #define FILE_FILE   -3
@@ -80,8 +88,8 @@ extern struct ExecBase *SysBase;
 
 #define FAT_EOF     0xFFFF	/* end of file FAT entry */
 #define FAT_UNUSED  0		/* unused block */
-#define SEC_EOF     ((word)-1)  /* end of FAT chain */
-#define ROOT_SEC    ((word)-1)  /* where the root directory 'is' */
+#define SEC_EOF     ((word)-1)	/* end of FAT chain */
+#define ROOT_SEC    ((word)-1)	/* where the root directory 'is' */
 
 #define DIR_DELETED	    0xE5
 #define DIR_DELETED_MASK    0x80
@@ -121,7 +129,7 @@ struct MsDirEntry {
 #define 	    L_3 	3
 void  OtherEndianMsd(struct MsDirEntry *msd);
 #define 	    msd_CreationTime(e) ((e).msd_CreationTime)
-#define 	    msd_CreationDate(e) ((e).msd_CreationTime)
+#define 	    msd_CreationDate(e) ((e).msd_CreationDate)
 #endif
 
 #define ATTR_READONLY	    0x01
@@ -215,7 +223,7 @@ struct MSFileHandle {
     struct MSFileLock *msfh_FileLock;
     long	    msfh_SeekPos;
     word	    msfh_Cluster;
-#ifdef CONVERSIONS
+#if CONVERSIONS
     int 	    msfh_Conversion;
 #endif
 };
@@ -252,7 +260,7 @@ struct Cache {
     struct MinList  NumberList;
 };
 
-#define OFFSETOF(tag, member)   ((long)(&((struct tag *)0)->member))
+#define OFFSETOF(tag, member)	((long)(&((struct tag *)0)->member))
 
 struct PrivateInfo {
     short	    Revision;
@@ -261,7 +269,7 @@ struct PrivateInfo {
     short	   *CheckBootBlock;
     short	   *DefaultConversion;
     struct IOExtTD **DiskIOReq;
-#ifdef CONVERSIONS
+#if CONVERSIONS
     short	    NumConversions;
     struct {
 	unsigned char **to, **from;
