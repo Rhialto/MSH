@@ -1,6 +1,9 @@
 /*-
- * $Id$
- * $Log$
+ * $Id: fmtmain.c,v 1.53 92/10/25 02:48:07 Rhialto Rel $
+ * $Log:	fmtmain.c,v $
+ * Revision 1.53  92/10/25  02:48:07  Rhialto
+ * Initial revision.
+ *
  *  FMT MAIN.C
  *
  *  The main file of the MSH formatting utility.
@@ -59,12 +62,12 @@ struct DosList *HandlerDList;
 char	       *HandlerName;
 char	       *DevName;
 long		DevUnit;
-long		DevFlags;
+unsigned long	DevFlags;
 
-char		OkString[] = "Ok";
-char		AbortString[] = "Abort";
-char		PanicString[] = "Panic!";
-char		RCSId[] = "\0$VER: Messydos Format $Revision$ $Date$, by Olaf Seibert";
+const char	OkString[] = "Ok";
+const char	AbortString[] = "Abort";
+const char	PanicString[] = "Panic!";
+const char	RCSId[] = "\0$VER: MSH-Format $Revision: 1.53 $ $Date: 92/10/25 02:48:07 $, by Olaf Seibert";
 
 void		Show(void);
 void		Hide(void);
@@ -777,7 +780,7 @@ Recalculate(int id)
     if (mask & (1L<<GDX_SPT | 1L<<GDX_NSIDES | 1L<<GDX_NCYLS)) {
 	NSECTS = SPT * NSIDES * NCYLS;
 	UpdateString(GDX_NSECTS);
-	mask |= GDX_NSECTS;
+	mask |= 1L<<GDX_NSECTS;
     }
     if (mask & (1L<<GDX_NSECTS | 1L<<GDX_SPC | 1L<<GDX_BPS)) {
     /*
