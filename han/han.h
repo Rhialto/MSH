@@ -1,6 +1,9 @@
 /*-
- *  $Id: han.h,v 1.51 92/04/17 15:39:01 Rhialto Rel $
+ *  $Id: han.h,v 1.52 92/09/06 00:06:08 Rhialto Exp $
  *  $Log:	han.h,v $
+ * Revision 1.52  92/09/06  00:06:08  Rhialto
+ * Add cast to *_EOFs.
+ *
  * Revision 1.51  92/04/17  15:39:01  Rhialto
  * Freeze for MAXON3.
  *
@@ -123,7 +126,7 @@ struct DiskParam {
     word	    ndirsects;	/* # of root directory sectors */
     word	    datablock;	/* first block available for files &c */
     word	    bpc;	/* bytes per cluster */
-    word	    nsectsfree; /* amount of free space */
+    word	    freeclusts; /* amount of free space */
     long	    lowcyl;	/* offset to lowcyl */
     struct DirEntry vollabel;	/* copy of volume label */
     word	    fat16bits;	/* Is the FAT 16 bits/entry? */
@@ -136,6 +139,8 @@ struct DiskParam {
 
 #define NICE_TO_DFx	(1L<<16)/* flag bit in de_Interleave */
 #define PROMISE_NOT_TO_DIE  (1L<<17)/* flag bit in de_Interleave */
+
+#define MSH_MAGIC	'Msh\0' /* Magic word in DosPackets */
 
 /*
  * A pointer to an MSFileLock is put into the fl_Key field of a DOS
@@ -213,16 +218,22 @@ struct Cache {
 #define     DELAY_RUNNING   3	/* Running1 | 2 */
 #define     DELAY_DIRTY     4	/* We have dirty buffers to flush */
 
+struct PrivateInfo {
+    short	    Revision;
+    short	    Size;
+    char	   *RCSId;
+    short	   *CheckBootBlock;
+    short	   *DefaultConversion;
+    struct IOExtTD **DiskIOReq;
+#ifdef CONVERSIONS
+    short	    NumConversions;
+    struct {
+	unsigned char **to, **from;
+    }		    Table[2];
+#endif
+};
 
-/*
-extern long	Wait();
-extern struct MsgPort *CreatePort();
-extern struct IOExtTD *CreateExtIO();
-extern void    *AllocMem(), FreeMem();
-extern byte    *index(), *rindex();
-extern void    *CheckIO();
-extern long	AutoRequest();
-*/
+#define PRIVATE_REVISION    2
 
 #ifndef Prototype
 #define Prototype   extern
