@@ -1,6 +1,9 @@
 /*-
- * $Id: device.c,v 1.3 89/12/17 21:29:37 Rhialto Exp Locker: Rhialto $
+ * $Id: device.c,v 1.4 90/01/23 00:24:50 Rhialto Exp Locker: Rhialto $
  * $Log:	device.c,v $
+ * Revision 1.4  90/01/23  00:24:50  Rhialto
+ * io_Error=0 for immediate commands
+ *
  * Revision 1.3  89/12/17  21:29:37  Rhialto
  * Revision 1.1  89/12/17  20:03:55  Rhialto
  *
@@ -16,7 +19,7 @@
 #include "dev.h"
 #include "device.h"
 
-#undef DEBUG			/**/
+/*#undef DEBUG			/**/
 #ifdef DEBUG
 #   define	debug(x)  dbprintf x
 #else
@@ -60,7 +63,7 @@ _RomTag:
 /* INDENT ON */
 
 char		DevName[] = "messydisk.device";
-char		idString[] = "messydisk.device $Revision: 1.3 $ $Date: 89/12/17 21:29:37 $\r\n";
+char		idString[] = "messydisk.device $Revision: 1.4 $ $Date: 90/01/23 00:24:50 $\r\n";
 
 /*
  * -30-6*X  Library vectors:
@@ -525,8 +528,8 @@ UnitTask()
     {
 	byte		sigbit;
 
-	unit->DiskReplyPort.mp_SigBit = AllocSignal(-1L);
-	unit->DiskReplyPort.mp_Flags = PA_SIGNAL;
+	unit->mu_DiskReplyPort.mp_SigBit = AllocSignal(-1L);
+	unit->mu_DiskReplyPort.mp_Flags = PA_SIGNAL;
 
 	sigbit = AllocSignal(-1L);
 	unit->mu_Port.mp_SigBit = sigbit;
@@ -625,7 +628,7 @@ UNIT	       *unit;
     register struct IOExtTD *tdioreq;
 
     debug(("Trackdisk: %x ", ioreq->iotd_Req.io_Command));
-    tdioreq = unit->DiskIOReq;
+    tdioreq = unit->mu_DiskIOReq;
 
     /*
      * Clone almost the entire io request to relay to the
