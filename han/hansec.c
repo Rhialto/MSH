@@ -1,6 +1,9 @@
 /*-
- * $Id: hansec.c,v 1.32 90/11/23 23:53:51 Rhialto Exp $
+ * $Id: hansec.c,v 1.33 91/01/24 00:09:38 Rhialto Exp $
  * $Log:	hansec.c,v $
+ * Revision 1.33  91/01/24  00:09:38  Rhialto
+ * Constrain behaviour of FindFreeSector.
+ *
  * Revision 1.32  90/11/23  23:53:51  Rhialto
  * Prepare for syslog
  *
@@ -17,7 +20,7 @@
  * Sector-level stuff: read, write, cache, unit conversion.
  * Other interactions (via MyDoIO) with messydisk.device.
  *
- * This code is (C) Copyright 1989,1990 by Olaf Seibert. All rights reserved.
+ * This code is (C) Copyright 1989-1991 by Olaf Seibert. All rights reserved.
  * May not be used or copied without a licence.
 -*/
 
@@ -42,13 +45,17 @@ short		error;		/* To put the error value; for Result2 */
 long		IDDiskState;	/* InfoData.id_DiskState */
 long		IDDiskType;	/* InfoData.id_DiskType */
 struct timerequest *TimeIOReq;	/* For motor-off delay */
-struct MinList	CacheList;	/* Sector cache */
+struct Cache	CacheList;	/* Sector cache */
 int		CurrentCache;	/* How many cached buffers do we have */
 int		MaxCache;	/* Maximum amount of cached buffers */
 long		CacheBlockSize; /* Size of disk block + overhead */
 ulong		BufMemType;
 int		DelayState;
 short		CheckBootBlock; /* Do we need to check the bootblock? */
+
+#define LRU_TO_SEC(lru) ((struct CacheSec *)((char *)lru - \
+			OFFSETOF(CacheSec, sec_LRUNode)))
+#define NN_TO_SEC(nn)   ((struct CacheSec *) nn)
 
 word
 Get8086Word(Word8086)
@@ -187,28 +194,78 @@ word		prev;
  * Put it on the head of the cache list. So if it is not used anymore in a
  * long time, it bubbles to the end of the list, getting a higher chance
  * of being trashed for re-use.
+ * For convenience we remember the preceeding cached sector, for the
+ * common case that we want to insert a new sector.
  */
+
+struct MinNode *PredNumberNode;
 
 struct CacheSec *
 FindSecByNumber(number)
 register int	number;
 {
     register struct CacheSec *sec;
-    register
+    register struct MinNode  *nextsec;
 
     debug(("FindSecByNumber %ld ", (long)number));
 
-    for (sec = (void *) CacheList.mlh_Head;
-	 nextsec = (void *) sec->sec_Node.mln_Succ; sec = nextsec) {
-	if (sec->sec_Number == number) {
-	    debug((" (%lx) %lx\n", (long)sec->sec_Refcount, sec));
-	    Remove(sec);
-	    AddHead(&CacheList, &sec->sec_Node);
-	    return sec;
-	}
+    /*
+     * IF the most recently used sector has a number not higher than
+     * the one we want, start looking there instead of at the
+     * lowest sector number.
+     * Following the LRU chain further is not so effective since it
+     * has a decreasing tendency.
+     */
+    {
+	register struct CacheSec *lrusec;
+
+	if (CurrentCache > 0 &&
+	    (lrusec = LRU_TO_SEC(CacheList.LRUList.mlh_Head),
+	    lrusec->sec_Number <= number)) {
+	    sec = lrusec;
+	} else
+	    sec = NN_TO_SEC(CacheList.NumberList.mlh_Head);
     }
 
-    debug(("; "));
+    while (nextsec = sec->sec_NumberNode.mln_Succ) {
+	if (sec->sec_Number == number) {
+	    debug((" (%lx) %lx\n", (long)sec->sec_Refcount, sec));
+	    Remove(&sec->sec_LRUNode);
+	    AddHead(&CacheList.LRUList, &sec->sec_LRUNode);
+	    return sec;
+	}
+	debug(("cache %ld %lx; ", (long)sec->sec_Number, sec));
+	if (sec->sec_Number > number) {
+	    /* We need to insert before this one */
+	    debug(("insert b4 %ld ", (long)sec->sec_Number));
+	    break;
+	}
+#ifdef notdef	/* This improvement is at best marginal I think */
+	{
+	    register struct CacheSec *lrusec;
+
+	    if ((lrusec = NextNode(&sec->sec_LRUNode)) &&
+		(lrusec = LRU_TO_SEC(lrusec),
+		lrusec->sec_Number > sec->sec_Number) &&
+		lrusec->sec_Number <= number) {
+		sec = lrusec;
+		debug(("++LRU++ "));
+	    } else
+		sec = NN_TO_SEC(nextsec);
+	}
+#else
+	sec = NN_TO_SEC(nextsec);
+#endif
+    }
+
+    /*
+     * If we ran off the end of the list, or if it was empty,
+     * *sec is now the dummy end marker. In all 3 cases we need its
+     * predecessor.
+     */
+
+    PredNumberNode = sec->sec_NumberNode.mln_Pred;
+    debug(("sec = %lx, pred = %lx; ", sec, PredNumberNode));
     return NULL;
 }
 
@@ -228,10 +285,11 @@ byte	       *buffer;
  */
 
 struct CacheSec *
-NewCacheSector()
+NewCacheSector(pred)
+struct MinNode *pred;
 {
     register struct CacheSec *sec;
-    register struct CacheSec *nextsec;
+    register struct MinNode  *nextsec;
 
     debug(("NewCacheSector\n"));
 
@@ -240,14 +298,18 @@ NewCacheSector()
 	    goto add;
 	}
     }
-    for (sec = (void *) CacheList.mlh_TailPred;
-	 nextsec = (void *) sec->sec_Node.mln_Pred; sec = nextsec) {
+    for (sec = LRU_TO_SEC(CacheList.LRUList.mlh_TailPred);
+	 nextsec = sec->sec_LRUNode.mln_Pred;
+	 sec = LRU_TO_SEC(nextsec)) {
 	if ((CurrentCache >= MaxCache) && (sec->sec_Refcount == SEC_DIRTY)) {
 	    FreeCacheSector(sec);       /* Also writes it to disk */
 	    continue;
 	}
-	if (sec->sec_Refcount == 0)     /* Implies not SEC_DIRTY */
-	    return sec;
+	if (sec->sec_Refcount == 0) {    /* Implies not SEC_DIRTY */
+	    Remove(&sec->sec_LRUNode);
+	    Remove(&sec->sec_NumberNode);
+	    goto move;
+	}
     }
 
     sec = AllocMem(CacheBlockSize, BufMemType);
@@ -255,10 +317,13 @@ NewCacheSector()
     if (sec) {
 add:
 	CurrentCache++;
-	AddHead(&CacheList, &sec->sec_Node);
+move:
+	AddHead(&CacheList.LRUList, &sec->sec_LRUNode);
+	Insert(&CacheList.NumberList, &sec->sec_NumberNode, pred);
     } else
 	error = ERROR_NO_FREE_STORE;
 
+    debug(("NewCacheSector: %lx\n", sec));
     return sec;
 }
 
@@ -272,7 +337,8 @@ FreeCacheSector(sec)
 register struct CacheSec *sec;
 {
     debug(("FreeCacheSector %ld\n", (long)sec->sec_Number));
-    Remove(sec);
+    Remove(&sec->sec_LRUNode);
+    Remove(&sec->sec_NumberNode);
 #ifndef READONLY
     if (sec->sec_Refcount & SEC_DIRTY) {
 	PutSec(sec->sec_Number, sec->sec_Data);
@@ -291,7 +357,8 @@ InitCacheList()
 {
     extern struct CacheSec *sec;    /* Of course this does not exist... */
 
-    NewList(&CacheList);
+    NewList(&CacheList.LRUList);
+    NewList(&CacheList.NumberList);
     CurrentCache = 0;
     CacheBlockSize = Disk.bps + sizeof (*sec) - sizeof (sec->sec_Data);
 }
@@ -306,42 +373,9 @@ FreeCacheList()
     register struct CacheSec *sec;
 
     debug(("FreeCacheList, %ld\n", (long)CurrentCache));
-    while (sec = GetHead(&CacheList)) {
-	FreeCacheSector(sec);
+    while (sec = GetHead(&CacheList.NumberList)) {
+	FreeCacheSector(NN_TO_SEC(sec));
     }
-}
-
-/*
- * Do an insertion sort on tosort in the CacheList. Since it changes the
- * location in the list, you must fetch it before calling this routine.
- * The list will become ascending.
- */
-
-void
-SortSec(tosort)
-register struct CacheSec *tosort;
-{
-    register struct CacheSec *sec;
-    struct CacheSec *nextsec;
-    register word   secno;
-
-    secno = tosort->sec_Number;
-    debug(("SortSec %ld: ", (long)secno));
-
-    for (sec = (void *) CacheList.mlh_Head;
-	 nextsec = (void *) sec->sec_Node.mln_Succ; sec = nextsec) {
-	debug(("%ld, ", (long)sec->sec_Number));
-	if (sec == tosort) {
-	    debug(("\n"));
-	    return;			/* No need to move it away */
-	}
-	if (sec->sec_Number > secno)
-	    break;
-    }
-    /* Insert before sec */
-    Remove(tosort);
-    Insert(&CacheList, tosort, sec->sec_Node.mln_Pred);
-    debug(("\n"));
 }
 
 /*
@@ -354,26 +388,18 @@ MSUpdate(immediate)
 int		immediate;
 {
     register struct CacheSec *sec;
-    register struct CacheSec *nextsec;
+    register void  *nextsec;
 
     debug(("MSUpdate\n"));
 
 #ifndef READONLY
     if (DelayState & DELAY_DIRTY) {
 	/*
-	 * First sort all dirty sectors on block number
+	 * Do a backward scan to write them out.
 	 */
-	for (sec = (void *) CacheList.mlh_Head;
-	     nextsec = (void *) sec->sec_Node.mln_Succ; sec = nextsec) {
-	    if (sec->sec_Refcount & SEC_DIRTY) {
-		SortSec(sec);
-	    }
-	}
-	/*
-	 * Then do a second (backward) scan to write them out.
-	 */
-	for (sec = (void *) CacheList.mlh_TailPred;
-	     nextsec = (void *) sec->sec_Node.mln_Pred; sec = nextsec) {
+	for (sec = NN_TO_SEC(CacheList.NumberList.mlh_TailPred);
+	     nextsec = (void *) sec->sec_NumberNode.mln_Pred;
+	     sec = NN_TO_SEC(nextsec)) {
 	    if (sec->sec_Refcount & SEC_DIRTY) {
 		PutSec(sec->sec_Number, sec->sec_Data);
 		sec->sec_Refcount &= ~SEC_DIRTY;
@@ -444,7 +470,7 @@ int		sector;
 
 	return sec->sec_Data;
     }
-    if (sec = NewCacheSector()) {
+    if (sec = NewCacheSector(PredNumberNode)) {
 	register struct IOExtTD *req;
 
 	sec->sec_Number = sector;
@@ -491,7 +517,7 @@ int		sector;
 
 	return sec->sec_Data;
     }
-    if (sec = NewCacheSector()) {
+    if (sec = NewCacheSector(PredNumberNode)) {
 	sec->sec_Number = sector;
 	sec->sec_Refcount = 1;
 

@@ -1,6 +1,9 @@
 /*-
- *  $Id: han.h,v 1.30 90/06/04 23:18:28 Rhialto Rel $
+ *  $Id: han.h,v 1.31 90/11/10 02:50:47 Rhialto Exp $
  *  $Log:	han.h,v $
+ * Revision 1.31  90/11/10  02:50:47  Rhialto
+ * Patch 3a. Introduce disk volume date.
+ *
  * Revision 1.30  90/06/04  23:18:28  Rhialto
  * Release 1 Patch 3
  *
@@ -151,13 +154,19 @@ struct LockList {
 };
 
 struct CacheSec {
-    struct MinNode  sec_Node;
+    struct MinNode  sec_NumberNode;
+    struct MinNode  sec_LRUNode;
     word	    sec_Number;
     word	    sec_Refcount;
     byte	    sec_Data[2];/* Really Disk.bps */
 };
 
 #define SEC_DIRTY   0x8000	/* Bit in sec_Refcount */
+
+struct Cache {
+    struct MinList  LRUList;
+    struct MinList  NumberList;
+};
 
 #define OFFSETOF(tag, member)   ((long)(&((struct tag *)0)->member))
 
@@ -213,7 +222,7 @@ extern short	error;		/* To put the error value; for Result2 */
 extern long	IDDiskState;	/* InfoData.id_DiskState */
 extern long	IDDiskType;	/* InfoData.id_DiskType */
 extern struct timerequest *TimeIOReq;	/* For motor-off delay */
-extern struct MinList CacheList;/* Sector cache */
+extern struct Cache CacheList;/* Sector cache */
 extern int	CurrentCache;	/* How many cached buffers do we have */
 extern int	MaxCache;	/* Maximum amount of cached buffers */
 extern ulong	BufMemType;
