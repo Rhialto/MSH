@@ -1,6 +1,9 @@
 /*-
- * $Id: hanlock.c,v 1.31 90/11/10 02:48:38 Rhialto Exp $
+ * $Id: hanlock.c,v 1.32 90/11/23 23:54:18 Rhialto Exp $
  * $Log:	hanlock.c,v $
+ * Revision 1.32  90/11/23  23:54:18  Rhialto
+ * Prepare for syslog
+ *
  * Revision 1.31  90/11/10  02:48:38  Rhialto
  * Patch 3a. Introduce disk volume date. Update modification time of
  * directories. *.INF -> *.info.
@@ -118,16 +121,27 @@ int		createit;
 	error = ERROR_OBJECT_NOT_FOUND;
 #ifndef READONLY
 	if (createit) {
+	    int 	    clearblocks;
+
 	    if (prevsec < Disk.datablock - 1) { /* Should not be necessary */
 		previous->de_Sector = prevsec + 1;
+		clearblocks = 1;	/* Clear just one root dir block */
 	    } else if (prevsec >= Disk.datablock) {
 		previous->de_Sector = FindFreeSector(prevsec);
+		clearblocks = Disk.spc; /* Clear the entire (implied) cluster */
 	    }
 	    if (previous->de_Sector != SEC_EOF) {
-		sector = EmptySec(previous->de_Sector);
-		setmem(sector, (int) Disk.bps, 0);
-		MarkSecDirty(sector);
-		FreeSec(sector);
+		for (prevsec = previous->de_Sector; clearblocks; clearblocks--) {
+		    sector = EmptySec(prevsec);
+		    setmem(sector, (int) Disk.bps, 0);
+		    MarkSecDirty(sector);
+		    FreeSec(sector);
+		    prevsec++;
+		}
+
+		/*
+		 * Just return a clear directory entry
+		 */
 		setmem(&previous->de_Msd, sizeof (previous->de_Msd), 0);
 
 		return previous;
