@@ -1,6 +1,9 @@
 /*-
- * $Id: pack.c,v 1.4 90/03/11 17:45:27 Rhialto Rel $
- * $Log$
+ * $Id: pack.c,v 1.30a $
+ * $Log:	pack.c,v $
+ * Revision 1.30  90/06/04  23:15:58  Rhialto
+ * Release 1 Patch 3
+ *
  *  Originally:
  *
  *	DOSDEVICE.C	    V1.10   2 November 1987
@@ -12,8 +15,8 @@
  *  This has been stripped and refilled with messydos code
  *  by Olaf Seibert.
  *
- *  This code is (C) Copyright 1989 by Olaf Seibert. All rights reserved. May
- *  not be used or copied without a licence.
+ *  This code is (C) Copyright 1989,1990 by Olaf Seibert. All rights reserved.
+ *  May not be used or copied without a licence.
  *
  *  Please note that we are NOT pure, so if you wish to mount
  *  multiple MSDOS units, you must use different copies of this driver.
@@ -58,7 +61,7 @@ long		DosType;
 PACKET	       *DosPacket;	/* For the SystemRequest pr_WindowPtr */
 
 void ChangeIntHand(), DiskChange();
-void NewVolNodeName(), NewVolNodeDate();
+void NewVolNodeName();
 
 struct Interrupt ChangeInt = {
     { 0 },			/* is_Node */
@@ -728,20 +731,6 @@ NewVolNodeName()
 }
 
 /*
- *  Get the current VolNode a new date, from the last root directory.
- */
-
-void
-NewVolNodeDate()
-{
-    if (VolNode) {
-	ToDateStamp(&VolNode->dl_VolumeDate,
-		    Disk.vollabel.de_Msd.msd_Date,
-		    Disk.vollabel.de_Msd.msd_Time);
-    }
-}
-
-/*
  * Remove Volume entry.  Since DOS uses singly linked lists, we must
  * (ugg) search it manually to find the link before our Volume entry.
  */
@@ -823,7 +812,6 @@ DiskRemoved()
     if (VolNode == NULL) {  /* Could happen via MSDiskRemoved() */
 	return DOSTRUE;
     }
-    NewVolNodeDate();       /* Fetch new date of root directory */
     VolNode = NULL;
     return DOSFALSE;
 }
