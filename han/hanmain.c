@@ -1,6 +1,9 @@
 /*-
- * $Id: hanmain.c,v 1.53 92/10/25 02:25:46 Rhialto Rel $
- * $Log:	hanmain.c,v $
+ * $Id: hanmain.c,v 1.54 1993/06/24 05:12:49 Rhialto Exp $
+ * $Log: hanmain.c,v $
+ * Revision 1.54  1993/06/24  05:12:49	Rhialto
+ * DICE 2.07.54R.
+ *
  * Revision 1.53  92/10/25  02:25:46  Rhialto
  * Expose private info if user asks nicely.
  *
@@ -51,6 +54,10 @@
 #ifdef CONVERSIONS
 #   include "hanconv.h"
 #endif
+#ifdef INPUTDEV
+#include <devices/input.h>
+#include <devices/inputevent.h>
+#endif
 
 #include <string.h>
 #ifdef HDEBUG
@@ -66,13 +73,18 @@ Prototype byte *ToMSName(byte *dest, byte *source);
 Prototype long MSDiskInfo(struct InfoData *infodata);
 Prototype void MSDiskInserted(struct LockList **locks, void *cookie);
 Prototype int MSDiskRemoved(struct LockList **locks);
+Prototype void InputDiskInserted(void);
+Prototype void InputDiskRemoved(void);
 Prototype void HanCloseDown(void);
 Prototype int HanOpenUp(void);
 Prototype long MSRelabel(byte *newname);
 Prototype struct PrivateInfo *PrivateInfo(void);
 
 struct Library *IntuitionBase;
-Local const char RCSId[] = "\0$VER: Messydos filing system $Revision: 1.53 $ $Date: 92/10/25 02:25:46 $, by Olaf Seibert";
+#ifdef INPUTDEV
+struct IOStdReq *InputIOReq;
+#endif
+Local const char RCSId[] = "\0$VER: Messydos filing system $Revision: 1.54 $ $Date: 1993/06/24 05:12:49 $, by Olaf Seibert";
 
 #define CONV_SEP    ';'
 
@@ -119,15 +131,42 @@ ToMSName(dest, source)
 byte	       *dest;
 byte	       *source;
 {
+#if LONGNAMES == 0
     byte	   *dotp;
     byte	   *slashp;
-    int 	    i,
-		    len;
+    int 	    i;
+#endif
+    int 	    len;
 
     if (*source == '/') {       /* parentdir */
-	strncpy(dest, DotDot, 8 + 3);   /* ".." */
+	strncpy(dest, DotDot, L_8 + L_3);   /* ".." */
 	return source;
     }
+#if LONGNAMES
+    /* Pad with nuls instead of spaces */
+    memset(dest, 0, L_8 + L_3);
+
+    for (len = 0;
+	    *source && *source != '/' && *source != CONV_SEP && len < L_8;
+	    len++)
+	*dest++ = *source++;
+
+    if (source[0] == CONV_SEP && source[1]) {
+	int		c;
+
+	source++;
+#ifdef CONVERSIONS
+	c = source[0] & 31;
+	if (c >= ConvFence)
+	    c = ConvNone;
+	ConversionImbeddedInFileName = c;
+#endif /* CONVERSIONS */
+
+	while (*source && *source != '/')
+	    source++;
+    }
+    return source;
+#else
     /*
      * Remove any strictly leading dots. .info -> info, .indent.pro ->
      * indent.pro, .profile -> profile, etc.
@@ -157,13 +196,13 @@ byte	       *source;
     }
 
     len = dotp - source;
-    if (len > 8)
-	len = 8;
+    if (len > L_8)
+	len = L_8;
 
     for (i = 0; i < len; i++) {
 	*dest++ = ToUpper(*source++);
     }
-    for (; i < 8; i++) {
+    for (; i < L_8; i++) {
 	*dest++ = ' ';
     }
 
@@ -194,6 +233,7 @@ byte	       *source;
 	    slashp++;
     }
     return slashp;
+#endif
 }
 
 /*
@@ -209,11 +249,12 @@ struct InfoData *infodata;
     infodata->id_DiskState = IDDiskState;
     infodata->id_DiskType = IDDiskType;
     infodata->id_UnitNumber = UnitNr;
+    debug(("DiskInfo: state %d, type %x\n", IDDiskState, IDDiskType));
 
     infodata->id_VolumeNode = (BPTR) CTOB(VolNode);
     infodata->id_InUse = LockList ? 1 : 0;
 
-    if (IDDiskType == ID_DOS_DISK) {
+    /*if (IDDiskType == ID_DOS_DISK)*/ {
 	infodata->id_NumBlocks = Disk.nsects;
 	infodata->id_NumBlocksUsed = Disk.nsects - Disk.freeclusts * Disk.spc;
 	infodata->id_BytesPerBlock = Disk.bps;
@@ -271,6 +312,7 @@ struct LockList **locks;
     FreeCacheList();
 
     IDDiskType = ID_NO_DISK_PRESENT;
+    IDDiskState = ID_WRITE_PROTECTED;
     *locks = NULL;
 
     if (RootLock == NULL) {
@@ -304,6 +346,38 @@ struct LockList **locks;
     }
 }
 
+#ifdef INPUTDEV
+void
+InputDiskInserted(void)
+{
+    struct InputEvent ie;
+
+    memset(&ie, 0, sizeof(ie));
+    ie.ie_Class = IECLASS_DISKINSERTED;
+
+    InputIOReq->io_Command = IND_WRITEEVENT;
+    InputIOReq->io_Data = &ie;
+    InputIOReq->io_Length = sizeof(ie);
+    DoIO((struct IORequest *)InputIOReq);
+    debug(("IECLASS_DISKINSERTED %d\n", InputIOReq->io_Error));
+}
+
+void
+InputDiskRemoved(void)
+{
+    struct InputEvent ie;
+
+    memset(&ie, 0, sizeof(ie));
+    ie.ie_Class = IECLASS_DISKREMOVED;
+
+    InputIOReq->io_Command = IND_WRITEEVENT;
+    InputIOReq->io_Data = &ie;
+    InputIOReq->io_Length = sizeof(ie);
+    DoIO((struct IORequest *)InputIOReq);
+    debug(("IECLASS_DISKREMOVED %d\n", InputIOReq->io_Error));
+}
+#endif
+
 void
 HanCloseDown()
 {
@@ -318,6 +392,16 @@ HanCloseDown()
 #endif
 #ifdef CONVERSIONS
     ConvCleanUp();
+#endif
+#ifdef INPUTDEV
+
+    if (InputIOReq) {
+	if (InputIOReq->io_Unit) {
+	    CloseDevice((struct IORequest *)InputIOReq);
+	}
+	DeleteExtIO((struct IORequest *)InputIOReq);
+	InputIOReq = NULL;
+    }
 #endif
     if (DiskIOReq) {
 	if (DiskIOReq->iotd_Req.io_Unit) {
@@ -351,8 +435,8 @@ HanOpenUp()
     LockList = NULL;
     RootLock = NULL;
     Fat = NULL;
-    IDDiskState = ID_WRITE_PROTECTED;
     IDDiskType = ID_NO_DISK_PRESENT;
+    IDDiskState = ID_WRITE_PROTECTED;
     DelayCount = 0;
     Disk.bps = MS_BPS;
     CheckBootBlock = CHECK_BOOTJMP | CHECK_SANITY | CHECK_SAN_DEFAULT;
@@ -386,6 +470,17 @@ HanOpenUp()
 					(struct IORequest *)TimeIOReq, 0L))
 	goto abort;
     TimeIOReq->tr_node.io_Flags = IOF_QUICK;	/* For the first WaitIO() */
+
+#ifdef INPUTDEV
+    if (!(InputIOReq = CreateExtIO(DiskReplyPort, (long) sizeof (*InputIOReq)))) {
+	debug(("Failed to CreateExtIO for input.device\n"));
+	goto abort;
+    }
+    if (OpenDevice("input.device", 0, (struct IORequest *)InputIOReq, 0)) {
+	debug(("Failed to Open input.device\n"));
+	goto abort;
+    }
+#endif
 
     IntuitionBase = OpenLibrary("intuition.library", 0L);
     return DOSTRUE;
@@ -437,13 +532,13 @@ byte	       *newname;
 	    error = 0;
 
 	    DateStamp(&dateStamp);
-	    ToMSDate(&Disk.vollabel.de_Msd.msd_CreationDate,
-		     &Disk.vollabel.de_Msd.msd_CreationTime, &dateStamp);
+	    ToMSDate(&msd_CreationDate(Disk.vollabel.de_Msd),
+		     &msd_CreationTime(Disk.vollabel.de_Msd), &dateStamp);
 
 	    Disk.vollabel.de_Msd.msd_Date =
-		Disk.vollabel.de_Msd.msd_CreationDate;
+		msd_CreationDate(Disk.vollabel.de_Msd);
 	    Disk.vollabel.de_Msd.msd_Time =
-		Disk.vollabel.de_Msd.msd_CreationTime;
+		msd_CreationTime(Disk.vollabel.de_Msd);
 
 	    if (new->msfl_DirSector == Disk.rootdir) {
 		RootLock->msfl_DirSector = Disk.rootdir;
@@ -494,11 +589,18 @@ byte	       *newname;
 
 	    s = newname;
 	    d = Disk.vollabel.de_Msd.msd_Name;
-	    for (i = 0; i < 8 + 3; i++) {
+	    for (i = 0; i < L_8 + L_3; i++) {
+#if LONGNAMES
+		if (s[0])
+		    *d++ = *s++;
+		else
+		    *d++ = '\0';
+#else
 		if (s[0])
 		    *d++ = ToUpper(*s++);
 		else
 		    *d++ = ' ';
+#endif
 	    }
 	}
 	RootLock->msfl_Msd = Disk.vollabel.de_Msd;	/* Just for the name and
