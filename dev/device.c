@@ -1,9 +1,7 @@
 /*-
- * $Id: device.c,v 1.1 89/12/17 20:03:55 Rhialto Exp Locker: Rhialto $
+ * $Id: device.c,v 1.2 89/12/17 21:24:31 Rhialto Exp Locker: Rhialto $
  * $Log:	device.c,v $
  * Revision 1.1  89/12/17  20:03:55  Rhialto
- * Initial revision
- *
  *
  *  DEVICE.C
  *
@@ -61,7 +59,7 @@ _RomTag:
 /* INDENT ON */
 
 char		DevName[] = "messydisk.device";
-char		idString[] = "$Id$\r\n";
+char		idString[] = "messydisk.device $Revision$ $Date$\r\n";
 
 /*
  * -30-6*X  Library vectors:

@@ -1,5 +1,5 @@
 /*-
- * $Id: hanmain.c,v 1.1 89/12/17 20:02:31 Rhialto Exp Locker: Rhialto $
+ * $Id: hanmain.c,v 1.2 89/12/17 21:24:47 Rhialto Exp Locker: Rhialto $
  * $Log:	hanmain.c,v $
  * Revision 1.1  89/12/17  20:02:31  Rhialto
  * Initial revision
@@ -27,7 +27,7 @@
 
 extern char	DotDot[1 + 8 + 3];
 struct Library *IntuitionBase;
-static char RCSId = "$Id";
+static char RCSId = "Messydos filing system $Revision$ $Date$, by Olaf Seibert";
 
 byte
 ToUpper(ch)
