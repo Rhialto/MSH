@@ -1,6 +1,14 @@
 /*-
- * $Id: hansec.c,v 1.54 1993/06/24 05:12:49 Rhialto Exp $
+ * $Id: hansec.c,v 1.55 1993/12/30 23:28:00 Rhialto Rel $
  * $Log: hansec.c,v $
+ * Revision 1.55  1993/12/30  23:28:00	Rhialto
+ * Freeze for MAXON5.
+ * Keep two sets of disk geometries: for DD and HD floppies.
+ * Move start of partition out of this: this prevents your harddisk from
+ * resetting the MSH partition to its start on a disk change.
+ * Tell outside programs the track size, through the Mount info.
+ * Free the boot block if you don't understand it.
+ *
  * Revision 1.54  1993/06/24  05:12:49	Rhialto
  * try heuristics for the cache. DICE 2.07.54R.
  *
@@ -45,7 +53,7 @@
  * Sector-level stuff: read, write, cache, unit conversion.
  * Other interactions (via MyDoIO) with messydisk.device.
  *
- * This code is (C) Copyright 1989-1992 by Olaf Seibert. All rights reserved.
+ * This code is (C) Copyright 1989-1994 by Olaf Seibert. All rights reserved.
  * May not be used or copied without a licence.
 -*/
 
@@ -53,7 +61,7 @@
 #include "han.h"
 #include "dos.h"
 
-#ifdef HDEBUG
+#if HDEBUG
 #   include "syslog.h"
 #else
 #   define	debug(x)
@@ -79,7 +87,7 @@ Prototype short CheckBootBlock;
 Prototype word	Get8086Word(byte *Word8086);
 Prototype word	OtherEndianWord(long oew);     /* long should become word */
 Prototype ulong OtherEndianLong(ulong oel);
-#ifndef OtherEndianMsd
+#if !defined(OtherEndianMsd)
 /*Prototype void  OtherEndianMsd (struct MsDirEntry *msd);*/
 #endif
 Prototype word	ClusterToSector(word cluster);
@@ -155,14 +163,14 @@ short		CheckBootBlock; /* Do we need to check the bootblock? */
 
 #define LRU_TO_SEC(lru) ((struct CacheSec *)((char *)lru - \
 			OFFSETOF(CacheSec, sec_LRUNode)))
-#define NN_TO_SEC(nn)   ((struct CacheSec *) nn)
+#define NN_TO_SEC(nn)	((struct CacheSec *) nn)
 
 long dos_packet1(struct MsgPort *port, long type, long arg1);
 
 #if 0
 word
 Get8086Word(Word8086)
-register byte  *Word8086;
+byte  *Word8086;
 {
     return Word8086[0] | Word8086[1] << 8;
 }
@@ -179,18 +187,18 @@ ulong
 OtherEndianLong(oel)
 ulong		oel;
 {
-     return ((oel &       0xff) << 24) |
-	    ((oel &     0xff00) <<  8) |
+     return ((oel &	  0xff) << 24) |
+	    ((oel &	0xff00) <<  8) |
 	    ((oel &   0xff0000) >>  8) |
 	    ((oel & 0xff000000) >> 24);
 
 }
 #endif
 
-#ifndef OtherEndianMsd
+#if !defined(OtherEndianMsd)
 void
 OtherEndianMsd(msd)
-register struct MsDirEntry *msd;
+struct MsDirEntry *msd;
 {
     msd->msd_Date = OtherEndianWord(msd->msd_Date);
     msd->msd_Time = OtherEndianWord(msd->msd_Time);
@@ -201,7 +209,7 @@ register struct MsDirEntry *msd;
 
 word
 ClusterToSector(cluster)
-register word	cluster;
+word	cluster;
 {
     return cluster ? Disk.start + cluster * Disk.spc
 	: 0;
@@ -209,8 +217,8 @@ register word	cluster;
 
 word
 ClusterOffsetToSector(cluster, offset)
-register word	cluster;
-register word	offset;
+word	cluster;
+word	offset;
 {
     return cluster ? Disk.start + cluster * Disk.spc + offset / Disk.bps
 	: 0;
@@ -218,7 +226,7 @@ register word	offset;
 
 word
 DirClusterToSector(cluster)
-register word	cluster;
+word	cluster;
 {
     return cluster ? Disk.start + cluster * Disk.spc
 	: Disk.rootdir;
@@ -226,7 +234,7 @@ register word	cluster;
 
 word
 SectorToCluster(sector)
-register word	sector;
+word	sector;
 {
     return sector ? (sector - Disk.start) / Disk.spc
 	: 0;
@@ -241,7 +249,7 @@ word
 NextCluster(cluster)
 word cluster;
 {
-    register word entry;
+    word entry;
 
     entry = GetFatEntry(cluster);
     if (entry >= 0xFFF7 || entry == 0 || entry > Disk.maxclst)
@@ -264,7 +272,7 @@ word		sector;
 	return sector + 1;
 }
 
-#ifndef READONLY
+#if ! READONLY
 
 /*
  * FindFreeSector is like FindFreeCluster, but communicates in terms of
@@ -299,10 +307,10 @@ struct MinNode *PredNumberNode;
 
 struct CacheSec *
 FindSecByNumber(number)
-register int	number;
+int	number;
 {
-    register struct CacheSec *sec;
-    register struct MinNode  *nextsec;
+    struct CacheSec *sec;
+    struct MinNode  *nextsec;
 
     debug(("FindSecByNumber %ld ", (long)number));
 
@@ -314,7 +322,7 @@ register int	number;
      * has a decreasing tendency.
      */
     {
-	register struct CacheSec *lrusec;
+	struct CacheSec *lrusec;
 
 	if (CurrentCache > 0 &&
 	    (lrusec = LRU_TO_SEC(CacheList.LRUList.mlh_Head),
@@ -340,7 +348,7 @@ register int	number;
 	}
 #ifdef notdef	/* This improvement is at best marginal I think */
 	{
-	    register struct CacheSec *lrusec;
+	    struct CacheSec *lrusec;
 
 	    if ((lrusec = NextNode(&sec->sec_LRUNode)) &&
 		(lrusec = LRU_TO_SEC(lrusec),
@@ -389,8 +397,8 @@ struct CacheSec *
 NewCacheSector(pred)
 struct MinNode *pred;
 {
-    register struct CacheSec *sec;
-    register struct MinNode  *nextsec;
+    struct CacheSec *sec;
+    struct MinNode  *nextsec;
 
     debug(("NewCacheSector\n"));
 
@@ -411,10 +419,10 @@ struct MinNode *pred;
 	    if (&sec->sec_NumberNode == pred)
 		pred = sec->sec_NumberNode.mln_Pred;
 	    debug(("NewCacheSector: dump dirty sec %d\n", sec->sec_Number));
-	    FreeCacheSector(sec);       /* Also writes it to disk */
+	    FreeCacheSector(sec);	/* Also writes it to disk */
 	    continue;
 	}
-	if (sec->sec_Refcount == 0) {   /* Implies not SEC_DIRTY */
+	if (sec->sec_Refcount == 0) {	/* Implies not SEC_DIRTY */
 	    if (&sec->sec_NumberNode == pred) /* Same comment */
 		pred = sec->sec_NumberNode.mln_Pred;
 	    debug(("NewCacheSector: re-use clean sec %d\n", sec->sec_Number));
@@ -449,7 +457,7 @@ move:
 
 void
 FreeCacheSector(sec)
-register struct CacheSec *sec;
+struct CacheSec *sec;
 {
     debug(("FreeCacheSector %ld\n", (long)sec->sec_Number));
 
@@ -458,7 +466,7 @@ register struct CacheSec *sec;
 	sec->sec_Refcount &= SEC_DIRTY;
     }
 
-#ifndef READONLY
+#if ! READONLY
     if (sec->sec_Refcount & SEC_DIRTY) {
 	/*WriteSec(sec->sec_Number, sec->sec_Data);*/
 	MayWriteTrack(sec);
@@ -493,12 +501,13 @@ InitCacheList()
 void
 FreeCacheList()
 {
-    register struct CacheSec *sec;
+    struct CacheSec *sec;
 
     debug(("FreeCacheList, %ld\n", (long)CurrentCache));
     while (sec = GetHead(&CacheList.NumberList)) {
 	FreeCacheSector(NN_TO_SEC(sec));
     }
+    MSUpdate(1);
 }
 
 /*
@@ -512,6 +521,7 @@ MSUpdate(immediate)
 int		immediate;
 {
     int 	    writingfat;
+    int 	    delaycount;
 
     debug(("MSUpdate, imm=%d, count=%d\n", immediate, DelayCount));
 
@@ -521,12 +531,18 @@ int		immediate;
     if (DelayCount == 0)
 	return;
 
-#ifndef READONLY
-    writingfat = DelayCount <= 2 && FatDirty;
+    delaycount = DelayCount;
+#if ! READONLY
+    writingfat = delaycount <= 2 && FatDirty;
 
-    if (DelayCount <= 3 && CacheDirty) {
-	register struct CacheSec *sec;
-	register struct MinNode *nextsec;
+    /* A special case... sigh... */
+    if (delaycount <= 3) {
+	WriteDirtyFileLock(RootLock);
+    }
+
+    if (delaycount <= 3 && CacheDirty) {
+	struct CacheSec *sec;
+	struct MinNode *nextsec;
 	int		lowtrack, hightrack;
 	int		offset;
 
@@ -548,6 +564,7 @@ int		immediate;
 		offset = OFFSETOF(CacheSec, sec_NumberNode.mln_Succ);
 		if (writingfat) {
 		    WriteFat();
+		    writingfat = 0;
 		}
 	    } else {
 		/* closer to high track */
@@ -571,8 +588,8 @@ int		immediate;
 	WriteFat();
 #endif
 
-    if (DelayCount <= 1) {
-#ifndef READONLY
+    if (delaycount <= 1) {
+#if ! READONLY
 	debug(("MSUpdate, do TDUpdate\n"));
 	while (TDUpdate() != 0 && RetryRwError(DiskIOReq))
 	    ;
@@ -601,6 +618,7 @@ int		times;
 	TimeIOReq->tr_time.tv_secs = 2;
 	TimeIOReq->tr_time.tv_micro = 0;
 	SendIO((struct IORequest *)TimeIOReq);
+	debug(("StartTimer(%d) sent TimeIOReq\n", times));
     }
 }
 
@@ -616,7 +634,7 @@ int		sector;
 {
     struct CacheSec *sec;
 
-#ifdef HDEBUG
+#if HDEBUG
     if (sector == 0) {
 	debug(("************ ReadSec(0) ***************\n"));
     }
@@ -628,7 +646,7 @@ int		sector;
 	return sec->sec_Data;
     }
     if (sec = NewCacheSector(PredNumberNode)) {
-	register struct IOExtTD *req;
+	struct IOExtTD *req;
 
 	sec->sec_Number = sector;
 	sec->sec_Refcount = 1;
@@ -648,6 +666,9 @@ int		sector;
 	HeadOnTrack = sector / Disk.spt;
 
 	if (req->iotd_Req.io_Error == 0) {
+#if 1
+	    MayWriteTrack(sec);
+#endif
 	    return sec->sec_Data;
 	}
 	error = ERROR_NOT_A_DOS_DISK;
@@ -657,15 +678,15 @@ int		sector;
     return NULL;
 }
 
-#ifndef READONLY
+#if ! READONLY
 
 byte	       *
 EmptySec(sector)
 int		sector;
 {
-    register struct CacheSec *sec;
+    struct CacheSec *sec;
 
-#ifdef HDEBUG
+#if HDEBUG
     if (sector == 0) {
 	debug(("************ EmptySec(0) ***************\n"));
     }
@@ -690,7 +711,7 @@ WriteSec(sector, data)
 int		sector;
 byte	       *data;
 {
-    register struct IOExtTD *req;
+    struct IOExtTD *req;
 
     debug(("WriteSec %ld\n", (long)sector));
 
@@ -701,6 +722,7 @@ byte	       *data;
 	req->iotd_Req.io_Offset = Partition.offset + (long) sector * Disk.bps;
 	req->iotd_Req.io_Length = Disk.bps;
 	MyDoIO(&req->iotd_Req);
+	/* debug(("WriteSec error %ld\n", req->iotd_Req.io_Error)); */
     } while (req->iotd_Req.io_Error != 0 && RetryRwError(req));
 
     StartTimer(2);
@@ -741,7 +763,8 @@ struct CacheSec *cache;
     for (c = cache; cn = c->sec_NumberNode.mln_Succ; c = NN_TO_SEC(cn)) {
 	if (c->sec_Number >= highsec)
 	    break;
-	if (c->sec_Refcount == SEC_DIRTY) {     /* don't write active sectors */
+	/* don't write active sectors */
+	if (c->sec_Refcount == SEC_DIRTY) {
 	    WriteSec(c->sec_Number, c->sec_Data);
 	    c->sec_Refcount &= ~SEC_DIRTY;
 	}
@@ -762,23 +785,29 @@ byte	       *buffer;
 {
 
     if (buffer) {
-	register struct CacheSec *sec;
+	struct CacheSec *sec;
 
 	sec = FindSecByBuffer(buffer);
-#ifdef HDEBUG
+#if HDEBUG
 	if (sec->sec_Number == 0) {
 	    debug(("************ FreeSec(0) ***************\n"));
 	}
 #endif
 	--sec->sec_Refcount;
 #if 1
-	/* Write out the sector, if doing it now is cheap */
-	if (/*(sec->sec_Refcount == SEC_DIRTY) &&*/
-	    (sec->sec_Number / Disk.spt) == HeadOnTrack) {
-	    /*WriteSec(sec->sec_Number, sec->sec_Data);*/
-	    /*sec->sec_Refcount &= ~SEC_DIRTY;*/
+# if 1
+	/* Write out the track, if doing it now is cheap */
+	if ((sec->sec_Number / Disk.spt) == HeadOnTrack) {
 	    MayWriteTrack(sec);
 	}
+# else
+	/* Write out the sector, if doing it now is cheap */
+	if ((sec->sec_Refcount == SEC_DIRTY) &&
+	    (sec->sec_Number / Disk.spt) == HeadOnTrack) {
+	    WriteSec(sec->sec_Number, sec->sec_Data);
+	    sec->sec_Refcount &= ~SEC_DIRTY;
+	}
+# endif
 #endif
 #ifdef notdef
 	if (sec->sec_Refcount == 0) { /* Implies not SEC_DIRTY */
@@ -802,13 +831,13 @@ byte	       *buffer;
     }
 }
 
-#ifndef READONLY
+#if ! READONLY
 
 void
 MarkSecDirty(buffer)
 byte	       *buffer;
 {
-    register struct CacheSec *sec;
+    struct CacheSec *sec;
 
     if (buffer) {
 	sec = FindSecByBuffer(buffer);
@@ -827,10 +856,11 @@ byte	       *buffer;
 void
 WriteFat()
 {
-    register int    fat,
+    int    fat,
 		    sec;
     int 	    disksec = Disk.res;      /* First FAT, first sector */
 
+    debug(("WriteFat()\n"));
     /* Write all FATs */
     for (fat = 0; fat < Disk.nfats; fat++) {
 	for (sec = 0; sec < Disk.spf; sec++) {
@@ -920,19 +950,17 @@ int
 ReadBootBlock()
 {
     int protstatus;
+    short	oldCancel = Cancel;
 
     debug(("ReadBootBlock\n"));
-    FreeFat();                  /* before disk parameters change */
+    FreeFat();			/* before disk parameters change */
     TDClear();
 
     if (TDProtStatus() >= 0) {
-	register byte *bootblock;
-	short	    oldCancel;
-
-	oldCancel = Cancel;
+	byte *bootblock;
 
 	if (AwaitDFx())
-	    goto bad_disk;
+	    goto unreadable_disk;
 	if ((protstatus = TDProtStatus()) < 0)
 	    goto no_disk;
 
@@ -943,6 +971,8 @@ ReadBootBlock()
 	if (bootblock = ReadSec(0)) {
 	    word	oldbps;
 
+	    IDDiskType = *(ULONG *)bootblock;
+
 	    if ((CheckBootBlock & CHECK_BOOTJMP) &&
 				/* Atari: empty or 68000 JMP */
 		bootblock[0] != 0x00 && bootblock[0] != 0x4E &&
@@ -950,7 +980,9 @@ ReadBootBlock()
 		bootblock[0] != 0xE9 && bootblock[0] != 0xEB) {
 
 		FreeSec(bootblock);
-		IDDiskType = ID_NOT_REALLY_DOS;
+		/* IDDiskType = ID_NOT_REALLY_DOS; */
+		IDDiskType = *(ULONG *)bootblock;
+		debug(("bootblock[0] not good.\n"));
 		goto not_dos_disk;
 	    }
 	    oldbps = Disk.bps;
@@ -978,6 +1010,15 @@ ReadBootBlock()
 	    if (Disk.bps != oldbps) {
 		FreeCacheList();
 		InitCacheList();
+	    }
+
+	    /*
+	     * Check some things no matter what the user wants,
+	     * because they might cause MSH to crash otherwise.
+	     */
+	    if (Disk.bps == 0 || Disk.spc == 0 || Disk.nsides == 0) {
+		debug(("0 disk parameters.\n"));
+		goto insane_disk;
 	    }
 
 	    Disk.ndirsects = (Disk.ndirs * MS_DIRENTSIZE) / Disk.bps;
@@ -1031,6 +1072,7 @@ ReadBootBlock()
 		    Disk.spt < 1 ||
 		    Disk.nsides < 1 ||
 		    Disk.ndirsects < 1) {
+		insane_disk:
 		    if (CheckBootBlock & CHECK_SAN_DEFAULT) {
 			debug(("Bad bootblock; using default values.\n"));
 			oldbps = Disk.bps;
@@ -1038,13 +1080,14 @@ ReadBootBlock()
 			goto recalculate;
 		    } else {
 			IDDiskType = ID_NOT_REALLY_DOS;
+			debug(("Bad bootblock; refusing disk.\n"));
 			goto not_dos_disk;
 		    }
 		}
 	    }
 
 	    IDDiskType = ID_DOS_DISK;
-#ifdef READONLY
+#if READONLY
 	    IDDiskState = ID_WRITE_PROTECTED;
 #else
 	    if (protstatus > 0)
@@ -1061,19 +1104,20 @@ ReadBootBlock()
 	    GetFat();
 	} else {
 	    debug(("Can't read %ld.\n", (long)DiskIOReq->iotd_Req.io_Error));
-	bad_disk:
+	unreadable_disk:
 	    IDDiskType = ID_UNREADABLE_DISK;
 	not_dos_disk:
 	    FreeCacheList();
 	    error = ERROR_NO_DISK;
 	    IDDiskState = ID_VALIDATING;
 	}
-	Cancel = oldCancel;
     }
-#ifdef HDEBUG
+#if HDEBUG
     else debug(("No disk inserted %ld.\n", (long)DiskIOReq->iotd_Req.io_Error));
 #endif
 no_disk:
+
+    Cancel = oldCancel;
     return 1;
 }
 
@@ -1088,11 +1132,11 @@ char	       *name;		/* Should be at least 32 characters */
 struct DateStamp *date;
 {
     debug(("IdentifyDisk\n"));
-    ReadBootBlock();            /* Also sets default vollabel */
+    ReadBootBlock();		/* Also sets default vollabel */
 
     if (IDDiskType == ID_DOS_DISK) {
 	byte	       *dirblock;
-	register struct MsDirEntry *dirent;
+	struct MsDirEntry *dirent;
 
 	if (dirblock = ReadSec(Disk.rootdir)) {
 	    dirent = (struct MsDirEntry *) dirblock;
@@ -1109,7 +1153,6 @@ struct DateStamp *date;
 		dirent++;
 	    }
 	    strncpy(name, Disk.vollabel.de_Msd.msd_Name, L_8 + L_3);
-	    name[L_8 + L_3] = '\0';
 	    ZapSpaces(name, name + L_8 + L_3);
 	    ToDateStamp(date, msd_CreationDate(Disk.vollabel.de_Msd),
 			      msd_CreationTime(Disk.vollabel.de_Msd));
@@ -1132,7 +1175,7 @@ void
 TDRemChangeInt()
 {
     if (DiskChangeReq) {
-	register struct IOExtTD *req = DiskIOReq;
+	struct IOExtTD *req = DiskIOReq;
 
 #if 0				/* V1.2 and V1.3 have a broken
 				 * TD_REMCHANGEINT */
@@ -1158,7 +1201,7 @@ int
 TDAddChangeInt(interrupt)
 struct Interrupt *interrupt;
 {
-    register struct IOExtTD *req = DiskIOReq;
+    struct IOExtTD *req = DiskIOReq;
 
     if (DiskChangeReq) {
 	TDRemChangeInt();
@@ -1171,7 +1214,9 @@ struct Interrupt *interrupt;
 	DiskChangeReq->io_Unit = req->iotd_Req.io_Unit;
 	DiskChangeReq->io_Command = TD_ADDCHANGEINT;
 	DiskChangeReq->io_Data = (void *) interrupt;
+	debug(("Sending TD_ADDCHANGEINT\n"));
 	SendIO((struct IORequest *)DiskChangeReq);
+	debug(("Done sending TD_ADDCHANGEINT\n"));
 
 	return 0;
     }
@@ -1186,7 +1231,7 @@ struct Interrupt *interrupt;
 int
 TDChangeNum()
 {
-    register struct IOExtTD *req = DiskIOReq;
+    struct IOExtTD *req = DiskIOReq;
 
     req->iotd_Req.io_Command = TD_CHANGENUM;
     MyDoIO(&req->iotd_Req);
@@ -1205,7 +1250,7 @@ TDChangeNum()
 int
 TDProtStatus()
 {
-    register struct IOExtTD *req = DiskIOReq;
+    struct IOExtTD *req = DiskIOReq;
 
     req->iotd_Req.io_Command = TD_PROTSTATUS;
     MyDoIO(&req->iotd_Req);
@@ -1223,7 +1268,7 @@ TDProtStatus()
 int
 TDMotorOff()
 {
-    register struct IOExtTD *req = DiskIOReq;
+    struct IOExtTD *req = DiskIOReq;
 
     req->iotd_Req.io_Command = TD_MOTOR;
     req->iotd_Req.io_Length = 0;
@@ -1239,14 +1284,14 @@ TDMotorOff()
 int
 TDClear()
 {
-    register struct IOExtTD *req = DiskIOReq;
+    struct IOExtTD *req = DiskIOReq;
 
     req->iotd_Req.io_Command = CMD_CLEAR;
 
     return MyDoIO(&req->iotd_Req);
 }
 
-#ifndef READONLY
+#if ! READONLY
 /*
  * Write out all internal messydisk buffers to the disk.
  */
@@ -1254,7 +1299,7 @@ TDClear()
 int
 TDUpdate()
 {
-    register struct IOExtTD *req = DiskIOReq;
+    struct IOExtTD *req = DiskIOReq;
 
     req->iotd_Req.io_Command = ETD_UPDATE;
 
@@ -1264,7 +1309,7 @@ TDUpdate()
 
 int
 MyDoIO(ioreq)
-register struct IOStdReq *ioreq;
+struct IOStdReq *ioreq;
 {
     ioreq->io_Flags |= IOF_QUICK;	/* Preserve IOMDF_40TRACKS */
     BeginIO((struct IORequest *)ioreq);
