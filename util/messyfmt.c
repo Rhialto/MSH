@@ -1,6 +1,10 @@
 /*
- * $Id: MessyFmt.c,v 1.42 91/06/14 00:06:25 Rhialto Exp $
+ * $Id: MessyFmt.c,v 1.46 91/10/06 18:25:23 Rhialto Rel $
  * $Log:	MessyFmt.c,v $
+ * Revision 1.46  91/10/06  18:25:23  Rhialto
+ *
+ * Freeze for MAXON
+ *
  * Revision 1.42  91/06/14  00:06:25  Rhialto
  * DICE conversion
  *
@@ -65,11 +69,17 @@ ulong		BootBlock[] = {
 byte	       *DiskTrack;
 long		TrackSize;
 int		Track;
-int		LowTrack;
+int		EndTrack;
 word		nsides;
 struct IOExtTD *TDReq;
 char	       *Device;
 sig_atomic_t	Break;
+int		Ask;
+int		Boot;
+int		Quick;
+int		Argc;
+char	      **Argv;
+char	       *Argv0;
 
 int
 todigit(char   c)
@@ -139,6 +149,9 @@ word
 input(char *question, word defval)
 {
     char	    buf[80];
+
+    if (!Ask)
+	return defval;
 
     printf("%s? [%d] ", question, defval);
     fflush(stdout);
@@ -227,6 +240,47 @@ breakhandler(int signo)
     Break = 1;
 }
 
+void
+usage(void)
+{
+    printf("Usage: %s [ASK/BOOT/QUICK] <unitnr> [<device>]\n"
+	   "Formats a messydos volume in any desired shape.\n",
+	   Argv0);
+    exit(1);
+}
+
+int
+argswitch(char *sw)
+{
+    if (Argc > 1 && stricmp(sw, Argv[1]) == 0) {
+	Argc--;
+	Argv++;
+	return 1;
+    }
+    return 0;
+}
+
+int
+argnum(void)
+{
+    if ((Argc <= 1) || (Argv[1][0] < '0') || (Argv[1][0] > '9'))
+	usage();
+    Argc--;
+    Argv++;
+    return ntoi(Argv[0]);
+}
+
+char		*
+argstring(char *def)
+{
+    if (Argc > 1) {
+	Argc--;
+	Argv++;
+	return Argv[0];
+    }
+    return def;
+}
+
 int
 main(int argc, char **argv)
 {
@@ -243,20 +297,20 @@ main(int argc, char **argv)
 		    ncylinders,
 		    ndirs,
 		    wholeDisk,
-		    clearFat,
-		    endtrack;
+		    clearFat;
 
-    if (argc < 2) {
-	printf("Usage: %s <unitnr> <device>\n"
-	       "Formats a messydos volume in any desired shape.\n",
-	       argv[0]);
-	exit(1);
-    }
-    unitNr = ntoi(argv[1]);
-    if (argc > 2)
-	Device = argv[2];
-    else
-	Device = "messydisk.device";
+    Argc = argc;
+    Argv = argv;
+    Argv0 = argv[0];
+
+    if (Argc < 2)
+	usage();
+
+    Ask = argswitch("ASK");
+    Boot = argswitch("BOOT");
+    Quick = argswitch("QUICK");
+    unitNr = argnum();
+    Device = argstring("messydisk.device");
 
     signal(SIGINT, breakhandler);       /* Do not disturb */
 
@@ -273,7 +327,10 @@ main(int argc, char **argv)
 	goto abort3;
     }
 
-    printf("Preparing to format disk in %s unit #%d.\n\n", Device, (int) unitNr);
+    if (Ask) {
+	printf("Preparing to format disk in %s unit #%d.\n\n",
+	    Device, (int) unitNr);
+    }
     bps = input("Bytes per sector", bps);
     spt = input("Sectors per track", spt);
     TrackSize = bps * spt;
@@ -281,7 +338,7 @@ main(int argc, char **argv)
     Track = input("Starting cylinder", 0);
     Track *= nsides;
     ncylinders = input("Number of cylinders", 80);
-    endtrack = Track + nsides * ncylinders;
+    EndTrack = Track + nsides * ncylinders;
 
     if ((DiskTrack = AllocMem(TrackSize,
 			MEMF_PUBLIC | MEMF_CHIP | MEMF_CLEAR)) == NULL) {
@@ -308,9 +365,35 @@ main(int argc, char **argv)
 			 " (enter 0 for just the bootblock)\n"
 			 " (enter 1 for FAT and root directory as well)", 0);
 
-    if (input("Are you sure? (enter 42)", 0) != 42)
-	goto abort5;
+    if (Ask) {
+	if (input("Are you sure? (enter 42)", 0) != 42)
+	    goto abort5;
+    } else {
+	int ch;
 
+	printf("Insert disk to be formatted in %s unit %d\nand press RETURN",
+		Device, unitNr);
+	fflush(stdout);
+	while ((ch = getchar()) != '\n' && ch != EOF)
+	    ;
+	ch == '\n' || putchar('\n');
+    }
+
+    /*
+     * Now use command line options to modify default values
+     */
+    if (!Ask)
+	wholeDisk = 1;
+    if (Quick) {
+	wholeDisk = 0;
+	clearFat = 1;
+    }
+    if (Boot) {
+	wholeDisk = 0;
+	clearFat = 0;
+    }
+
+    chkabort();
     if (Break)
 	goto abort5;
 
@@ -340,9 +423,8 @@ main(int argc, char **argv)
     diskBlock = MaybeWrite(diskBlock + ndirs * MS_DIRENTSIZE);
     MaybeWrite(DiskTrack + TrackSize);  /* Force a write */
 
-    ncylinders *= nsides;
     if (wholeDisk) {
-	while (Track < ncylinders) {
+	while (Track < EndTrack) {
 	    MaybeWrite(DiskTrack + TrackSize);  /* Write an empty track */
 	    if (Break)
 		break;
