@@ -1,6 +1,9 @@
 /*-
- * $Id: pack.c,v 1.42 91/06/13 23:46:21 Rhialto Exp $
+ * $Id: pack.c,v 1.43 91/09/28 01:35:36 Rhialto Exp $
  * $Log:	pack.c,v $
+ * Revision 1.43  91/09/28  01:35:36  Rhialto
+ * Changed to newer syslog stuff.
+ *
  * Revision 1.42  91/06/13  23:46:21  Rhialto
  * DICE conversion
  *
@@ -51,7 +54,8 @@
 #   define	debug(x)
 #endif
 
-#define MSFL(something)     (struct MSFileLock *)(something)
+#define MSFL(something)     ((struct MSFileLock *)(something))
+#define MSFH(something)     ((struct MSFileHandle *)(something))
 
 /*
  * Since this code might be called several times in a row without being
@@ -76,10 +80,14 @@ char	       *DevName;	/*   the */
 ulong		DevFlags;	/*     mountlist */
 long		DosType;
 PACKET	       *DosPacket;	/* For the SystemRequest pr_WindowPtr */
+long		OpenCount;	/* How many open files/locks there are */
+short		WriteProtect;	/* Are we software-writeprotected? */
+
 
 __stkargs __geta4 void ChangeIntHand(void);
 void NewVolNodeName(void);
 void DiskChange(void);
+BPTR MakeFileLock(struct MSFileLock *msfl, struct FileLock *fl, long mode);
 
 struct Interrupt ChangeInt = {
     { 0 },			/* is_Node */
@@ -98,7 +106,6 @@ messydoshandler(void)
     register PACKET *packet;
     MSG 	   *msg;
     byte	    notdone;
-    long	    OpenCount;	    /* How many open files/locks there are */
 
     /*
      * Initialize all global variables.  SysBase MUST be initialized
@@ -259,14 +266,7 @@ top:
 		    msfl = MSLock(MSFL(lock ? lock->fl_Key : NULL),
 				  buf,
 				  lockmode);
-		    if (msfl) {
-			if (newlock = NewFileLock(msfl, lock)) {
-			    newlock->fl_Access = lockmode;
-			    PRes1 = (long) CTOB(newlock);
-			    OpenCount++;
-			} else
-			    MSUnLock(msfl);
-		    }
+		    PRes1 = MakeFileLock(msfl, lock, lockmode);
 		}
 		break;
 	    case ACTION_RENAME_DISK:	/* BSTR:NewName 	   Bool      */
@@ -331,7 +331,6 @@ top:
 		break;
 	    case ACTION_COPY_DIR:	/* Lock 		   Lock      */
 		{
-		    register struct FileLock *newlock;
 		    struct FileLock *lock;
 		    struct MSFileLock *msfl;
 
@@ -339,15 +338,8 @@ top:
 
 		    msfl = MSDupLock(MSFL(lock ? lock->fl_Key : NULL));
 
-		    if (msfl) {
-			if (newlock = NewFileLock(msfl, lock)) {
-			    newlock->fl_Access =
-				lock ? lock->fl_Access : SHARED_LOCK;
-			    PRes1 = (long) CTOB(newlock);
-			    OpenCount++;
-			} else
-			    MSUnLock(msfl);
-		    }
+		    PRes1 = MakeFileLock(msfl, lock,
+					 lock ? lock->fl_Access : SHARED_LOCK);
 		}
 		break;
 	    case ACTION_SET_PROTECT:	/* -,Lock,Name,Mask	   Bool      */
@@ -364,7 +356,6 @@ top:
 		break;
 	    case ACTION_CREATE_DIR:	/* Lock,Name		Lock	     */
 		{
-		    register struct FileLock *newlock;
 		    struct FileLock *lock;
 		    struct MSFileLock *msfl;
 
@@ -376,14 +367,7 @@ top:
 		    msfl = MSCreateDir(MSFL(lock ? lock->fl_Key : NULL),
 				       buf);
 
-		    if (msfl) {
-			if (newlock = NewFileLock(msfl, lock)) {
-			    newlock->fl_Access = SHARED_LOCK;
-			    PRes1 = (long) CTOB(newlock);
-			    OpenCount++;
-			} else
-			    MSUnLock(msfl);
-		    }
+		    PRes1 = MakeFileLock(msfl, lock, SHARED_LOCK);
 		}
 		break;
 	    case ACTION_EXAMINE_OBJECT: /* Lock,Fib	       Bool	     */
@@ -391,8 +375,10 @@ top:
 		    struct FileLock *lock;
 
 		    lock = BTOC(PArg1);
+		    /*
 		    if (CheckRead(lock))
 			break;
+		    */
 		    PRes1 = MSExamine(MSFL(lock ? lock->fl_Key : NULL),
 				      BTOC(PArg2));
 		}
@@ -421,33 +407,24 @@ top:
 /*	    case ACTION_SET_COMMENT:	/* -,Lock,Name,Comment	   Bool      */
 	    case ACTION_PARENT: /* Lock 		       ParentLock    */
 		{
-		    register struct FileLock *newlock;
 		    struct FileLock *lock;
 		    struct MSFileLock *msfl;
-		    long mode;
 
 		    lock = BTOC(PArg1);
 
 		    msfl = MSParentDir(MSFL(lock ? lock->fl_Key : NULL));
 
-		    if (msfl) {
-			if (newlock = NewFileLock(msfl, lock)) {
-			    newlock->fl_Access = SHARED_LOCK;
-			    PRes1 = (long) CTOB(newlock);
-			    OpenCount++;
-			} else
-			    MSUnLock(msfl);
-		    }
+		    PRes1 = MakeFileLock(msfl, lock, SHARED_LOCK);
 		}
 		break;
 	    case ACTION_INHIBIT:	/* Bool 		   Bool      */
-		if (Inhibited = PArg1) {
-		    DiskRemoved();
-		} else	 /* Fall through to ACTION_DISK_CHANGE: */
-		    goto disk_change;
-	    case ACTION_DISK_CHANGE:	/* ?			   ?	     */
-	    disk_change:
-		DiskChange();
+		if (PArg1) {
+		    if (++Inhibited == 1)
+			DiskRemoved();
+		} else {
+		    if (--Inhibited == 0)
+			DiskChange();
+		}
 		PRes1 = DOSTRUE;
 		break;
 	    case ACTION_SET_DATE: /* -,Lock,Name,CPTRDateStamp	   Bool      */
@@ -463,19 +440,36 @@ top:
 				      (struct DateStamp *)PArg4);
 		}
 		break;
+#ifdef ACTION_SAME_LOCK
+	    case ACTION_SAME_LOCK:  /* Lock1,Lock2		   Result    */
+		{
+		    struct FileLock *fl1, *fl2;
+
+		    fl1 = BTOC(PArg1);
+		    fl2 = BTOC(PArg2);
+		    if (fl1->fl_Task == fl2->fl_Task) {
+			PRes1 = MSSameLock(MSFL(fl1->fl_Key),
+					   MSFL(fl2->fl_Key));
+		    } else {
+			PRes1 = LOCK_DIFFERENT;
+			error = ERROR_DEVICE_NOT_MOUNTED;
+		    }
+		}
+		break;
+#endif
 	    case ACTION_READ:	/* FHArg1,CPTRBuffer,Length	  ActLength  */
-		if (CheckRead(NULL)) {
+		if (CheckLock(MSFH(PArg1)->msfh_FileLock) ||
+		    CheckRead(NULL)) {
 		    PRes1 = -1;
 		} else
-		    PRes1 = MSRead((struct MSFileHandle *)PArg1,
-				   (byte *)PArg2, PArg3);
+		    PRes1 = MSRead(MSFH(PArg1), (byte *)PArg2, PArg3);
 		break;
 	    case ACTION_WRITE:	/* FHArg1,CPTRBuffer,Length	  ActLength  */
-		if (CheckWrite(NULL)) {
+		if (CheckLock(MSFH(PArg1)->msfh_FileLock) ||
+		    CheckWrite(NULL)) {
 		    PRes1 = -1;
 		} else
-		    PRes1 = MSWrite((struct MSFileHandle *)PArg1,
-				    (byte *)PArg2, PArg3);
+		    PRes1 = MSWrite(MSFH(PArg1), (byte *)PArg2, PArg3);
 		break;
 	    case ACTION_OPENRW: 	/* FileHandle,Lock,Name    Bool      */
 	    case ACTION_OPENOLD:	/* FileHandle,Lock,Name    Bool      */
@@ -506,17 +500,117 @@ top:
 		    }
 		}
 		break;
-	    case ACTION_CLOSE:	/* FHArg1			  Bool:TRUE  */
-		MSClose((struct MSFileHandle *)PArg1);
+	    case ACTION_CLOSE:	/* FHArg1			   Bool:TRUE */
+		MSClose(MSFH(PArg1));
 		PRes1 = DOSTRUE;
 		OpenCount--;
 		break;
 	    case ACTION_SEEK:	/* FHArg1,Position,Mode 	 OldPosition */
-		if (CheckRead(NULL)) {
+		if (CheckLock(MSFH(PArg1)->msfh_FileLock) ||
+		    CheckRead(NULL)) {
 		    PRes1 = -1;
 		} else
-		    PRes1 = MSSeek((struct MSFileHandle *)PArg1, PArg2, PArg3);
+		    PRes1 = MSSeek(MSFH(PArg1), PArg2, PArg3);
 		break;
+#ifdef ACTION_SET_FILE_SIZE
+	    case ACTION_SET_FILE_SIZE:
+		PRes1 = MSSetFileSize(
+			    MSFH(((struct FileHandle *)BTOC(PArg1))->fh_Arg1),
+			    PArg2, PArg3);
+		break;
+#endif
+#ifdef ACTION_WRITE_PROTECT
+	    case ACTION_WRITE_PROTECT:
+		{
+		    static long     Passkey;
+
+		    if (PArg1) {
+			if (Passkey == 0) {
+			    WriteProtect = 1;
+			    Passkey = PArg2;
+			    PRes1 = DOSTRUE;
+			}
+		    } else {
+			if (Passkey == 0 || PArg2 == Passkey) {
+			    WriteProtect = 0;
+			    Passkey = 0;
+			    PRes1 = DOSTRUE;
+			}
+		    }
+		}
+		break;
+#endif
+#ifdef ACTION_FH_FROM_LOCK	/* FH,Lock			    BOOL     */
+	    case ACTION_FH_FROM_LOCK:
+		{
+		    struct MSFileHandle *msfh;
+		    struct FileHandle *fh;
+		    struct FileLock *lock;
+
+		    fh = BTOC(PArg1);
+		    lock = BTOC(PArg2);
+		    if (CheckRead(lock))
+			break;
+		    msfh = MSOpenFromLock(MSFL(lock ? lock->fl_Key : NULL));
+		    if (msfh) {
+			fh->fh_Arg1 = (long) msfh;
+			PRes1 = DOSTRUE;
+			OpenCount++;
+			/* Discard the lock */
+			FreeFileLock(lock);
+			OpenCount--;
+		    }
+		}
+		break;
+#endif
+#ifdef ACTION_IS_FILESYSTEM
+		case ACTION_IS_FILESYSTEM:
+		    PRes1 = DOSTRUE;
+		    break;
+#endif
+#ifdef ACTION_CHANGE_MODE
+		case ACTION_CHANGE_MODE:
+		    switch (PArg1) {
+		    case CHANGE_FH:
+			PRes1 = MSChangeModeFH(MSFH(((struct FileHandle *)BTOC(PArg2))->fh_Arg1), PArg3);
+			break;
+		    case CHANGE_LOCK:
+			PRes1 = MSChangeModeLock(MSFL(((struct FileLock *)BTOC(PArg2))->fh_Key), PArg3);
+			break;
+		    }
+		    break;
+#endif
+#ifdef ACTION_COPY_DIR_FH
+	    case ACTION_COPY_DIR_FH:	/* FH			   Lock      */
+	    case ACTION_PARENT_FH:
+		{
+		    struct FileHandle *fh;
+		    struct MSFileLock *msfl;
+
+		    fh = BTOC(PArg1);
+		    /*
+		    if (PType == ACTION_PARENT_FH)
+			msfl = MSParentOfFH(MSFH(fh->fh_Arg1));
+		    else
+			msfl = MSDupLockFromFH(MSFH(fh->fh_Arg1));
+		    */
+		    msfl = ((PType == ACTION_PARENT_FH) ?
+			    MSParentOfFH : MSDupLockFromFH) (MSFH(fh->fh_Arg1));
+
+		    PRes1 = MakeFileLock(msfl, lock, SHARED_LOCK);
+		}
+		break;
+#endif
+#ifdef ACTION_EXAMINE_FH
+	    case ACTION_EXAMINE_FH:	 /* FH,Fib		   Bool      */
+		{
+		    struct FileHandle *fh;
+
+		    fh = BTOC(PArg1);
+		    PRes1 = MSExamineFH(MSFH(fh->fh_Arg1), BTOC(PArg2));
+		}
+		break;
+#endif
 		/*
 		 * A few other packet types which we do not support
 		 */
@@ -695,6 +789,32 @@ struct FileLock *lock;
 	debug(("Huh?? Could not find filelock!\n"));
 	return DOSFALSE;
     }
+}
+
+/*
+ * MakeFileLock allocates and initializes a new FileLock, using info
+ * from an existing FileLock. It always consumes the MSFileLock, even
+ * in case of failure.
+ */
+
+BPTR
+MakeFileLock(msfl, fl, mode)
+struct MSFileLock *msfl;
+struct FileLock *fl;
+long		mode;
+{
+    struct FileLock *newlock;
+
+    newlock = NULL;
+    if (msfl) {
+	if (newlock = NewFileLock(msfl, fl)) {
+	    newlock->fl_Access = mode;
+	    OpenCount++;
+	} else
+	    MSUnLock(msfl);
+    }
+
+    return CTOB(newlock);
 }
 
 /*
@@ -927,7 +1047,7 @@ struct FileLock *lock;
 	error = ERROR_NOT_A_DOS_DISK;
     else if (IDDiskState == ID_VALIDATING)
 	error = ERROR_DISK_NOT_VALIDATED;
-    else if (IDDiskState != ID_VALIDATED)
+    else if (IDDiskState != ID_VALIDATED || WriteProtect)
 	error = ERROR_DISK_WRITE_PROTECTED;
 
     return error;

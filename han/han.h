@@ -1,6 +1,9 @@
 /*-
- *  $Id: han.h,v 1.42 91/06/14 00:09:19 Rhialto Exp $
+ *  $Id: han.h,v 1.43 91/09/28 01:50:02 Rhialto Exp $
  *  $Log:	han.h,v $
+ * Revision 1.43  91/09/28  01:50:02  Rhialto
+ * Byteswap routines no longer __stkargs.
+ *
  * Revision 1.42  91/06/14  00:09:19  Rhialto
  * DICE conversion
  *
@@ -23,6 +26,14 @@
 -*/
 
 #include "dev.h"
+
+/*----- Configuration section -----*/
+
+#define CONVERSIONS
+#undef	NONCOMM
+#undef	READONLY
+
+/*----- End configuration section -----*/
 
 #define MODE_READWRITE	1004L
 #define MODE_CREATEFILE (1L<<31)
@@ -148,6 +159,9 @@ struct MSFileHandle {
     struct MSFileLock *msfh_FileLock;
     long	    msfh_SeekPos;
     word	    msfh_Cluster;
+#ifdef CONVERSIONS
+    int 	    msfh_Conversion;
+#endif
 };
 
 /*
@@ -322,8 +336,10 @@ void SetFatEntry(word cluster, word value);
 word FindFreeCluster(word prev);
 word ExtendClusterChain(word cluster);
 void FreeClusterChain(word cluster);
+struct MSFileHandle *MakeMSFileHandle(struct MSFileLock *fl, long mode);
 struct MSFileHandle *MSOpen(struct MSFileLock *parentdir, char *name, long mode);
 void MSClose(struct MSFileHandle *fh);
+long		FilePos(struct MSFileHandle *fh, long position, long mode);
 long MSSeek(struct MSFileHandle *fh, long position, long mode);
 long MSRead(struct MSFileHandle *fh, byte *userbuffer, long size);
 long MSWrite(struct MSFileHandle *fh, byte *userbuffer, long size);
@@ -337,6 +353,7 @@ long MSRename(struct MSFileLock *slock, byte *sname, struct MSFileLock *dlock, b
  */
 extern short	Cancel; 	/* Cancel all R/W errors */
 long RetryRwError(struct IOExtTD *req);
+void		DisplayMessage(char *msg);
 
 /*
  * HANCMD.C

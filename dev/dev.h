@@ -1,6 +1,9 @@
 /*-
- *  $Id: dev.h,v 1.40 91/03/03 17:56:29 Rhialto Rel $
+ *  $Id: dev.h,v 1.42 91/06/14 00:07:09 Rhialto Exp $
  *  $Log:	dev.h,v $
+ * Revision 1.42  91/06/14  00:07:09  Rhialto
+ * DICE conversion
+ * 
  * Revision 1.40  91/03/03  17:56:29  Rhialto
  * Freeze for MAXON
  *

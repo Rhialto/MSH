@@ -1,5 +1,5 @@
 /*
- * $Id: ignore.c,v 1.40 91/03/03 17:57:26 Rhialto Rel $
+ * $Id: Ignore.c,v 1.42 91/06/14 00:05:28 Rhialto Exp $
  *
  *  IGNORE.C
  *

@@ -1,6 +1,9 @@
 /*-
- * $Id: hanreq.c,v 1.43 91/09/28 01:37:13 Rhialto Exp $
+ * $Id: hanreq.c,v 1.45 91/10/04 00:12:06 Rhialto Exp $
  * $Log:	hanreq.c,v $
+ * Revision 1.45  91/10/04  00:12:06  Rhialto
+ * Add general information requester
+ * 
  * Revision 1.43  91/09/28  01:37:13  Rhialto
  * Changed to newer syslog stuff.
  *

@@ -1,6 +1,9 @@
 /*-
- * $Id: date.c,v 1.40 91/03/03 17:55:18 Rhialto Rel $
+ * $Id: date.c,v 1.42 91/06/14 00:09:48 Rhialto Exp $
  * $Log:	date.c,v $
+ * Revision 1.42  91/06/14  00:09:48  Rhialto
+ * DICE conversion
+ * 
  * Revision 1.40  91/03/03  17:55:18  Rhialto
  * Freeze for MAXON
  *

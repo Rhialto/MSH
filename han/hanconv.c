@@ -1,6 +1,9 @@
 /*-
- * $Id$
- * $Log$
+ * $Id: hanconv.c,v 1.45 91/10/03 23:34:41 Rhialto Exp $
+ * $Log:	hanconv.c,v $
+ * Revision 1.45  91/10/03  23:34:41  Rhialto
+ * Initial version
+ * 
  *
  * May not be used or copied without a licence.
 -*/

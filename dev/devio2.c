@@ -1,6 +1,9 @@
 /*-
- * $Id: devio2.c,v 1.42 91/06/13 23:47:34 Rhialto Exp $
+ * $Id: devio2.c,v 1.44 91/10/02 21:07:42 Rhialto Exp $
  * $Log:	devio2.c,v $
+ * Revision 1.44  91/10/02  21:07:42  Rhialto
+ * Fix bug that sectors with number 0 are accepted and crash.
+ * 
  * Revision 1.42  91/06/13  23:47:34  Rhialto
  * DICE conversion
  *

@@ -1,7 +1,10 @@
 
 /*
- *  $Id: dos.h,v 1.40 91/03/03 17:55:29 Rhialto Rel $
+ *  $Id: dos.h,v 1.42 91/06/14 00:05:47 Rhialto Exp $
  *  $Log:	dos.h,v $
+ * Revision 1.42  91/06/14  00:05:47  Rhialto
+ * DICE conversion
+ * 
  * Revision 1.40  91/03/03  17:55:29  Rhialto
  * Freeze for MAXON
  *

@@ -1,5 +1,8 @@
-; $Id: hancrtso.a,v 1.42 91/06/14 00:07:56 Rhialto Exp $
-; $Log: hancrtso.a,v $
+; $Id: hancrtso.a,v 1.43 91/09/28 01:46:54 Rhialto Exp $
+; $Log:	hancrtso.a,v $
+; Revision 1.43  91/09/28  01:46:54  Rhialto
+; Create regargs entrypoints for byte swap routines.
+; 
 ; Revision 1.42  91/06/14  00:07:56  Rhialto
 ; DICE conversion
 ;

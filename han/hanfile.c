@@ -1,6 +1,9 @@
 /*-
- * $Id: hanfile.c,v 1.43 91/09/28 01:45:39 Rhialto Exp $
+ * $Id: hanfile.c,v 1.45 91/10/03 23:36:16 Rhialto Exp $
  * $Log:	hanfile.c,v $
+ * Revision 1.45  91/10/03  23:36:16  Rhialto
+ * Implement in-situ conversions during Read()/Write()
+ *
  * Revision 1.43  91/09/28  01:45:39  Rhialto
  * Changed to newer syslog stuff.
  *
@@ -43,8 +46,6 @@
 #   define	debug(x)
 #endif
 
-struct MSFileHandle *MakeMSFileHandle(struct MSFileLock *fl, long mode);
-long		FilePos(struct MSFileHandle *fh, long position, long mode);
 
 extern char	DotDot[1 + 8 + 3];
 
@@ -375,7 +376,7 @@ long		position;
 long		mode;
 {
     long	    oldpos = fh->msfh_SeekPos;
-    long	    newpos = oldpos;
+    long	    newpos;
     long	    filesize = fh->msfh_FileLock->msfl_Msd.msd_Filesize;
     word	    cluster = fh->msfh_Cluster;
     word	    oldcluster;

@@ -1,6 +1,9 @@
 /*-
- *  $Id: device.h,v 1.40 91/03/03 17:56:47 Rhialto Rel $
+ *  $Id: device.h,v 1.42 91/06/14 00:07:33 Rhialto Exp $
  *  $Log:	device.h,v $
+ *
+ * Freeze for MAXON
+ *
  * Revision 1.42  91/06/14  00:07:33  Rhialto
  * DICE conversion
  *
@@ -19,6 +22,9 @@
 
 #ifndef RESOURCES_DISK_H
 #include "resources/disk.h"
+#endif
+#ifndef RESOURCES_CIA_H
+#include "resources/cia.h"
 #endif
 #ifndef HARDWARE_CIA_H
 #include "hardware/cia.h"
@@ -39,7 +45,7 @@ extern struct ExecBase *SysBase;
 #define MD_NUMUNITS	4
 #define TRACKS(cyls)    ((cyls) * NUMHEADS)
 #define VERSION 	34L
-#define REVISION	10
+#define REVISION	11
 
 #define VERSION 	SYS2_04
 #define REVISION	16

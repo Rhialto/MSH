@@ -1,6 +1,9 @@
 /*-
- * $Id$
- * $Log$
+ * $Id: hanconv.h,v 1.45 91/10/03 23:35:59 Rhialto Exp $
+ * $Log:	hanconv.h,v $
+ * Revision 1.45  91/10/03  23:35:59  Rhialto
+ * Initial version
+ * 
  *
  * HANCONV.H
  *

@@ -1,6 +1,10 @@
 /*-
- * $Id: hanlock.c,v 1.42 91/06/13 23:55:16 Rhialto Exp $
+ * $Id: hanlock.c,v 1.43 91/09/28 01:41:06 Rhialto Exp $
  * $Log:	hanlock.c,v $
+ * Revision 1.43  91/09/28  01:41:06  Rhialto
+ * Changed to newer syslog stuff.
+ * Fix bug that assign always refers to the rootdir.
+ * 
  * Revision 1.42  91/06/13  23:55:16  Rhialto
  * DICE conversion
  *

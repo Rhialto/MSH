@@ -1,6 +1,9 @@
 /*-
- * $Id: hancmd.c,v 1.43 91/09/28 01:33:22 Rhialto Exp $
+ * $Id: hancmd.c,v 1.45 91/10/04 00:12:32 Rhialto Exp $
  * $Log:	hancmd.c,v $
+ * Revision 1.45  91/10/04  00:12:32  Rhialto
+ * Add confirmation requesters and a switch for them
+ * 
  * Revision 1.43  91/09/28  01:33:22  Rhialto
  * DICE conversion.
  *

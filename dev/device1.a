@@ -1,5 +1,8 @@
-; $Id$
-; $Log$
+; $Id: device1.a,v 1.42 91/06/14 00:08:48 Rhialto Exp $
+; $Log:	device1.a,v $
+; Revision 1.42  91/06/14  00:08:48  Rhialto
+; DICE conversion
+; 
 ;;;;
 ;
 ;   Some constants that need to be modified on specific versions

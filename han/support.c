@@ -1,6 +1,9 @@
 /*-
- * $Id: support.c,v 1.42 91/06/13 23:55:51 Rhialto Exp $
+ * $Id: support.c,v 1.43 91/09/28 01:43:35 Rhialto Exp $
  * $Log:	support.c,v $
+ * Revision 1.43  91/09/28  01:43:35  Rhialto
+ * *** empty log message ***
+ * 
  * Revision 1.42  91/06/13  23:55:51  Rhialto
  * DICE conversion
  *

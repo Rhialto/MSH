@@ -1,6 +1,9 @@
 /*
- * $Id: messyfmt.c,v 1.40 91/03/03 17:57:08 Rhialto Rel $
- * $Log:	messyfmt.c,v $
+ * $Id: MessyFmt.c,v 1.42 91/06/14 00:06:25 Rhialto Exp $
+ * $Log:	MessyFmt.c,v $
+ * Revision 1.42  91/06/14  00:06:25  Rhialto
+ * DICE conversion
+ *
  * Revision 1.40  91/03/03  17:57:08  Rhialto
  * Freeze for MAXON
  *
@@ -21,6 +24,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <signal.h>
 #include "han.h"
 
 ulong		BootBlock[] = {
@@ -65,6 +69,7 @@ int		LowTrack;
 word		nsides;
 struct IOExtTD *TDReq;
 char	       *Device;
+sig_atomic_t	Break;
 
 int
 todigit(char   c)
@@ -81,10 +86,10 @@ todigit(char   c)
 long
 ntoi(char  *str)
 {
-    register long   total = 0;
-    register long   value;
-    register int    digit;
-    register int    base;
+    long	    total = 0;
+    long	    value;
+    int 	    digit;
+    int 	    base;
 
     /* First determine the base */
 number:
@@ -215,12 +220,14 @@ MaybeWrite(byte *block)
     return block;
 }
 
-int
-Chk_Abort(void)
+void
+breakhandler(int signo)
 {
-    return (SetSignal(0L, SIGBREAKF_CTRL_C) & SIGBREAKF_CTRL_C) != 0;
+    signal(signo, breakhandler);
+    Break = 1;
 }
 
+int
 main(int argc, char **argv)
 {
     struct MsgPort *port;
@@ -250,6 +257,8 @@ main(int argc, char **argv)
 	Device = argv[2];
     else
 	Device = "messydisk.device";
+
+    signal(SIGINT, breakhandler);       /* Do not disturb */
 
     if (!(port = CreatePort(NULL, 0L))) {
 	puts("No memory for replyport");
@@ -302,7 +311,7 @@ main(int argc, char **argv)
     if (input("Are you sure? (enter 42)", 0) != 42)
 	goto abort5;
 
-    if (Chk_Abort())
+    if (Break)
 	goto abort5;
 
     if (!wholeDisk && !clearFat) {
@@ -335,7 +344,7 @@ main(int argc, char **argv)
     if (wholeDisk) {
 	while (Track < ncylinders) {
 	    MaybeWrite(DiskTrack + TrackSize);  /* Write an empty track */
-	    if (Chk_Abort())
+	    if (Break)
 		break;
 	}
     }
@@ -357,4 +366,7 @@ abort2:
     DeletePort(port);
 abort1:;
 
+    signal(SIGINT, SIG_DFL);
+
+    return 0;
 }

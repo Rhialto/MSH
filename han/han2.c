@@ -1,6 +1,9 @@
 /*-
- * $Id$
- * $Log$
+ * $Id: han2.c,v 1.43 91/09/28 01:30:07 Rhialto Exp $
+ * $Log:	han2.c,v $
+ * Revision 1.43  91/09/28  01:30:07  Rhialto
+ * Preliminary - not functional yet
+ *
  *
  * HAN2.C
  *
@@ -16,13 +19,23 @@
 #include <functions.h>
 #include "han.h"
 #include "dos.h"
-#include <dos/exall.h>
+
+#ifdef ACTION_SAME_LOCK      /* Do we have 2.0 includes? */
 
 #ifdef HDEBUG
 #   include "syslog.h"
 #else
 #   define	debug(x)
 #endif
+
+long		MSSameLock(struct MSFileLock *lock1, struct MSFileLock *lock2);
+struct MSFileHandle *MSOpenFromLock(struct MSFileLock *lock);
+struct MSFileLock *MSDupLockFromFH(struct MSFileHandle *msfh);
+struct MSFileLock *MSParentOfFH(struct MSFileHandle *msfh);
+long		MSExamineFH(struct MSFileHandle *msfh, struct FileInfoBlock *fib);
+long		MSSetFileSize(struct MSFileHandle *msfh, long pos, long mode);
+long		MSChangeModeLock(struct MSFileLock *object, long newmode);
+long		MSChangeModeFH(struct MSFileHandle *object, long newmode);
 
 /*	DOS Object Management */
 BPTR DupLockFromFH( BPTR fh );
@@ -57,21 +70,44 @@ long
 MSSameLock(lock1, lock2)
 struct MSFileLock *lock1, *lock2;
 {
-    return lock1 == lock2;
+    if (lock1 == lock2)
+	return LOCK_SAME;
+    else
+	return LOCK_SAME_HANDLER;
 }
+
+struct MSFileHandle *
+MSOpenFromLock(lock)
+struct MSFileLock *lock;
+{
+    return MakeMSFileHandle(lock, MODE_OLDFILE);
+    /* The lock is now owned by the MSFileHandle */
+}
+
+/*
+ * For DupLockFromFH and ParentOfFH we force the user to insert the disk.
+ * This is the only easy way of knowing the VolumeNode from the filehandle,
+ * and we need it in the FileLock. Yech!
+ */
 
 struct MSFileLock *
 MSDupLockFromFH(msfh)
 struct MSFileHandle *msfh;
 {
-    return MSDupLock(msfh->msfh_FileLock);
+    if (CheckLock(msfh->msfh_FileLock))
+	return MSDupLock(msfh->msfh_FileLock);
+    else
+	return NULL;
 }
 
 struct MSFileLock *
 MSParentOfFH(msfh)
 struct MSFileHandle *msfh;
 {
-    return MSParentDir(msfh->msfh_FileLock);
+    if (CheckLock(msfh->msfh_FileLock))
+	return MSParentDir(msfh->msfh_FileLock);
+    else
+	return NULL;
 }
 
 long
@@ -79,18 +115,19 @@ MSExamineFH(msfh, fib)
 struct MSFileHandle *msfh;
 struct FileInfoBlock *fib;
 {
-    return MSExamine(msfh->msfh_FileLock);
+    return MSExamine(msfh->msfh_FileLock, fib);
 }
 
 long
 MSSetFileSize(msfh, pos, mode)
 struct MSFileHandle *msfh;
 long		pos;
-long		mode;	/* ??? */
+long		mode;
 {
-    long	    clusters;
+    long	    oldclusters,
+		    newclusters;
     struct MSFileLock *msfl;
-    long success = FALSE;
+    long	    success = FALSE;
 
     msfl = msfh->msfh_FileLock;
 
@@ -98,6 +135,8 @@ long		mode;	/* ??? */
 	error = ERROR_WRITE_PROTECTED;
 	return ;
     }
+
+    pos = FilePos(msfh, pos, mode);
 
     oldclusters = (msfl->msfl_Msd.msd_Filesize + Disk.bpc - 1) / Disk.bpc;
     newclusters = (pos + Disk.bpc - 1) / Disk.bpc;
@@ -107,6 +146,8 @@ long		mode;	/* ??? */
 	success = TRUE;
     } else if (newclusters > oldclusters) {
 	/* extend the file */
+	word	    cluster;
+
 	if ((newclusters - oldclusters) <= (Disk.nsectsfree / Disk.spc)) {
 	    while (oldclusters < newclusters) {
 		cluster = ExtendClusterChain(cluster);
@@ -140,14 +181,49 @@ long		mode;	/* ??? */
 }
 
 long
-MSChangeMode(type, fh, newmode)
+MSChangeModeLock(object, newmode)
+struct MSFileLock *object;
+long		newmode;
 {
+    /* We DON'T lock directories exclusively! */
+    if (object->msfl_Msd.msd_Attributes & ATTR_DIR)
+	newmode = SHARED_LOCK;
+
+    if (newmode == EXCLUSIVE_LOCK) {
+	if (object->msfl_Refcount <= 1) {
+	    object->msfl_Refcount = -1;
+	    return DOSTRUE;
+	}
+    } else { /* SHARED_LOCK */
+	if (object->msfl_Refcount == -1) {
+	    object->msfl_Refcount = 1;
+	}
+	return DOSTRUE;
+    }
+
+    return DOSFALSE;
+}
+
+long
+MSChangeModeFH(object, newmode)
+struct MSFileHandle *object;
+long		newmode;
+{
+    if (newmode == MODE_OLDFILE)
+	newmode = SHARED_LOCK;
+    else
+	newmode = EXCLUSIVE_LOCK;
+
+    return MSChangeModeLock(object->msfh_FileLock, newmode);
 }
 
 /*
  * ExAll can conveniently be done with Examine/ExNext... at least for now.
  */
 
+#ifdef notdef
+
+#include <dos/exall.h>
 long
 MSExAll(lock, ead, size, data, eac)
 struct MSFileLock  *lock;
@@ -211,6 +287,8 @@ struct ExAllControl *eac;
     return 0;	/* ??? */
 }
 
+#endif
+
 long
 MSLockRecords()
 {
@@ -230,3 +308,5 @@ MSEndNotify(req)
 struct NotifyRequest *req;
 {
 }
+
+#endif /* ACTION_COMPARE_LOCK */

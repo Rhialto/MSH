@@ -1,6 +1,9 @@
 /*-
- * $Id: hansec.c,v 1.42 91/06/13 23:48:16 Rhialto Exp $
+ * $Id: hansec.c,v 1.43 91/09/28 01:38:43 Rhialto Exp $
  * $Log:	hansec.c,v $
+ * Revision 1.43  91/09/28  01:38:43  Rhialto
+ * Changed to newer syslog stuff.
+ *
  * Revision 1.42  91/06/13  23:48:16  Rhialto
  * DICE conversion; fix cache bug
  *
@@ -726,7 +729,7 @@ AwaitDFx()
 		SendIO((struct IORequest *)TimeIOReq);
 		continue;
 	    }
-	    if (infoData->id_DiskType == ID_DOS_DISK) {
+	    if ((infoData->id_DiskType & 0xFFFFFF00) == ID_DOS_DISK) {
 		/* DFx: understands it, so it is not for us. */
 		return 1;
 	    }

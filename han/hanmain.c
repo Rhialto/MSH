@@ -1,6 +1,9 @@
 /*-
- * $Id: hanmain.c,v 1.43 91/09/28 01:40:24 Rhialto Exp $
+ * $Id: hanmain.c,v 1.45 91/10/03 23:36:47 Rhialto Exp $
  * $Log:	hanmain.c,v $
+ * Revision 1.45  91/10/03  23:36:47  Rhialto
+ * Implement conversions during Read()/Write()
+ * 
  * Revision 1.43  91/09/28  01:40:24  Rhialto
  * Changed to newer syslog stuff.
  *
@@ -50,7 +53,7 @@
 extern int	CheckBootBlock;
 extern char	DotDot[1 + 8 + 3];
 struct Library *IntuitionBase;
-static char RCSId[] = "Messydos filing system $Revision: 1.43 $ $Date: 91/09/28 01:40:24 $, by Olaf Seibert";
+static char RCSId[] = "Messydos filing system $Revision: 1.45 $ $Date: 91/10/03 23:36:47 $, by Olaf Seibert";
 
 byte
 ToUpper(ch)
