@@ -1,6 +1,9 @@
 /*-
- * $Id: hanlock.c,v 1.40 91/03/03 17:53:35 Rhialto Rel $
+ * $Id: hanlock.c,v 1.41 91/06/13 23:37:53 Rhialto Exp $
  * $Log:	hanlock.c,v $
+ * Revision 1.41  91/06/13  23:37:53  Rhialto
+ * Fix MSSetProtect (converted dirs into files) + DICE conversion
+ * 
  * Revision 1.40  91/03/03  17:53:35  Rhialto
  * Freeze for MAXON
  *

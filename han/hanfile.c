@@ -1,6 +1,9 @@
 /*-
- * $Id: hanfile.c,v 1.32 90/11/23 23:54:57 Rhialto Exp $
+ * $Id: hanfile.c,v 1.40 91/03/03 17:53:53 Rhialto Rel $
  * $Log:	hanfile.c,v $
+ * Revision 1.40  91/03/03  17:53:53  Rhialto
+ * Freeze for MAXON
+ *
  * Revision 1.32  90/11/23  23:54:57  Rhialto
  * Prepare for syslog
  *
@@ -20,11 +23,17 @@
  * May not be used or copied without a licence.
 -*/
 
-#include "dos.h"
+#include <amiga.h>
+#include <functions.h>
+#include <string.h>
 #include "han.h"
+#include "dos.h"
 
 #ifdef HDEBUG
 #   define	debug(x)  syslog x
+    void initsyslog(void);
+    void syslog(char *, ...);
+    void uninitsyslog(void);
 #else
 #   define	debug(x)
 #endif
@@ -347,7 +356,7 @@ long		mode;
     }
     if (oldcluster < newcluster) {
 	if (CheckLock(fh->msfh_FileLock))
-	    return -1L;
+	    return -1;
 	while (oldcluster < newcluster) {
 	    cluster = NextCluster(cluster);
 	    oldcluster++;
@@ -368,7 +377,7 @@ register long	size;
     long	    oldsize;
 
     if (CheckLock(fh->msfh_FileLock))
-	return -1L;
+	return -1;
 
     if (fh->msfh_SeekPos + size > fh->msfh_FileLock->msfl_Msd.msd_Filesize)
 	size = fh->msfh_FileLock->msfl_Msd.msd_Filesize - fh->msfh_SeekPos;
@@ -399,7 +408,7 @@ register long	size;
 	} else {		/* Read error. Return amount successfully
 				 * read, if any. Else return -1 for error. */
 	    if (size == oldsize) {
-		return -1L;
+		return -1;
 	    }
 	    return oldsize - size;
 	}
@@ -450,7 +459,7 @@ register long	size;
 		prevclust = newclust;
 	    } else {
 		error = ERROR_DISK_FULL;
-		goto error;
+		goto some_error;
 	    }
 	}
 	{
@@ -485,7 +494,7 @@ register long	size;
 		fl->msfl_Msd.msd_Attributes |= ATTR_ARCHIVED;
 		update = 1;
 	    } else {		/* Write error. */
-	error:
+	some_error:
 		if (update)
 		    UpdateFileLock(fl);
 #if 1
@@ -523,7 +532,7 @@ byte	       *name;
     if (fl) {
 	if (fl->msfl_Msd.msd_Attributes & ATTR_READONLY) {
 	    error = ERROR_DELETE_PROTECTED;
-	    goto error;
+	    goto some_error;
 	}
 	if (fl->msfl_Msd.msd_Attributes & ATTR_DIRECTORY) {
 	    struct FileInfoBlock fib;
@@ -536,20 +545,20 @@ byte	       *name;
 
 	    if (fl->msfl_Refcount != 1 || fl == RootLock) {
 		error = ERROR_OBJECT_IN_USE;
-		goto error;
+		goto some_error;
 	    }
 	    if (MSExamine(fl, &fib) &&  /* directory itself */
 		MSExNext(fl, &fib)) {   /* should fail */
 		if (error == 0) {
 	    not_empty:
 		    error = ERROR_DIRECTORY_NOT_EMPTY;
-	    error:
+	    some_error:
 		    MSUnLock(fl);
 		    return DOSFALSE;
 		}
 	    }
 	    if (error != ERROR_NO_MORE_ENTRIES)
-		goto error;
+		goto some_error;
 
 	    error = 0;
 	}
@@ -611,10 +620,10 @@ byte	       *name;
     fl = MSLock(parentdir, name, EXCLUSIVE_LOCK ^ MODE_CREATEFILE);
     if (fl || error == ERROR_OBJECT_IN_USE) {
 	error = ERROR_OBJECT_EXISTS;
-	goto error;
+	goto some_error;
     }
     if (error != 0) {
-	goto error;
+	goto some_error;
     }
     if (fl = EmptyFileLock) {
 	debug(("Creating new dir\n"));
@@ -695,7 +704,7 @@ byte	       *name;
 
 error_no_free_store:
     error = ERROR_NO_FREE_STORE;
-error:
+some_error:
     if (fl)
 	MSUnLock(fl);
     return DOSFALSE;
@@ -734,7 +743,7 @@ byte	       *dname;
 
     sfl = MSLock(slock, sname, SHARED_LOCK);
     if (sfl == NULL || sfl == RootLock)
-	goto error;
+	goto some_error;
 
     /*
      * Now we are going to pull a dirty trick with the cache. We are going
@@ -748,7 +757,7 @@ byte	       *dname;
 	byte		old;
 
 	if ((sec = GetSec(sfl->msfl_DirSector)) == NULL)
-	    goto error;
+	    goto some_error;
 	scache = FindSecByBuffer(sec);
 	oldstatus = scache->sec_Refcount;
 
@@ -788,7 +797,7 @@ byte	       *dname;
 undelete:
 	WriteFileLock(sfl);
 	scache->sec_Refcount = oldstatus;
-	goto error;
+	goto some_error;
     }
     /*
      * Now, if the moved entry was a directory, and it was moved to a
@@ -816,14 +825,14 @@ undelete:
 			OFFSETOF(MsDirEntry, msd_Attributes));
 		dir[1].msd_Attributes = ATTR_DIRECTORY;
 		OtherEndianMsd(&dir[1]);
-		MarkSecDirty(dir);
+		MarkSecDirty((byte *)dir);
 	    }
 #ifdef HDEBUG
 	    else
 		debug(("!!! No \"..\" found ??\n"));
 #endif
 	    MSUnLock(parentdir);
-	    FreeSec(dir);
+	    FreeSec((byte *)dir);
 	}
     }
     /*
@@ -849,7 +858,7 @@ undelete:
     UpdateFileLock(dfl->msfl_Parent);
     success = DOSTRUE;
 
-error:
+some_error:
     if (sfl)
 	MSUnLock(sfl);
     if (dfl)

@@ -1,24 +1,30 @@
 /*
- * $Id: ignore.c,v 1.31 90/11/10 02:42:14 Rhialto Exp $
+ * $Id: ignore.c,v 1.40 91/03/03 17:57:26 Rhialto Rel $
  *
  *  IGNORE.C
  *
  *  Makes it possible to ignore CRC errors.
  *
- *  This code is (C) Copyright 1989 by Olaf Seibert. All rights reserved.
+ *  This code is (C) Copyright 1989-1991 by Olaf Seibert. All rights reserved.
  *  May not be used or copied without a licence.
  */
 
+#include <amiga.h>
+#include <functions.h>
+#include <string.h>
+#include <stdlib.h>
 #include "dev.h"
 #include "device.h"
 
-
-main(argc, argv)
-int argc;
-char **argv;
+Puts(char *string)
 {
-    struct MsgPort *port, *CreatePort();
-    struct IOExtTD *tdreq, *CreateExtIO();
+    Write(Output(), string, (long)strlen(string));
+}
+
+main(int argc, char **argv)
+{
+    struct MsgPort *port;
+    struct IOExtTD *tdreq;
     UNIT *unit;
     long unitnr;
     int yesno;
@@ -41,7 +47,8 @@ char **argv;
 
     if (port = CreatePort(NULL, 0L)) {
 	if (tdreq = CreateExtIO(port, (long)sizeof(*tdreq))) {
-	    OpenDevice("messydisk.device", unitnr, tdreq, 0L);
+	    OpenDevice("messydisk.device", unitnr, (struct IORequest *)tdreq,
+		       0L);
 	    if (tdreq->iotd_Req.io_Device) {
 		unit = (UNIT *)tdreq->iotd_Req.io_Unit;
 		if (yesno != -42)
@@ -50,23 +57,13 @@ char **argv;
 		    Puts("No\n");
 		else
 		    Puts("Yes\n");
-		CloseDevice(tdreq);
+		CloseDevice((struct IORequest *)tdreq);
 	    } else
 		Puts("Cannot OpenDevice messydisk\n");
-	    DeleteExtIO(tdreq);
+	    DeleteExtIO((struct IORequest *)tdreq);
 	} else
 	    Puts("No memory for I/O request\n");
 	DeletePort(port);
     } else
 	Puts("No memory for replyport\n");
 }
-
-Puts(string)
-char *string;
-{
-    long Output();
-
-    Write(Output(), string, (long)strlen(string));
-}
-
-_wb_parse(){}

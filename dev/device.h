@@ -1,25 +1,45 @@
 /*-
- *  $Id: device.h,v 1.34 91/01/24 00:13:57 Rhialto Exp $
+ *  $Id: device.h,v 1.40 91/03/03 17:56:47 Rhialto Rel $
  *  $Log:	device.h,v $
+ * Revision 1.42  91/06/14  00:07:33  Rhialto
+ * DICE conversion
+ *
  * Revision 1.40  91/03/03  17:56:47  Rhialto
  * Freeze for MAXON
- * 
+ *
  * Revision 1.34  91/01/24  00:13:57  Rhialto
  * Use TD_RAWWRITE under AmigaOS 2.0.
  *
- *  This code is (C) Copyright 1989 by Olaf Seibert. All rights reserved. May
- *  not be used or copied without a licence.
+ *  This code is (C) Copyright 1989,1991 by Olaf Seibert. All rights reserved.
+ * Release 1 Patch 3
  *
  *  This code is (C) Copyright 1989-1993 by Olaf Seibert. All rights reserved.
+ *  May not be used or copied without a licence.
+-*/
 
+#ifndef RESOURCES_DISK_H
+#include "resources/disk.h"
+#endif
+#ifndef HARDWARE_CIA_H
+#include "hardware/cia.h"
+#endif
+#ifndef HARDWARE_CUSTOM_H
+#include "hardware/custom.h"
+#endif
+#ifndef HARDWARE_ADKBITS_H
+#include "hardware/adkbits.h"
+#endif
+#ifndef HARDWARE_DMABITS_H
+#include "hardware/dmabits.h"
+#endif
+#ifndef MESSYDISK_DEV_H
+
+extern struct ExecBase *SysBase;
+
+#define MD_NUMUNITS	4
 #define TRACKS(cyls)    ((cyls) * NUMHEADS)
 #define VERSION 	34L
-#define REVISION	8
-
-#asm
-VERSION     equ 	34
-RTPRI	    equ 	0
-#endasm
+#define REVISION	10
 
 #define VERSION 	SYS2_04
 #define REVISION	16
@@ -82,15 +102,6 @@ struct MessyUnit {
 #define STATEF_HIGHDENSITY (1<<3)
 
 #define SYS1_3		34	/* System version 1.3 */
-/* Some constants related to #defines */
-#asm
-MS_BPS		    equ 512
-MS_BPScode	    equ 2		    ; 2log(MSBPS/128)
-LOG2_MS_BPS	    equ 9
-MS_SPT		    equ 9
-MS_SPT_MAX	    equ 10
-#endasm
-
 #define SYS2_0		36	/* System version 2.0 */
 #define SYS2_04 	37	/* System version 2.04 */
 
@@ -133,76 +144,69 @@ typedef struct MessyUnit   UNIT;
 #define IMMEDIATE   ((1<<CMD_INVALID)|(1<<CMD_RESET)|\
 		     (1<<CMD_STOP)|(1<<CMD_START)|(1<<CMD_FLUSH)|\
 		     (1L<<TD_ADDCHANGEINT))
-extern DEV *MakeLibrary();
-extern struct Task *FindTask();
-extern struct Task *CreateTask();
+__stkargs struct DiskResourceUnit *GetUnit(struct DiskResourceUnit *);
+__stkargs void GiveUnit(void);
 
 #define Prototype extern
  *  Forward declarations:
 
 /*
-extern char EndCode;
+
 extern void Init(), _DevOpen(), _DevClose(), _DevExpunge(), _LibNull();
 extern void _DevBeginIO(), _DevAbortIO();
 
 extern char DevName[], idString[];
 
-extern DEV *CInit();
-extern void DevOpen();
-extern long DevClose(), DevExpunge();
-extern void DevBeginIO(), TermIO();
-extern long DevAbortIO();
+__stkargs __geta4 DEV *CInit(ulong D2, ulong D3, long segment);
+__stkargs __geta4 void DevOpen(ulong unitno, ulong flags, ulong D2, ulong D3, struct IOStdReq *ioreq, DEV *dev);
+__stkargs __geta4 long DevClose(ulong D2, ulong D3, struct IOStdReq *ioreq, DEV *dev);
+__stkargs __geta4 long DevExpunge(ulong D2, ulong D3, DEV *dev);
+__stkargs __geta4 void DevBeginIO(ulong D2, ulong D3, struct IOStdReq *ioreq, DEV *dev);
+__stkargs __geta4 long DevAbortIO(ulong D2, ulong D3, struct IOStdReq *ioreq, DEV *dev);
+void TermIO(struct IOStdReq *ioreq);
+void WakePort(struct MsgPort *port);
+__geta4 void UnitTask(void);
+void CMD_Invalid(struct IOStdReq *ioreq, UNIT *unit);
+void CMD_Stop(struct IOStdReq *ioreq, UNIT *unit);
+void CMD_Start(struct IOStdReq *ioreq, UNIT *unit);
+void CMD_Flush(struct IOStdReq *ioreq, UNIT *unit);
+void CMD_Read(struct IOStdReq *ioreq, UNIT *unit);
+void CMD_Write(struct IOStdReq *ioreq, UNIT *unit);
+void TD_Format(struct IOStdReq *ioreq, UNIT *unit);
+void CMD_Reset(struct IOStdReq *ioreq, UNIT *unit);
+void CMD_Update(struct IOStdReq *ioreq, UNIT *unit);
+void CMD_Clear(struct IOStdReq *ioreq, UNIT *unit);
+void TD_Seek(struct IOStdReq *ioreq, UNIT *unit);
+void TD_Changenum(struct IOStdReq *ioreq, UNIT *unit);
+void TD_Addchangeint(struct IOStdReq *ioreq);
+void TD_Remchangeint(struct IOStdReq *ioreq);
 
-extern void WakePort();
-extern void UnitTask();
+void TrackdiskGateway(struct IOStdReq *ioreq, UNIT *unit);
 
-extern int DevInit();
-extern UNIT *UnitInit();
-extern void DiskChangeHandler();
-
-extern void TrackdiskGateway();
-extern void CMD_Invalid();
-extern void CMD_Reset();
-extern void CMD_Read();
-extern void CMD_Write();
-extern void CMD_Update();
-extern void CMD_Clear();
-extern void CMD_Stop();
-extern void CMD_Start();
-extern void CMD_Flush();
-extern void TD_Seek();
-extern void TD_Format();
-extern void TD_Changenum();
-extern void TD_Addchangeint();
-extern void TD_Remchangeint();
-
-extern struct DiskResource *OpenResource();
-extern struct MsgPort *DeviceProc();
-extern struct MsgPort *CreatePort();
-extern struct IOExtTD *CreateExtIO();
-extern void    *GetUnit(), *GetMsg();
-extern long	Wait();
-extern void    *AllocMem(), FreeMem();
-extern byte    *index(), *rindex();
-
-extern int	ReadTrack();
-extern void	InitDecoding();
-extern int	TDSeek();
-extern long	MyDoIO();
-extern int	TDMotorOn();
-extern int	TDMotorOff();
-extern int	TDGetNumCyls();
-extern void    *GetDrive();
-extern void	FreeDrive();
-extern int	DevOpenUp();
-extern int	DevCloseDown();
-extern int	GetTrack();
-extern int	CheckRequest();
+int DevInit(DEV *dev);
+void InitDecoding(byte  *decode);
+long MyDoIO(struct IORequest *req);
+int TDMotorOn(struct IOExtTD *tdreq);
+int TDGetNumCyls(struct IOExtTD *tdreq);
+int TDSeek(UNIT *unit, struct IOStdReq *ioreq, int cylinder);
+void *GetDrive(struct DiskResourceUnit *drunit);
+void FreeDrive(void);
+int GetTrack(struct IOStdReq *ioreq, int side, int cylinder);
+int CheckChanged(struct IOExtTD *ioreq, UNIT *unit);
+int DevCloseDown(DEV *dev);
+int CheckRequest(struct IOExtTD *ioreq, UNIT *unit);
+UNIT *UnitInit(DEV *dev, ulong UnitNr);
+int UnitCloseDown(struct IOStdReq *ioreq, DEV *dev, UNIT *unit);
+__stkargs __geta4 void DiskChangeHandler0(UNIT *unit);
+void DiskChangeHandler(void);
 
 #ifndef READONLY
-extern int	InitWrite();
-extern void	FreeBuffer();
-extern void	EncodeTrack();
+word CalculateGapLength(int sectors);
+int InitWrite(DEV *dev);
+void FreeBuffer(DEV *dev);
+void Internal_Update(struct IOStdReq *ioreq, UNIT *unit);
+__stkargs void EncodeTrack(byte *TrackBuffer, byte *Rawbuffer, word *Crcs, long Cylinder, long Side, long GapLen, long NumSecs);
+/* should become							   word Cylinder, word Side, word GapLen, word NumSecs */
 #endif
  */
 

@@ -1,21 +1,27 @@
 /*
- * $Id: messyfmt.c,v 1.30 90/06/04 23:20:13 Rhialto Rel $
+ * $Id: messyfmt.c,v 1.40 91/03/03 17:57:08 Rhialto Rel $
  * $Log:	messyfmt.c,v $
+ * Revision 1.40  91/03/03  17:57:08  Rhialto
+ * Freeze for MAXON
+ *
  * Revision 1.30  90/06/04  23:20:13  Rhialto
  * Release 1 Patch 3
- * 
+ *
  * MESSYFMT.C
  *
  * Formats a disk. Low-level formatting can also be done by mounting a file
  * system and using the AmigaDOS format command.
  *
- * This code is (C) Copyright 1989,1990 by Olaf Seibert. All rights reserved.
+ * This code is (C) Copyright 1989-1991 by Olaf Seibert. All rights reserved.
  * May not be used or copied without a licence.
  */
 
+#include <amiga.h>
+#include <functions.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include "han.h"
-extern int	Enable_Abort;
 
 ulong		BootBlock[] = {
     0xEB349049, 0x424D2020, 0x332E3200, 0x02020100,	/* ...IBM  3.2..... */
@@ -57,13 +63,11 @@ long		TrackSize;
 int		Track;
 int		LowTrack;
 word		nsides;
-struct IOExtTD *TDReq,
-	       *CreateExtIO();
+struct IOExtTD *TDReq;
 char	       *Device;
 
 int
-todigit(c)
-register char	c;
+todigit(char   c)
 {
     if ((c -= '0') < 0 || c > ('F' - '0'))
 	return 42;
@@ -75,8 +79,7 @@ register char	c;
 }
 
 long
-ntoi(str)
-register char  *str;
+ntoi(char  *str)
 {
     register long   total = 0;
     register long   value;
@@ -128,9 +131,7 @@ suffix:
 }
 
 word
-input(question, defval)
-char	       *question;
-word		defval;
+input(char *question, word defval)
 {
     char	    buf[80];
 
@@ -144,19 +145,14 @@ word		defval;
 }
 
 void
-PutWord(address, value)
-register byte  *address;
-register word	value;
+PutWord(byte *address, word value)
 {
     address[0] = value;
     address[1] = value >> 8;
 }
 
 word
-SetWord(address, question, value)
-byte	       *address;
-char	       *question;
-word		value;
+SetWord(byte *address, char *question, word value)
 {
     value = input(question, value);
     PutWord(address, value);
@@ -165,18 +161,14 @@ word		value;
 }
 
 byte
-SetByte(address, question, value)
-byte	       *address;
-char	       *question;
-word		value;
+SetByte(byte *address, char *question, word value)
 {
     value = input(question, value);
     return *address = value;
 }
 
 byte	       *
-MaybeWrite(block)
-byte	       *block;
+MaybeWrite(byte *block)
 {
     while (block >= (DiskTrack + TrackSize)) {
 	int		t,
@@ -190,19 +182,19 @@ byte	       *block;
 	TDReq->iotd_Req.io_Data = (APTR) DiskTrack;
 	TDReq->iotd_Req.io_Length = TrackSize;
 	TDReq->iotd_Req.io_Offset = TrackSize * Track;
-	DoIO(TDReq);
+	DoIO((struct IORequest *)TDReq);
 	if (TDReq->iotd_Req.io_Error) {
 	    printf(" Write error %d on cylinder %d side %d.\n",
 		   TDReq->iotd_Req.io_Error, t, s);
 	}
 	TDReq->iotd_Req.io_Command = CMD_UPDATE;
-	DoIO(TDReq);
+	DoIO((struct IORequest *)TDReq);
 	if (TDReq->iotd_Req.io_Error) {
 	    printf("Update error %d on cylinder %d side %d.\n",
 		   TDReq->iotd_Req.io_Error, t, s);
 	}
 	TDReq->iotd_Req.io_Command = CMD_CLEAR;
-	DoIO(TDReq);
+	DoIO((struct IORequest *)TDReq);
 
 	printf("  Read\r");
 	fflush(stdout);
@@ -210,7 +202,7 @@ byte	       *block;
 	TDReq->iotd_Req.io_Data = (APTR) DiskTrack;
 	TDReq->iotd_Req.io_Length = TrackSize;
 	TDReq->iotd_Req.io_Offset = TrackSize * Track;
-	DoIO(TDReq);
+	DoIO((struct IORequest *)TDReq);
 	if (TDReq->iotd_Req.io_Error) {
 	    printf("  Read error %d on cylinder %d side %d.\n",
 		   TDReq->iotd_Req.io_Error, t, s);
@@ -223,12 +215,15 @@ byte	       *block;
     return block;
 }
 
-main(argc, argv)
-int		argc;
-char	      **argv;
+int
+Chk_Abort(void)
 {
-    struct MsgPort *port,
-		   *CreatePort();
+    return (SetSignal(0L, SIGBREAKF_CTRL_C) & SIGBREAKF_CTRL_C) != 0;
+}
+
+main(int argc, char **argv)
+{
+    struct MsgPort *port;
     byte	   *diskBlock;
     long	    unitNr;
     int 	    i;
@@ -250,7 +245,6 @@ char	      **argv;
 	       argv[0]);
 	exit(1);
     }
-    Enable_Abort = 0;
     unitNr = ntoi(argv[1]);
     if (argc > 2)
 	Device = argv[2];
@@ -265,7 +259,7 @@ char	      **argv;
 	puts("No memory for I/O request");
 	goto abort2;
     }
-    if (OpenDevice(Device, unitNr, TDReq, 0L)) {
+    if (OpenDevice(Device, unitNr, (struct IORequest *)TDReq, 0L)) {
 	printf("Cannot OpenDevice %s\n", Device);
 	goto abort3;
     }
@@ -285,7 +279,7 @@ char	      **argv;
 	puts("No memory for track buffer");
 	goto abort4;
     }
-    CopyMem(BootBlock, DiskTrack, (long) sizeof (BootBlock));
+    CopyMem((char *)BootBlock, DiskTrack, (long) sizeof (BootBlock));
 
     PutWord(DiskTrack + 0x0b, bps);
     SetByte(DiskTrack + 0x0d, "Sectors per cluster", MS_SPC);
@@ -317,9 +311,9 @@ char	      **argv;
 	TDReq->iotd_Req.io_Data = (APTR) DiskTrack;
 	TDReq->iotd_Req.io_Length = sizeof (BootBlock);
 	TDReq->iotd_Req.io_Offset = 0;
-	DoIO(TDReq);
+	DoIO((struct IORequest *)TDReq);
 	TDReq->iotd_Req.io_Command = CMD_UPDATE;
-	DoIO(TDReq);
+	DoIO((struct IORequest *)TDReq);
 
 	goto done;
     }
@@ -349,22 +343,18 @@ char	      **argv;
 done:
     TDReq->iotd_Req.io_Command = TD_MOTOR;
     TDReq->iotd_Req.io_Length = 0;
-    DoIO(TDReq);
+    DoIO((struct IORequest *)TDReq);
 
     printf("\n\nNow remove the disk from the drive (or use DiskChange).\n");
 
 abort5:
     FreeMem(DiskTrack, TrackSize);
 abort4:
-    CloseDevice(TDReq);
+    CloseDevice((struct IORequest *)TDReq);
 abort3:
-    DeleteExtIO(TDReq);
+    DeleteExtIO((struct IORequest *)TDReq);
 abort2:
     DeletePort(port);
 abort1:;
 
-}
-
-_wb_parse()
-{
 }

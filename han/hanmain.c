@@ -1,9 +1,12 @@
 /*-
- * $Id: hanmain.c,v 1.32 90/11/23 23:54:07 Rhialto Exp $
+ * $Id: hanmain.c,v 1.40 91/03/03 17:46:39 Rhialto Rel $
  * $Log:	hanmain.c,v $
+ * Revision 1.40  91/03/03  17:46:39  Rhialto
+ * Freeze for MAXON
+ *
  * Revision 1.32  90/11/23  23:54:07  Rhialto
  * Prepare for syslog
- * 
+ *
  * Revision 1.31  90/11/10  02:46:35  Rhialto
  * Patch 3a. Changes location of disk volume date.
  *
@@ -21,11 +24,17 @@
  *  not be used or copied without a licence.
 -*/
 
-#include "dos.h"
+#include <amiga.h>
+#include <functions.h>
+#include <string.h>
 #include "han.h"
+#include "dos.h"
 
 #ifdef HDEBUG
 #   define	debug(x)  syslog x
+    void initsyslog(void);
+    void syslog(char *, ...);
+    void uninitsyslog(void);
 #else
 #   define	debug(x)
 #endif
@@ -33,7 +42,7 @@
 extern int	CheckBootBlock;
 extern char	DotDot[1 + 8 + 3];
 struct Library *IntuitionBase;
-static char RCSId[] = "Messydos filing system $Revision: 1.32 $ $Date: 90/11/23 23:54:07 $, by Olaf Seibert";
+static char RCSId[] = "Messydos filing system $Revision: 1.40 $ $Date: 91/03/03 17:46:39 $, by Olaf Seibert";
 
 byte
 ToUpper(ch)
@@ -229,8 +238,8 @@ register struct LockList **locks;
     if (RootLock != GetTail(&LockList->ll_List)) {
 	debug(("RootLock not at end of LockList!\n"));
 	/* Get the lock on the root dir at the tail of the List */
-	Remove(RootLock);
-	AddTail(&LockList->ll_List, RootLock);
+	Remove((struct Node *)RootLock);
+	AddTail((struct List *)&LockList->ll_List, (struct Node *)RootLock);
     }
 #endif
 
@@ -260,24 +269,24 @@ HanCloseDown()
 
     while (LockList && (fl = (struct MSFileLock *) GetHead(&LockList->ll_List))) {
 	debug(("UNLOCKING %08lx: ", fl));
-	PrintDirEntry(&fl->msfl_Msd);
+	PrintDirEntry((struct DirEntry *)&fl->msfl_Msd);
 	MSUnLock(fl);           /* Remove()s it from this List */
     }
 #endif
     if (DiskIOReq) {
 	if (DiskIOReq->iotd_Req.io_Unit) {
 	    MSUpdate(1);
-	    CloseDevice(DiskIOReq);
+	    CloseDevice((struct IORequest *)DiskIOReq);
 	}
-	DeleteExtIO(DiskIOReq);
+	DeleteExtIO((struct IORequest *)DiskIOReq);
 	DiskIOReq = NULL;
     }
     if (TimeIOReq) {
 	if (TimeIOReq->tr_node.io_Unit) {
-	    WaitIO(TimeIOReq);
-	    CloseDevice(TimeIOReq);
+	    WaitIO((struct IORequest *)TimeIOReq);
+	    CloseDevice((struct IORequest *)TimeIOReq);
 	}
-	DeleteExtIO(TimeIOReq);
+	DeleteExtIO((struct IORequest *)TimeIOReq);
 	TimeIOReq = NULL;
     }
     if (DiskReplyPort) {
@@ -300,7 +309,7 @@ HanOpenUp()
     IDDiskType = ID_NO_DISK_PRESENT;
     DelayState = DELAY_OFF;
     Disk.bps = MS_BPS;
-    CheckBootBlock = 1;
+    CheckBootBlock = CHECK_BOOTJMP | CHECK_SANITY | CHECK_SAN_DEFAULT;
     InitCacheList();
 
     TimeIOReq = NULL;
@@ -319,14 +328,16 @@ HanOpenUp()
 	debug(("Failed to CreateExtIO\n"));
 	goto abort;
     }
-    if (OpenDevice(DevName, UnitNr, DiskIOReq, DevFlags | TDF_ALLOW_NON_3_5)) {
+    if (OpenDevice(DevName, UnitNr, (struct IORequest *)DiskIOReq,
+		   DevFlags | TDF_ALLOW_NON_3_5)) {
 	debug(("Failed to OpenDevice\n"));
 	goto abort;
     }
     TimeIOReq = (struct timerequest *) CreateExtIO(DiskReplyPort,
 					     (long) sizeof (*TimeIOReq));
 
-    if (TimeIOReq == NULL || OpenDevice(TIMERNAME, UNIT_VBLANK, TimeIOReq, 0L))
+    if (TimeIOReq == NULL || OpenDevice(TIMERNAME, UNIT_VBLANK,
+					(struct IORequest *)TimeIOReq, 0L))
 	goto abort;
     TimeIOReq->tr_node.io_Flags = IOF_QUICK;	/* For the first WaitIO() */
 
@@ -353,7 +364,7 @@ byte	       *newname;
      * A null or empty string means: remove the label, if any.
      */
     if (!newname || !*newname) {
-	if ((int) RootLock->msfl_DirSector >= (int) Disk.rootdir) {
+	if (RootLock->msfl_DirSector != (word)ROOT_SEC) {
 	    RootLock->msfl_Msd.msd_Name[0] = DIR_DELETED;
 	    RootLock->msfl_Msd.msd_Attributes = 0;
 	    WriteFileLock(RootLock);
@@ -370,7 +381,7 @@ byte	       *newname;
      * something else for it.
      */
 
-    if ((int) RootLock->msfl_DirSector < 0) {
+    if (RootLock->msfl_DirSector == (word)ROOT_SEC) {
 	struct MSFileLock *new;
 
 	new = MSLock(RootLock, "OLAF-><>.\\*", EXCLUSIVE_LOCK ^ MODE_CREATEFILE);
@@ -412,7 +423,7 @@ byte	       *newname;
 			break;	/* and move it no matter what */
 		    }
 		}
-		CopyMem(dir, tosec + new->msfl_DirOffset,
+		CopyMem((byte *)dir, tosec + new->msfl_DirOffset,
 			(long) sizeof (struct MsDirEntry));
 		MarkSecDirty(tosec);
 		RootLock->msfl_DirSector = Disk.rootdir;
@@ -426,7 +437,7 @@ byte	       *newname;
 	EmptyFileLock = NULL;
 	MSUnLock(new);
     }
-    if ((int) RootLock->msfl_DirSector >= Disk.rootdir) {
+    if (error == 0) {
 	/*
 	 * The easy part: Copy the name to Disk.vollabel and RootLock.
 	 */

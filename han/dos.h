@@ -1,10 +1,13 @@
 
 /*
- *  $Id: dos.h,v 1.30 90/06/04 23:18:20 Rhialto Rel $
+ *  $Id: dos.h,v 1.40 91/03/03 17:55:29 Rhialto Rel $
  *  $Log:	dos.h,v $
+ * Revision 1.40  91/03/03  17:55:29  Rhialto
+ * Freeze for MAXON
+ *
  * Revision 1.30  90/06/04  23:18:20  Rhialto
  * Release 1 Patch 3
- * 
+ *
  */
 
 #ifndef EXEC_TYPES_H
@@ -64,7 +67,7 @@
 #define DE_DOSTYPE	    16L
 #endif
 
-#define CTOB(x) (void *)(((long)(x))>>2)    /*  BCPL conversion */
+#define CTOB(x)         (((long)(x))>>2)    /*  BCPL conversion */
 #define BTOC(x) (void *)(((long)(x))<<2)
 
 #define bmov(ss,dd,nn) CopyMem(ss,dd,(ulong)(nn))   /* Matt's habit */
@@ -109,21 +112,21 @@ typedef struct DosLibrary	DOSLIB;
 
 extern void *AbsExecBase;
 
-extern struct MsgPort *CreatePort();
-extern void *AllocMem(), *RemHead(), *GetMsg();
-extern void *FindTask(), *Open(), *OpenLibrary();
+void returnpacket(struct DosPacket *packet);
+int packetsqueued(void);
+void *dosalloc(ulong bytes);
+void dosfree(ulong *ptr);
+void btos(byte *bstr, byte *buf);
+void *GetHead(LIST *list);
+void *GetTail(LIST *list);
+char *typetostr(long ty);
 
-extern void   *dosalloc(), *NextNode(), *GetHead(), *GetTail();
-extern void   btos(), returnpacket();
-
-extern char *typetostr();
-
-extern struct DeviceList *NewVolNode();
-extern void FreeVolNode();
-extern struct FileLock *NewFileLock();
-extern long FreeFileLock();
-extern int DiskRemoved();
-extern void DiskInserted();
-extern DEVLIST *WhichDiskInserted();
-extern int CheckRead();
-extern int CheckWrite();
+struct DeviceList *NewVolNode(char *name, struct DateStamp *date);
+void FreeVolNode(DEVLIST *volnode);
+struct FileLock *NewFileLock(struct MSFileLock *msfl, struct FileLock *fl);
+long FreeFileLock(struct FileLock *lock);
+int DiskRemoved(void);
+void DiskInserted(DEVLIST *volnode);
+DEVLIST *WhichDiskInserted(void);
+int CheckRead(struct FileLock *lock);
+int CheckWrite(struct FileLock *lock);

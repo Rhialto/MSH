@@ -1,0 +1,123 @@
+; $Id$
+; $Log$
+;;;;
+;
+;   Some constants that need to be modified on specific versions
+
+VERSION     equ 	34
+RTPRI	    equ 	0
+
+;;;;
+;
+; The first executable location. This should return an error in case
+; someone tried to run you as a program (instead of loading you as a
+; device)
+
+	section text,code
+
+	moveq.l #20,d0
+	rts
+
+;;;;
+;
+; A romtag structure. Both "exec" and "ramlib" look for this structure to
+; discover magic constants about you (such as where to start running you
+; from...).
+;
+	xref	_DevName
+	xref	_idString
+	xdef	_RomTag
+_RomTag:
+	dc.w	$4AFC		; RTC_MATCHWORD
+	dc.l	_RomTag 	; rt_MatchTag
+	dc.l	EndCode 	; rt_EndSkip
+	dc.b	0		; rt_Flags (no RTF_AUTOINIT)
+	dc.b	VERSION 	; rt_Version
+	dc.b	3		; rt_Type  NT_DEVICE
+	dc.b	RTPRI		; rt_Pri
+	dc.l	_DevName	; rt_Name
+	dc.l	_idString	; rt_IdString
+	dc.l	_Init		; rt_Init
+
+;;;;
+;
+; Here begin the system interface commands. When the user calls
+; OpenDevice/CloseDevice/RemDevice, this eventually gets trahslated into
+; a call to the following routines (Open/Close/Expunge).  Exec has
+; already put our device pointer in A6 for us.	Exec has turned off task
+; switching while in these routines (via Forbid/Permit), so we should not
+; take too long in them.
+
+	xdef	_Init
+	xref	_CInit
+_Init:				;a0=segment list
+	movem.l D2-D3/A0/A6,-(sp)
+	jsr	_CInit
+	movem.l (sp)+,D2-D3/A0/A6
+	rts
+
+	xdef	__DevOpen
+	xref	_DevOpen
+__DevOpen:			;d0=unitnum,d1=flags,a1=ioreq,a6=device
+	movem.l D0-D3/A1/A6,-(sp)
+	jsr	_DevOpen
+	movem.l (sp)+,D0-D3/A1/A6
+	rts
+
+	xdef	__DevClose
+	xref	_DevClose
+__DevClose:			;a1=ioreq,a6=device
+	movem.l D2-D3/A1/A6,-(sp)
+	jsr	_DevClose
+	movem.l (sp)+,D2-D3/A1/A6
+	rts
+
+	xdef	__DevExpunge
+	xref	_DevExpunge
+__DevExpunge:			;a6=device
+	movem.l D2-D3/A6,-(sp)
+	jsr	_DevExpunge
+	movem.l (sp)+,D2-D3/A6
+	rts
+
+	xdef	__LibNull
+	xref	_LibNull
+__LibNull:
+	clr.l	d0
+	rts
+
+	xdef	__DevBeginIO
+	xref	_DevBeginIO
+__DevBeginIO:			;a1=ioreq,a6=device
+	movem.l D2-D3/A1/A6,-(sp)
+	jsr	_DevBeginIO
+	movem.l (sp)+,D2-D3/A1/A6
+	rts
+
+	xdef	__DevAbortIO
+	xref	_DevAbortIO
+__DevAbortIO:			;a1=ioreq,a6=device
+	movem.l D2-D3/A1/A6,-(sp)
+	jsr	_DevAbortIO
+	movem.l (sp)+,D2-D3/A1/A6
+	rts
+
+
+;#ifdef HANDLE_IO_QUICK
+;;;;
+;
+;   C interface to the atomic set bit and test old value instruction.
+;
+;   Called as	BSET_ACTIVE(byte *address).
+;
+;   Old value of the bit returned all over d0.w
+
+	xdef	_BSET_ACTIVE
+_BSET_ACTIVE:
+	move.l	4(sp),a0
+	bset	#0,(a0)         ; UNITB_ACTIVE
+	sne	d0
+	rts
+
+EndCode
+	end

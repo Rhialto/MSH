@@ -1,0 +1,671 @@
+;;;;
+;
+; $Id: devio.c,v 1.40 91/03/03 17:56:00 Rhialto Rel $
+; $Log:        devio.c,v $
+; Revision 1.40  91/03/03  17:56:00  Rhialto
+; Freeze for MAXON
+;
+
+	section     text,code
+	include     "c.i"
+
+; Some hardware data:
+
+INDEXSYNC	equ $5224	; special sync for index
+SYNC		equ $4489	; normal sector sync
+TLEN		equ 12500	; 2 miscrosecs/bit, 200 ms/track -> 100000 bits
+RLEN		equ TLEN+1324	; 1 sector extra
+WLEN		equ TLEN+20
+
+;;;;
+;
+;   The following lengths are all in unencoded bytes (or encoded words)
+
+INDEXGAP	equ 40
+INDXGAP 	equ 12
+INDXSYNC	equ  3
+INDXMARK	equ  1
+INDEXGAP2	equ 40
+
+IDGAP2		equ 12
+IDSYNC		equ  3
+IDMARK		equ  1
+IDDATA		equ  4
+IDCRC		equ  2
+
+DATAGAP1	equ 22
+DATAGAP2	equ 12
+DATASYNC	equ  3
+DATAMARK	equ  1
+DATACRC 	equ  2
+
+; Some hardware addresses:
+
+		xdef custom
+custom		equ $DFF000
+
+Dsklen		equ $24
+Intena		equ $9a 	; Interrupt enable  register (write)
+Intreq		equ $9c 	; Interrupt request register (write)
+
+		xdef ciab
+ciab		equ $BFD000
+
+; Flags in DSKLEN:
+
+dskdmaoff	equ $4000
+
+; Flags in INTENA/INTREQ:
+
+intf_setclr	equ	1<<15
+intf_dskblk	equ	1<<1
+
+; CIA interrupt control register bits/flags:
+
+ciaicrf_flg	equ	1<<4	; flg interrupt (disk index)
+
+; some cia.resource library functions
+
+	xref	_LVOSignal
+	xref	_LVOAbleICR
+	xref	_LVOSetICR
+	xref	_CiaBResource
+
+	xdef	 _SafeEnableICR
+_SafeEnableICR: 		    ; the argument is passed as a long for now
+	move.l	a6,-(sp)
+	move.l	_CiaBResource,a6
+	move.b	4+4+3(sp),d0        ; skip a6,retadr
+	jsr	_LVOSetICR(a6)      ; clear pending interrupt
+	move.b	4+3(sp),d0
+	or.b	#$80,d0 	    ; then enable it
+	jsr	_LVOAbleICR(a6)
+	move.l	(sp)+,a6
+	rts
+;;;;
+;
+;   Disk index interrupt code.
+;   is_Data (A1) is the value to stuff into the DSKLEN register.
+;   A0 points to the custom chips already.
+;   It then enables the disk block interrupt and disables the
+;   index interrupt.
+
+	xdef	_IndexIntCode
+_IndexIntCode:
+	move.w	#dskdmaoff,Dsklen(a0)
+	move.w	a1,Dsklen(a0)
+	move.w	a1,Dsklen(a0)       ; this enables the DMA
+	move.w	#intf_setclr|intf_dskblk,Intena(a0)
+	move.l	_CiaBResource,a6
+	move.b	#ciaicrf_flg,d0
+	jsr	_LVOAbleICR(a6)     ; disable index interrupt
+	rts
+;;;;
+;
+;   Disk DMA finished interrupt code.
+;   (a1) is the task to Signal, 4(a1) is the signal mask to use.
+;   Disables the disk block finished interrupt.
+
+	xdef	_DskBlkIntCode
+_DskBlkIntCode:
+	move.w	#dskdmaoff,Dsklen(a0)   ; disable disk DMA
+	move.w	#intf_dskblk,Intena(a0) ; disable the interrupt
+	move.w	#intf_dskblk,Intreq(a0) ; clear 'diskblock finished' flag
+	move.l	4(a1),d0            ; signal mask
+	move.l	(a1),a1             ; task to signal
+	jsr	_LVOSignal(a6)
+	rts
+
+
+;;;;
+;
+; Create missing bindings
+;
+
+		xref	_DRResource
+
+lib_vectsize	equ	6
+lib_base	equ	-lib_vectsize
+
+_RVOAllocUnit	equ	lib_base-(0*lib_vectsize)
+_RVOFreeUnit	equ	lib_base-(1*lib_vectsize)
+_RVOGetUnit	equ	lib_base-(2*lib_vectsize)
+_RVOGiveUnit	equ	lib_base-(3*lib_vectsize)
+_RVOGetUnitID	equ	lib_base-(4*lib_vectsize)
+
+;_AllocUnit:
+;	move.l	_DRResource,a6
+;	move.l	4(sp),d0
+;	jmp	_RVOAllocUnit(a6)
+;_FreeUnit:
+;	move.l	_DRResource,a6
+;	move.l	4(sp),d0
+;	jmp	_RVOFreeUnit(a6)
+
+	xdef	_GetUnit
+_GetUnit:
+	move.l	a6,-(sp)
+	move.l	_DRResource,a6
+	move.l	8(sp),a1
+	jsr	_RVOGetUnit(a6)
+	move.l	(sp)+,a6
+	rts
+
+;_GetUnitID:
+;	move.l	_DRResource,a6
+;	move.l	4(sp),d0
+;	jmp	_RVOGetUnitID(a6)
+
+	xdef	_GiveUnit
+_GiveUnit:
+	move.l	a6,-(sp)
+	move.l	_DRResource,a6
+	jsr	_RVOGiveUnit(a6)
+	move.l	(sp)+,a6
+	rts
+
+;int
+;DecodeTrack0(dev, unit)
+;DEV		*dev;
+;UNIT		*unit;
+;{
+	xdef	_DecodeTrack0
+_DecodeTrack0:
+
+dtregs	reg	a2/a3/a4/d3
+
+	movem.l dtregs,-(sp)
+	link	a5,#-20
+
+;    register byte  *secptr;				 /*  a4 */
+;    long	     sector;
+;    word	     numsecs;
+;    register long   numbytes;				 /*  d3 */
+;    word	     maxsec;
+
+
+MFM_ID	    equ     $5554
+MFM_DATA    equ     $5545
+
+rawbuf	    equr    a2
+decode	    equr    a3
+secptr	    equr    a4
+numbytes    equr    d3
+
+dev	    set     8+(4*4)
+unit	    set     12+(4*4)
+
+rawend	    set     -4
+trackbuf    set     -8
+oldcrc	    set     -12
+sector	    set     -16
+numsecs     set     -18
+maxsec	    set     -20
+
+; word	*rawbuf = (word *)dev->md_Rawbuffer;
+	move.l	dev(a5),a0
+	move.l	md_Rawbuffer(a0),rawbuf
+
+; byte *rawend = (byte *)rawbuf + RLEN - (MS_BPS+2)*sizeof(word);
+	lea	RLEN-((MS_BPS+2)*2)(rawbuf),a1
+	move.l	a1,rawend(a5)
+
+; byte *decode = dev->md_MfmDecode;
+	lea	md_MfmDecode(a0),decode
+
+; byte	*trackbuf = unit->mu_TrackBuffer;
+	move.l	unit(a5),a0
+	lea	mu_TrackBuffer(a0),a1
+	move.l	a1,trackbuf(a5)
+
+; word *oldcrc = unit->mu_CrcBuffer;
+	lea	mu_CrcBuffer(a0),a1
+	move.l	a1,oldcrc(a5)
+
+	move.w	#0,numsecs(a5)      ; no sectors found yet
+	move.w	#0,maxsec(a5)       ; and no highest sector number
+
+;;;;	First we will try to find a sector id.
+find_id:
+	cmp	#SYNC,(rawbuf)+
+	beq.s	fid_gotsync
+	cmpa.l	rawend(a5),rawbuf
+	blt.s	find_id
+	bra	return		    ; We ran off the end of the buffer.
+
+fid_gotsync:			    ; Skip the other syncs.
+	cmp.w	#SYNC,(rawbuf)
+	bne.s	fid_endsync
+	lea	2(rawbuf),rawbuf
+	bra.s	fid_gotsync
+
+fid_endsync:
+	cmp.w	#MFM_ID,(rawbuf)+
+	bne.s	find_id
+
+	bsr	DecodeByte	    ; cylinder #
+	bsr	DecodeByte	    ; side #
+	moveq.l #0,d0		    ; clear high part
+	bsr	DecodeByte	    ; sector #
+	cmp.w	#MS_SPT_MAX,d0	    ; sector number too large?
+	bgt.s	find_id
+	cmp.w	maxsec(a5),d0       ; what is the highest sector number?
+	ble.s	nomax
+	move.w	d0,maxsec(a5)       ; record the highest sector number
+nomax:
+	subq.w	#1,d0		    ; normalize sector number
+	move.l	d0,sector(a5)
+
+find_data:			    ; Then find the data block.
+	cmp	#SYNC,(rawbuf)+
+	beq.s	fda_gotsync
+	cmpa.l	rawend(a5),rawbuf
+	blt.s	find_data
+	bra.s	return		    ; we ran off the end of the buffer.
+
+fda_gotsync:			    ; skip the other syncs.
+	cmp.w	#SYNC,(rawbuf)
+	bne.s	fda_endsync
+	lea	2(rawbuf),rawbuf
+	bra.s	fda_gotsync
+
+fda_endsync:
+	cmp.w	#MFM_DATA,(rawbuf)+ ; do we really have a data block?
+	bne.s	find_id
+
+	cmpa.l	rawend(a5),rawbuf   ; will we still be inside the mfm data?
+	bge.s	return
+
+	move.l	sector(a5),d0       ; calculate the location to
+	moveq.l #LOG2_MS_BPS,d1     ;  store this sector.
+	asl.l	d1,d0
+	move.l	trackbuf(a5),secptr
+	add.l	d0,secptr
+
+	move.w	#MS_BPS-1,numbytes
+data_copy:
+	bsr.s	DecodeByte
+	move.b	d0,(secptr)+
+	dbra	numbytes,data_copy
+
+	move.l	sector(a5),d3       ; get pointer to crc location
+	add.l	d3,d3		    ; 2 bytes of crc per sector
+	move.l	oldcrc(a5),a0
+	add.l	d3,a0
+
+	bsr.s	DecodeByte	    ; get high byte
+	move.b	d0,(a0)+
+	bsr.s	DecodeByte	    ; and low byte of crc
+	move.b	d0,(a0)+
+
+;;;;	unit->mu_SectorStatus[sector] = unit->mu_InitSectorStatus;
+	move.l	unit(a5),a0
+	move.b	mu_InitSectorStatus(a0),d0
+	move.w	sector+2(a5),d1
+	lea	mu_SectorStatus(a0),a0
+	move.b	d0,0(a0,d1.w)
+
+	addq.w	#1,numsecs(a5)
+	cmp.w	#MS_SPT_MAX,numsecs(a5)
+	blt	find_id
+
+return:
+	move.w	maxsec(a5),d0
+	unlk	a5
+	movem.l (sp)+,dtregs
+	rts
+
+;;;;
+;
+;   Decode a single MFM word to a byte.
+;   Auto-increments the rawbuffer pointer.
+
+DecodeByte:
+	move.b	(rawbuf)+,d1    ; high nybble
+	and.w	#$7f,d1 	; strip clock bit (and garbage)
+	move.b	0(decode,d1.w),d0; decode 4 data bits
+	lsl.b	#4,d0		; make room for the rest
+
+	move.b	(rawbuf)+,d1    ; low nybble
+	and.b	#$7f,d1 	; strip clock bit again
+	or.b	0(decode,d1.w),d0; insert 4 decoded bits
+
+	rts
+
+	ifeq	READONLY
+
+; we need a buffer for the Sector-ID field to calculate its checksum
+;SectorHeader:
+;	dc.b	0		  ; cylinder
+;	dc.b	0		  ; side
+;	dc.b	0		  ; sector
+;	dc.b	2		  ; length (2=512 bytes)
+;	dc.w	0		  ; CRC
+
+	xref	_MfmEncode
+	xdef	_EncodeTrack
+
+;   EncodeTrack(TrackBuffer, Rawbuffer, Crcs, Cylinder, Side, GapLen, NumSecs)
+;		4	     4		4     2 of 4	2(/4) 2(/4)   2(/4)
+
+_EncodeTrack:
+	movem.l D2-D7/A2-A6,-(sp)  ; save registers
+
+fp	set	(4*(6+5))+4        ; 4 for return address
+trackbf set	0
+rawbf	set	4
+crcs	set	8
+cylinder   set	12
+side	set	16
+gaplen	set	20
+numsecs set	24
+
+; a0	ptr in encoded data (also putmfmbyte)
+; a2	ptr to mfm encoding table (putmfmbyte)
+; a3	ptr to data to be crc'd (HeaderCRC)
+; a4	ptr to table with calculated CRC's
+; a5	ptr to unencoded data
+
+; d0	byte to be encoded (putmfmbyte)
+; d1	trashed by putmfmbyte
+; d3	used by putmfmbyte
+; d5	sector number
+; d6	general counter of byte spans
+; d7	sector countdown
+
+	sub.w	#2,fp+gaplen+2(sp) ; gap length between sectors
+	move.l	fp+rawbf(sp),a0    ; pointer to mfmencoded buffer
+	move.l	fp+crcs(sp),a4     ; pointer to precalculated CRCs
+	move.l	fp+trackbf(sp),a5  ; pointer to unencoded data
+	lea	_MfmEncode,a2	   ; pointer to MFM lookup table
+
+	move.w	#$9254,d0	   ; a track starts with a gap ($4e)
+	moveq	#INDEXGAP-1,d6
+ingl1	move.w	d0,(a0)+           ; mfmencoded = $9254
+	dbf	d6,ingl1
+
+	move.w	#$aaaa,d0	   ; a track index starts with a gap containing
+	moveq	#INDXGAP-1,d6	   ; 12 * 0 (mfm = $aaaa)
+ingl2	move.w	d0,(a0)+
+	dbf	d6,ingl2
+
+	move.w	#INDEXSYNC,d0	   ; The INDEX field begins here, starting
+	move.w	d0,(a0)+           ; with 3 syncs (3 * $c2) with a missing
+	move.w	d0,(a0)+           ; clock bit
+	move.w	d0,(a0)+
+
+	move.w	#$5552,(a0)+       ; INDEX mark ($fc)
+
+	move.w	#$9254,d0	   ; more gap
+	moveq	#INDEXGAP2-1,d6
+ingl3	move.w	d0,(a0)+           ; mfmencoded = $9254
+	dbf	d6,ingl3
+
+	lea	-6(sp),sp          ; Reserve room for SectorHeader
+fp	set	fp+6
+	move.w	fp+numsecs+2(sp),d7; number of sectors to encode
+	subq.w	#1,d7		   ; minus 1 for dbra
+	moveq	#0,d5		   ; start with first sector
+
+secloop:
+	move.w	#$aaaa,d0	   ; a sector starts with a gap containing
+	moveq	#IDGAP2-1,d6	   ; 12 * 0 (mfm = $aaaa)
+id2gl	move.w	d0,(a0)+
+	dbf	d6,id2gl
+
+	move.w	#SYNC,d0	   ; The ID field begins here, starting
+	move.w	d0,(a0)+           ; with 3 syncs (3 * $a1) with a missing
+	move.w	d0,(a0)+           ; clock bit
+	move.w	d0,(a0)+
+
+	move.w	#$5554,(a0)+       ; ID-Address mark ($fe)
+
+	move.l	sp,a3		   ; pointer to Sector-ID buffer
+
+	moveq	#$5554&1,d3	   ; preload d3 for the putmfmbyte routine
+	move.b	fp+cylinder+3(sp),0(a3)  ; insert current cylinder number
+	move.b	fp+side+3(sp),1(a3)   ; side number
+	addq.w	#1,d5		   ; sectors start with 1 instead of 0
+	move.b	d5,2(a3)           ; sector number
+	move.b	#MS_BPScode,3(a3)  ; sector length 512 bytes
+	bsr	HeaderCRC	   ; calculate checksum
+	move.w	d0,IDDATA(a3)      ; put it past the data
+
+	moveq	#IDDATA+IDCRC-1,d6 ; 6 bytes Sector-ID
+sidl	move.b	(a3)+,d0           ; get one byte
+	bsr.s	putmfmbyte	   ; encode it
+	dbf	d6,sidl 	   ; end of buffer ?
+
+	moveq	#$4e,d0 	   ; recalculate the MFM value of the
+	bsr.s	putmfmbyte	   ; first gap byte
+
+	moveq	#DATAGAP1-1-1,d6   ; GAP consisting of
+	move.w	#$9254,d0	   ; 22 * $4e
+dg1l	move.w	d0,(a0)+
+	dbf	d6,dg1l
+
+	moveq	#DATAGAP2-1,d6	   ; GAP consisting of
+	move.w	#$aaaa,d0	   ; 12 * 0 (mfm = $aaaa)
+dg2l	move.w	d0,(a0)+
+	dbf	d6,dg2l
+
+	move.w	#SYNC,d0	   ; Sector data
+	move.w	d0,(a0)+           ; starts with 3 syncs
+	move.w	d0,(a0)+
+	move.w	d0,(a0)+
+
+	move.w	#$5545,(a0)+       ; Data Address Mark ($fb)
+
+	moveq	#$5545&1,d3	   ; preload d3
+	move	#MS_BPS-1,d6	   ; a sector has 512 bytes
+dblockl move.b	(a5)+,d0           ; get one byte from the buffer
+	bsr.s	putmfmbyte	   ; encode it
+	dbf	d6,dblockl	   ; end of sector ?
+
+	move.b	(a4)+,d0           ; get first byte of CRC
+	bsr.s	putmfmbyte	   ; encode it
+	move.b	(a4)+,d0           ; get second byte
+	bsr.s	putmfmbyte	   ; encode it
+
+	moveq	#$4e,d0 	   ; recalculate the MFM value of the
+	bsr.s	putmfmbyte	   ; first gap byte -> -1 in following loop
+
+;	moveq	#DATAGAP3-1-1,d6   ; sector ends with a gap
+	move.w	fp+gaplen+2(sp),d6 ; sector ends with a gap, -1 for dbf
+	move.w	#$9254,d0	   ; 80 * $4e
+dg3l	move.w	d0,(a0)+
+	dbf	d6,dg3l
+
+	dbf	d7,secloop	   ; next sector. d5 has been incremented
+
+	lea	6(sp),sp           ; Free room for SectorHeader
+fp	set	fp-6
+
+	move.l	fp+rawbf(sp),d6    ; pointer to mfmencoded buffer
+	add.l	#WLEN-2,d6	   ; end of encoded buffer (-2 for dbf)
+	move.l	a0,d0		   ; (I really want to   sub.l a0,d6 )
+	sub.l	d0,d6		   ; length of the remains
+	lsr.l	#1,d6		   ; turn into words
+
+	move.w	#$9254,d0	   ; Fill the end of the track with $4e
+endgl	move.w	d0,(a0)+           ; $9254 mfm encoded
+	dbf	d6,endgl
+
+	movem.l (sp)+,D2-D7/A2-A6
+	rts
+
+; putmfmbyte encodes one byte (in D0) into MSDOS MFM format to the location
+; pointed by A0. D3 has to be preserved between calls !
+; A2 must contain the pointer to the encoding table.
+; Destroys D0, D1. Updates A0 and D3. Requires A0, D0, D3.
+
+putmfmbyte
+	moveq	#16-4,d1
+	lsl.l	d1,d0		; split the byte into two nibbles
+	lsr.w	d1,d0		; low nibble is in bits 0..15
+				; high nibble in bits 16..31
+	swap	d0		; process high nibble first
+	and.w	#$0f,d0 	; mask out unwanted bits
+	move.b	0(a2,d0.w),d1   ; get mfmencoded nibble from table
+	btst	#6,d1		; we now have to work out if
+	bne.s	1$		; the high bit of the unencoded data
+	btst	#0,d3		; byte and the low bit of the last
+	bne.s	1$		; encoded data are both 0. if this is the
+	bset	#7,d1		; case the first clock bit has to be '1'
+1$	move.b	d1,(a0)+        ; write high (encoded) nibble
+	swap	d0		; process low nibble
+	move.b	0(a2,d0.w),d3   ; ....same as above
+	btst	#6,d3
+	bne.s	2$
+	btst	#0,d1
+	bne.s	2$
+	bset	#7,d3
+2$	move.b	d3,(a0)+
+	rts
+
+
+; The CRC is computed not only over the actual data, but including
+; the SYNC mark (3 * $a1) and the 'ID/DATA - Address Mark' ($fe/$fb).
+; As we don't read or encode these fields into our buffers, we have to
+; preload the registers containing the CRC with the values they would have
+; after stepping over these fields.
+;
+; How CRCs "really" work:
+;
+; First, you should regard a bitstring as a series of coefficients of
+; polymomials. We calculate with these polynomials in modulo-2
+; arithmetic, in which both add and subtract are done the same as
+; exclusive-or. Now, we modify our data (a very long polynomial) in
+; such a way that it becomes divisible by the CCITT-standard 16-bit
+;		 16   12   5
+; polynomial:	x  + x	+ x + 1, represented by $11021. The easiest
+; way to do this would be to multiply (using proper arithmetic) our
+; datablock with $11021. So we have:
+;   data * $11021		 =
+;   data * ($10000 + $1021)      =
+;   data * $10000 + data * $1021
+; The left part of this is simple: Just add two 0 bytes. But then
+; the right part (data $1021) remains difficult and even could have
+; a carry into the left part. The solution is to use a modified
+; multiplication, which has a result that is not correct, but with
+; a difference of any multiple of $11021. We then only need to keep
+; the 16 least significant bits of the result.
+;
+; The following algorithm does this for us:
+;
+;   unsigned char *data, c, crclo, crchi;
+;   while (not done) {
+;	c = *data++ + crchi;
+;	crchi = (@ c) >> 8 + crclo;
+;	crclo = @ c;
+;   }
+;
+; Remember, + is done with EOR, the @ operator is in two tables (high
+; and low byte separately), which is calculated as
+;
+;      $1021 * (c & $F0)
+;  xor $1021 * (c & $0F)
+;  xor $1021 * (c >> 4)         (* is regular multiplication)
+;
+;
+; Anyway, the end result is the same as the remainder of the division of
+; the data by $11021. I am afraid I need to study theory a bit more...
+
+
+; This is the entry to calculate the checksum for the sector-id field
+; requires:  a3 = pointer to the unencoded data
+; returns:   d0 = CRC
+
+HeaderCRC:
+	movem.l  D1-D3/A3-A5,-(sp) ; save registers
+	move.w	 #$b2,d0	   ; preload registers
+	moveq	 #$30,d1	   ; (CRC for $a1,$a1,$a1,$fb)
+	moveq	 #3,d3		   ; calculate checksum for 4 bytes
+	bra.s	 getCRC 	   ; (=cylinder,side,sector,sectorlength)
+
+; This is the entry to calculate the checksum for the data field
+; requires:  a3 = pointer to the unencoded data
+; returns:   d0 = CRC
+
+; C entry point for DataCRC(byte *data)
+
+	xdef	_DataCRC
+_DataCRC:
+	movem.l D1-D3/A3-A5,-(sp)  ; save registers
+fp	set	(4*(3+3))+4
+data	set	0
+	move.l	fp+data(sp),a3     ; get parameter
+	move.w	#$e2,d0 	   ; preload the CRC registers
+	move.w	#$95,d1 	   ; (CRC for $a1,$a1,$a1,$fe)
+	move.w	#MS_BPS-1,d3	   ; a sector 512 bytes
+
+getCRC	lea	CRCTable1,a4
+	lea	CRCTable2,a5
+	moveq	#0,d2
+
+1$	move.b	(a3)+,d2
+	eor.b	d0,d2
+	move.b	0(a4,d2.w),d0
+	eor.b	d1,d0
+	move.b	0(a5,d2.w),d1
+	dbf	d3,1$
+
+	lsl.w	#8,d0
+	move.b	d1,d0
+	movem.l (sp)+,D1-D3/A3-A5
+	rts
+
+
+	section data,data
+CRCTable1:
+	dc.b $00,$10,$20,$30,$40,$50,$60,$70,$81,$91,$a1,$b1,$c1,$d1,$e1,$f1
+	dc.b $12,$02,$32,$22,$52,$42,$72,$62,$93,$83,$b3,$a3,$d3,$c3,$f3,$e3
+	dc.b $24,$34,$04,$14,$64,$74,$44,$54,$a5,$b5,$85,$95,$e5,$f5,$c5,$d5
+	dc.b $36,$26,$16,$06,$76,$66,$56,$46,$b7,$a7,$97,$87,$f7,$e7,$d7,$c7
+	dc.b $48,$58,$68,$78,$08,$18,$28,$38,$c9,$d9,$e9,$f9,$89,$99,$a9,$b9
+	dc.b $5a,$4a,$7a,$6a,$1a,$0a,$3a,$2a,$db,$cb,$fb,$eb,$9b,$8b,$bb,$ab
+	dc.b $6c,$7c,$4c,$5c,$2c,$3c,$0c,$1c,$ed,$fd,$cd,$dd,$ad,$bd,$8d,$9d
+	dc.b $7e,$6e,$5e,$4e,$3e,$2e,$1e,$0e,$ff,$ef,$df,$cf,$bf,$af,$9f,$8f
+	dc.b $91,$81,$b1,$a1,$d1,$c1,$f1,$e1,$10,$00,$30,$20,$50,$40,$70,$60
+	dc.b $83,$93,$a3,$b3,$c3,$d3,$e3,$f3,$02,$12,$22,$32,$42,$52,$62,$72
+	dc.b $b5,$a5,$95,$85,$f5,$e5,$d5,$c5,$34,$24,$14,$04,$74,$64,$54,$44
+	dc.b $a7,$b7,$87,$97,$e7,$f7,$c7,$d7,$26,$36,$06,$16,$66,$76,$46,$56
+	dc.b $d9,$c9,$f9,$e9,$99,$89,$b9,$a9,$58,$48,$78,$68,$18,$08,$38,$28
+	dc.b $cb,$db,$eb,$fb,$8b,$9b,$ab,$bb,$4a,$5a,$6a,$7a,$0a,$1a,$2a,$3a
+	dc.b $fd,$ed,$dd,$cd,$bd,$ad,$9d,$8d,$7c,$6c,$5c,$4c,$3c,$2c,$1c,$0c
+	dc.b $ef,$ff,$cf,$df,$af,$bf,$8f,$9f,$6e,$7e,$4e,$5e,$2e,$3e,$0e,$1e
+
+CRCTable2:
+	dc.b $00,$21,$42,$63,$84,$a5,$c6,$e7,$08,$29,$4a,$6b,$8c,$ad,$ce,$ef
+	dc.b $31,$10,$73,$52,$b5,$94,$f7,$d6,$39,$18,$7b,$5a,$bd,$9c,$ff,$de
+	dc.b $62,$43,$20,$01,$e6,$c7,$a4,$85,$6a,$4b,$28,$09,$ee,$cf,$ac,$8d
+	dc.b $53,$72,$11,$30,$d7,$f6,$95,$b4,$5b,$7a,$19,$38,$df,$fe,$9d,$bc
+	dc.b $c4,$e5,$86,$a7,$40,$61,$02,$23,$cc,$ed,$8e,$af,$48,$69,$0a,$2b
+	dc.b $f5,$d4,$b7,$96,$71,$50,$33,$12,$fd,$dc,$bf,$9e,$79,$58,$3b,$1a
+	dc.b $a6,$87,$e4,$c5,$22,$03,$60,$41,$ae,$8f,$ec,$cd,$2a,$0b,$68,$49
+	dc.b $97,$b6,$d5,$f4,$13,$32,$51,$70,$9f,$be,$dd,$fc,$1b,$3a,$59,$78
+	dc.b $88,$a9,$ca,$eb,$0c,$2d,$4e,$6f,$80,$a1,$c2,$e3,$04,$25,$46,$67
+	dc.b $b9,$98,$fb,$da,$3d,$1c,$7f,$5e,$b1,$90,$f3,$d2,$35,$14,$77,$56
+	dc.b $ea,$cb,$a8,$89,$6e,$4f,$2c,$0d,$e2,$c3,$a0,$81,$66,$47,$24,$05
+	dc.b $db,$fa,$99,$b8,$5f,$7e,$1d,$3c,$d3,$f2,$91,$b0,$57,$76,$15,$34
+	dc.b $4c,$6d,$0e,$2f,$c8,$e9,$8a,$ab,$44,$65,$06,$27,$c0,$e1,$82,$a3
+	dc.b $7d,$5c,$3f,$1e,$f9,$d8,$bb,$9a,$75,$54,$37,$16,$f1,$d0,$b3,$92
+	dc.b $2e,$0f,$6c,$4d,$aa,$8b,$e8,$c9,$26,$07,$64,$45,$a2,$83,$e0,$c1
+	dc.b $1f,$3e,$5d,$7c,$9b,$ba,$d9,$f8,$17,$36,$55,$74,$93,$b2,$d1,$f0
+
+	section text,code
+	endc
+;;;;
+;
+; The disk change interrupt handler glue code.
+
+	xref _DiskChangeHandler0
+	xdef _DiskChangeHandler
+
+_DiskChangeHandler:
+	move.l	a1,-(sp)                ; is_Data
+	jsr	_DiskChangeHandler0
+	lea	4(sp),sp
+	rts
+
+	end

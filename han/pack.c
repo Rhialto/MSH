@@ -1,9 +1,12 @@
 /*-
- * $Id: pack.c,v 1.32 90/11/23 23:53:22 Rhialto Exp $
+ * $Id: pack.c,v 1.40 91/03/03 17:45:09 Rhialto Rel $
  * $Log:	pack.c,v $
+ * Revision 1.40  91/03/03  17:45:09  Rhialto
+ * Freeze for MAXON
+ *
  * Revision 1.32  90/11/23  23:53:22  Rhialto
  * Prepare for syslog
- * 
+ *
  * Revision 1.31  90/11/10  02:42:38  Rhialto
  * Patch 3a.
  *
@@ -33,14 +36,22 @@
  *  Also, most protection against non-inserted disks is done here.
 -*/
 
-#include "dos.h"
+#include <amiga.h>
+#include <functions.h>
+#include <string.h>
 #include "han.h"
+#include "dos.h"
 
 #ifdef HDEBUG
 #   define	debug(x)  syslog x
+    void initsyslog(void);
+    void syslog(char *, ...);
+    void uninitsyslog(void);
 #else
 #   define	debug(x)
 #endif
+
+#define MSFL(something)     (struct MSFileLock *)(something)
 
 /*
  * Since this code might be called several times in a row without being
@@ -54,7 +65,7 @@ DEVNODE        *DevNode;	/* Our DOS node.. created by DOS for us */
 DEVLIST        *VolNode;	/* Device List structure for our volume
 				 * node */
 
-void	       *SysBase;	/* EXEC library base */
+/* void 	  *SysBase;	/* EXEC library base */
 DOSLIB	       *DOSBase;	/* DOS library base */
 long		PortMask;	/* The signal mask for our DosPort */
 long		WaitMask;	/* The signal mask to wait for */
@@ -66,8 +77,9 @@ ulong		DevFlags;	/*     mountlist */
 long		DosType;
 PACKET	       *DosPacket;	/* For the SystemRequest pr_WindowPtr */
 
-void ChangeIntHand(), DiskChange();
-void NewVolNodeName();
+__stkargs __geta4 void ChangeIntHand(void);
+void NewVolNodeName(void);
+void DiskChange(void);
 
 struct Interrupt ChangeInt = {
     { 0 },			/* is_Node */
@@ -81,7 +93,7 @@ struct Interrupt ChangeInt = {
  */
 
 void
-messydoshandler()
+messydoshandler(void)
 {
     register PACKET *packet;
     MSG 	   *msg;
@@ -94,7 +106,7 @@ messydoshandler()
      * referencing absolute memory location 4.
      */
 
-    SysBase = AbsExecBase;
+    /* SysBase = AbsExecBase; */
     DOSBase = OpenLibrary("dos.library", 0L);
 
 #ifdef HDEBUG
@@ -241,10 +253,10 @@ top:
 		    lock = BTOC(PArg1);
 		    if (CheckRead(lock))
 			break;
-		    btos(PArg2, buf);
+		    btos((byte *)PArg2, buf);
 		    if ((lockmode = PArg3) != EXCLUSIVE_LOCK)
 			lockmode = SHARED_LOCK;
-		    msfl = MSLock(lock ? lock->fl_Key : NULL,
+		    msfl = MSLock(MSFL(lock ? lock->fl_Key : NULL),
 				  buf,
 				  lockmode);
 		    if (msfl) {
@@ -260,7 +272,7 @@ top:
 	    case ACTION_RENAME_DISK:	/* BSTR:NewName 	   Bool      */
 		if (CheckWrite(NULL))
 		    break;
-		btos(PArg1, buf);
+		btos((byte *)PArg1, buf);
 		buf[31] = '\0';
 		if (PRes1 = MSRelabel(buf))
 		    NewVolNodeName();
@@ -275,7 +287,7 @@ top:
 		    if (lock == NULL)
 			break;
 
-		    msfl = (struct MSFileLock *)lock->fl_Key;
+		    msfl = MSFL(lock->fl_Key);
 		    FreeFileLock(lock); /* may remove last lock on volume */
 		    MSUnLock(msfl);     /* may call MayFreeVolNode */
 		    OpenCount--;
@@ -288,8 +300,8 @@ top:
 		    lock = BTOC(PArg1);
 		    if (CheckWrite(lock))
 			break;
-		    btos(PArg2, buf);
-		    PRes1 = MSDeleteFile(lock ? lock->fl_Key : NULL,
+		    btos((byte *)PArg2, buf);
+		    PRes1 = MSDeleteFile(MSFL(lock ? lock->fl_Key : NULL),
 					 buf);
 		}
 		break;
@@ -302,11 +314,11 @@ top:
 		    dlock = BTOC(PArg3);
 		    if (CheckWrite(slock) || CheckWrite(dlock))
 			break;
-		    btos(PArg2, buf);
-		    btos(PArg4, buf2);
-		    PRes1 = MSRename(slock ? slock->fl_Key : NULL,
+		    btos((byte *)PArg2, buf);
+		    btos((byte *)PArg4, buf2);
+		    PRes1 = MSRename(MSFL(slock ? slock->fl_Key : NULL),
 				     buf,
-				     dlock ? dlock->fl_Key : NULL,
+				     MSFL(dlock ? dlock->fl_Key : NULL),
 				     buf2);
 		}
 		break;
@@ -325,7 +337,7 @@ top:
 
 		    lock = BTOC(PArg1);
 
-		    msfl = MSDupLock(lock ? lock->fl_Key : NULL);
+		    msfl = MSDupLock(MSFL(lock ? lock->fl_Key : NULL));
 
 		    if (msfl) {
 			if (newlock = NewFileLock(msfl, lock)) {
@@ -345,8 +357,9 @@ top:
 		    lock = BTOC(PArg2);
 		    if (CheckWrite(lock))
 			break;
-		    btos(PArg3, buf);
-		    PRes1 = MSSetProtect(lock ? lock->fl_Key : NULL, buf, PArg4);
+		    btos((byte *)PArg3, buf);
+		    PRes1 = MSSetProtect(MSFL(lock ? lock->fl_Key : NULL),
+					buf, PArg4);
 		}
 		break;
 	    case ACTION_CREATE_DIR:	/* Lock,Name		Lock	     */
@@ -358,9 +371,10 @@ top:
 		    lock = BTOC(PArg1);
 		    if (CheckWrite(lock))
 			break;
-		    btos(PArg2, buf);
+		    btos((byte *)PArg2, buf);
 
-		    msfl = MSCreateDir(lock ? lock->fl_Key : NULL, buf);
+		    msfl = MSCreateDir(MSFL(lock ? lock->fl_Key : NULL),
+				       buf);
 
 		    if (msfl) {
 			if (newlock = NewFileLock(msfl, lock)) {
@@ -379,7 +393,8 @@ top:
 		    lock = BTOC(PArg1);
 		    if (CheckRead(lock))
 			break;
-		    PRes1 = MSExamine(lock ? lock->fl_Key : NULL, BTOC(PArg2));
+		    PRes1 = MSExamine(MSFL(lock ? lock->fl_Key : NULL),
+				      BTOC(PArg2));
 		}
 		break;
 	    case ACTION_EXAMINE_NEXT:	/* Lock,Fib	       Bool	     */
@@ -389,7 +404,7 @@ top:
 		    lock = BTOC(PArg1);
 		    if (CheckRead(lock))
 			break;
-		    PRes1 = MSExNext(lock ? lock->fl_Key : NULL, BTOC(PArg2));
+		    PRes1 = MSExNext(MSFL(lock ? lock->fl_Key : NULL), BTOC(PArg2));
 		}
 		break;
 	    case ACTION_DISK_INFO:	/* InfoData	       Bool:TRUE     */
@@ -413,7 +428,7 @@ top:
 
 		    lock = BTOC(PArg1);
 
-		    msfl = MSParentDir(lock ? lock->fl_Key : NULL);
+		    msfl = MSParentDir(MSFL(lock ? lock->fl_Key : NULL));
 
 		    if (msfl) {
 			if (newlock = NewFileLock(msfl, lock)) {
@@ -428,10 +443,11 @@ top:
 	    case ACTION_INHIBIT:	/* Bool 		   Bool      */
 		if (Inhibited = PArg1) {
 		    DiskRemoved();
-		} else { /* Fall through to ACTION_DISK_CHANGE: */
+		} else	 /* Fall through to ACTION_DISK_CHANGE: */
+		    goto disk_change;
 	    case ACTION_DISK_CHANGE:	/* ?			   ?	     */
-		    DiskChange();
-		}
+	    disk_change:
+		DiskChange();
 		PRes1 = DOSTRUE;
 		break;
 	    case ACTION_SET_DATE: /* -,Lock,Name,CPTRDateStamp	   Bool      */
@@ -441,24 +457,29 @@ top:
 		    lock = BTOC(PArg2);
 		    if (CheckWrite(lock))
 			break;
-		    btos(PArg3, buf);
-		    PRes1 = MSSetDate(lock ? lock->fl_Key : NULL,
+		    btos((byte *)PArg3, buf);
+		    PRes1 = MSSetDate(MSFL(lock ? lock->fl_Key : NULL),
 				      buf,
-				      PArg4);
+				      (struct DateStamp *)PArg4);
 		}
 		break;
 	    case ACTION_READ:	/* FHArg1,CPTRBuffer,Length	  ActLength  */
 		if (CheckRead(NULL)) {
 		    PRes1 = -1;
 		} else
-		    PRes1 = MSRead(PArg1, PArg2, PArg3);
+		    PRes1 = MSRead((struct MSFileHandle *)PArg1,
+				   (byte *)PArg2, PArg3);
 		break;
 	    case ACTION_WRITE:	/* FHArg1,CPTRBuffer,Length	  ActLength  */
 		if (CheckWrite(NULL)) {
 		    PRes1 = -1;
 		} else
-		    PRes1 = MSWrite(PArg1, PArg2, PArg3);
+		    PRes1 = MSWrite((struct MSFileHandle *)PArg1,
+				    (byte *)PArg2, PArg3);
 		break;
+	    case ACTION_OPENRW: 	/* FileHandle,Lock,Name    Bool      */
+	    case ACTION_OPENOLD:	/* FileHandle,Lock,Name    Bool      */
+		goto open_notnew;
 	    case ACTION_OPENNEW:	/* FileHandle,Lock,Name    Bool      */
 		{
 		    struct MSFileHandle *msfh;
@@ -467,16 +488,15 @@ top:
 
 		    if (CheckWrite(BTOC(PArg2)))
 			break;
-	    case ACTION_OPENRW: 	/* FileHandle,Lock,Name    Bool      */
-	    case ACTION_OPENOLD:	/* FileHandle,Lock,Name    Bool      */
 
+		open_notnew:
 		    fh = BTOC(PArg1);
 		    lock = BTOC(PArg2);
 		    if (CheckRead(lock))
 			break;
-		    btos(PArg3, buf);
+		    btos((byte *)PArg3, buf);
 		    debug(("'%s' ", buf));
-		    msfh = MSOpen(lock ? lock->fl_Key : NULL,
+		    msfh = MSOpen(MSFL(lock ? lock->fl_Key : NULL),
 				  buf,
 				  PType);
 		    if (msfh) {
@@ -487,7 +507,7 @@ top:
 		}
 		break;
 	    case ACTION_CLOSE:	/* FHArg1			  Bool:TRUE  */
-		MSClose(PArg1);
+		MSClose((struct MSFileHandle *)PArg1);
 		PRes1 = DOSTRUE;
 		OpenCount--;
 		break;
@@ -495,7 +515,7 @@ top:
 		if (CheckRead(NULL)) {
 		    PRes1 = -1;
 		} else
-		    PRes1 = MSSeek(PArg1, PArg2, PArg3);
+		    PRes1 = MSSeek((struct MSFileHandle *)PArg1, PArg2, PArg3);
 		break;
 		/*
 		 * A few other packet types which we do not support
@@ -532,7 +552,7 @@ top:
 	 *  when the timeout has elapsed, since the same message port is
 	 *  used for other IO.
 	 */
-	if (CheckIO(TimeIOReq)) {   /* Timer finished? */
+	if (CheckIO(&TimeIOReq->tr_node)) {   /* Timer finished? */
 	    debug(("TimeIOReq is finished\n"));
 	    if (DelayState != DELAY_OFF) {
 		MSUpdate(0);    /* Also may switch off motor */
@@ -581,19 +601,11 @@ exit:
     /* Fall off the end of the world. Implicit Permit(). */
 }
 
-void
-ChangeIntHand()
+__stkargs __geta4 void
+ChangeIntHand(void)
 {
-/* INDENT OFF */
-#asm
-    move.l  a6,-(sp)
-#endasm
     DiskChanged = 1;
     Signal(DosPort->mp_SigTask, PortMask);
-#asm
-    move.l  (sp)+,a6
-#endasm
-/* INDENT ON */
 }
 
 /*
@@ -665,7 +677,7 @@ struct FileLock *lock;
 
     if (fl == lock) {
 	*(BPTR *)flp = fl->fl_Link;
-	dosfree(fl);
+	dosfree((ulong *)fl);
 	return DOSTRUE;
     } else {
 	debug(("Huh?? Could not find filelock!\n"));
@@ -682,8 +694,8 @@ struct FileLock *lock;
 
 DEVLIST        *
 NewVolNode(name, date)
-struct DateStamp *date;
 char *name;
+struct DateStamp *date;
 {
     DOSINFO	   *di;
     register DEVLIST *volnode;
@@ -699,7 +711,7 @@ char *name;
 	    volnode->dl_Type = DLT_VOLUME;
 	    volnode->dl_Task = DosPort;
 	    volnode->dl_DiskType = IDDiskType;
-	    volnode->dl_Name = CTOB(volname);
+	    volnode->dl_Name = (BSTR *)CTOB(volname);
 	    volnode->dl_VolumeDate = *date;
 	    volnode->dl_MSFileLockList = NULL;
 
@@ -708,7 +720,7 @@ char *name;
 	    di->di_DevInfo = (long) CTOB(volnode);
 	    Permit();
 	} else {
-	    dosfree(volnode);
+	    dosfree((ulong *)volnode);
 	    volnode = NULL;
 	}
     } else {
@@ -760,7 +772,7 @@ DEVLIST        *volnode;
     if (dl == volnode) {
 	*(BPTR *) dlp = dl->dl_Next;
 	dosfree(BTOC(dl->dl_Name));
-	dosfree(dl);
+	dosfree((ulong *)dl);
     }
 #ifdef HDEBUG
     else {

@@ -1,17 +1,23 @@
 /*-
- * $Id: support.c,v 1.30 90/06/04 23:16:41 Rhialto Rel $
+ * $Id: support.c,v 1.40 91/03/03 17:46:02 Rhialto Rel $
  * $Log:	support.c,v $
+ * Revision 1.40  91/03/03  17:46:02  Rhialto
+ * Freeze for MAXON
+ *
  * Revision 1.30  90/06/04  23:16:41  Rhialto
  * Release 1 Patch 3
  *
 -*/
 
+#include <amiga.h>
+#include <functions.h>
+
+typedef unsigned long		ulong;
+typedef unsigned char		byte;
+
 #include "dos.h"
 
 extern PORT    *DosPort;	/* Our DOS port... */
-
-typedef unsigned long		ulong;
-typedef unsigned char		ubyte;
 
 /*
  * PACKET ROUTINES.	Dos Packets are in a rather strange format as you
@@ -65,6 +71,7 @@ register ulong	bytes;
     return NULL;
 }
 
+void
 dosfree(ptr)
 register ulong *ptr;
 {
@@ -80,8 +87,8 @@ register ulong *ptr;
 
 void
 btos(bstr, buf)
-ubyte	       *bstr;
-ubyte	       *buf;
+byte	       *bstr;
+byte	       *buf;
 {
     bstr = BTOC(bstr);
     bmov(bstr + 1, buf, *bstr);

@@ -1,9 +1,12 @@
 /*-
- * $Id: hanreq.c,v 1.32 90/11/23 23:53:42 Rhialto Exp $
+ * $Id: hanreq.c,v 1.40 91/03/03 17:54:07 Rhialto Rel $
  * $Log:	hanreq.c,v $
+ * Revision 1.40  91/03/03  17:54:07  Rhialto
+ * Freeze for MAXON
+ *
  * Revision 1.32  90/11/23  23:53:42  Rhialto
  * Prepare for syslog
- * 
+ *
  * Revision 1.30  90/06/04  23:17:48  Rhialto
  * Release 1 Patch 3
  *
@@ -17,12 +20,19 @@
  *  not be used or copied without a licence.
 -*/
 
-#include "dos.h"
+#include <amiga.h>
+#include <functions.h>
 #include "han.h"
+#include "dos.h"
+#ifndef INTUITION_INTUITION_H
 #include <intuition/intuition.h>
+#endif
 
 #ifdef HDEBUG
 #   define	debug(x)  syslog x
+    void initsyslog(void);
+    void syslog(char *, ...);
+    void uninitsyslog(void);
 #else
 #   define	debug(x)
 #endif

@@ -1,9 +1,12 @@
 /*-
- *  $Id: han.h,v 1.35 91/03/03 17:43:39 Rhialto Exp $
+ *  $Id: han.h,v 1.40 91/03/03 17:55:38 Rhialto Rel $
  *  $Log:	han.h,v $
+ * Revision 1.40  91/03/03  17:55:38  Rhialto
+ * Freeze for MAXON
+ *
  * Revision 1.35  91/03/03  17:43:39  Rhialto
  * Cache list is now two lists: LRU and sorted by sector.
- * 
+ *
  * Revision 1.31  90/11/10  02:50:47  Rhialto
  * Patch 3a. Introduce disk volume date.
  *
@@ -81,17 +84,16 @@ struct DirEntry {
 };
 
 struct DiskParam {
-    word	    bps;	/* bytes per sector. max MS_BPS supported */
-    byte	    spc;	/* sectors per cluster */
+    word	    bps;	/* bytes per sector */
+    word	    spc;	/* byte: sectors per cluster */
     word	    res;	/* reserved sectors (boot block) */
-    byte	    nfats;	/* number of fats */
+    word	    nfats;	/* byte: number of fats */
     word	    ndirs;	/* number of directory entries */
     word	    nsects;	/* total number of sectors on disk */
-    byte	    media;	/* media byte */
+    word	    media;	/* byte: media byte */
     word	    spf;	/* sectors per fat */
-    word	    spt;	/* sectors per track. Only MS_SPT
-				 * supported */
-    word	    nsides;	/* # sides. Max MS_NSIDES supported */
+    word	    spt;	/* sectors per track */
+    word	    nsides;	/* # sides */
     word	    nhid;	/* Number of hidden sectors */
     /* derived parameters */
     word	    start;	/* sector of cluster 0 */
@@ -105,6 +107,12 @@ struct DiskParam {
     struct DirEntry vollabel;	/* copy of volume label */
     word	    fat16bits;	/* Is the FAT 16 bits/entry? */
 };
+
+#define CHECK_BOOTJMP	0x01	/* accept disk only with JMP or 00 */
+#define CHECK_SANITY	0x02	/* check Bios Parameter Block */
+#define CHECK_SAN_DEFAULT 0x04	/* use default values when bpb not ok */
+#define CHECK_USE_DEFAULT 0x08	/* always use default values */
+
 
 /*
  * A pointer to an MSFileLock is put into the fl_Key field of a DOS
@@ -122,7 +130,7 @@ struct MSFileLock {
     short	    msfl_Refcount;	/* -1: exclusive, >0: # of shared
 					 * locks */
     struct MSFileLock *msfl_Parent;	/* Pointer to parent directory */
-    struct MsDirEntry msfl_Msd; /* Copy of directory entry */
+    struct MsDirEntry msfl_Msd; 	/* Copy of directory entry */
     word	    msfl_DirSector;	/* Location of directory entry */
     word	    msfl_DirOffset;
 };
@@ -180,6 +188,7 @@ struct Cache {
 #define     DELAY_DIRTY     4	/* We have dirty buffers to flush */
 
 
+/*
 extern long	Wait();
 extern struct MsgPort *CreatePort();
 extern struct IOExtTD *CreateExtIO();
@@ -187,6 +196,7 @@ extern void    *AllocMem(), FreeMem();
 extern byte    *index(), *rindex();
 extern void    *CheckIO();
 extern long	AutoRequest();
+*/
 
 /*
  * PACK.C
@@ -198,19 +208,21 @@ extern ulong	DevFlags;
 extern struct DosPacket *DosPacket;
 extern struct DeviceList *VolNode;
 extern short	DiskChanged;
+int MayFreeVolNode(struct DeviceList *volnode);
 
 /*
  * HANMAIN.C
  */
-extern byte	ToUpper();
-extern long	lmin();
-extern byte    *ZapSpaces();
-extern byte    *ToMSName();
-extern long	MSDiskInfo();
-extern void	MSDiskInserted();
-extern int	MSDiskRemoved();
-extern void	HanCloseDown();
-extern int	HanOpenUp();
+byte ToUpper(byte ch);
+long lmin(long a, long b);
+byte *ZapSpaces(byte *begin, byte *end);
+byte *ToMSName(byte *dest, byte  *source);
+long MSDiskInfo(struct InfoData *infodata);
+void MSDiskInserted(struct LockList **locks, void *cookie);
+int MSDiskRemoved(struct LockList **locks);
+void HanCloseDown(void);
+int HanOpenUp(void);
+long MSRelabel(byte *newname);
 
 /*
  * HANSEC.C
@@ -231,36 +243,42 @@ extern int	MaxCache;	/* Maximum amount of cached buffers */
 extern ulong	BufMemType;
 extern long	CacheBlockSize; /* Size of disk block + overhead */
 extern int	DelayState;
-extern byte    *Word8086;
-extern word	Get8086Word();
-extern word	OtherEndianWord();
-extern ulong	OtherEndianLong();
-extern void	OtherEndianMsd();
-extern word	ClusterToSector();
-extern word	ClusterOffsetToSector();
-extern word	DirClusterToSector();
-extern word	SectorToCluster();
-extern word	NextCluster();
-extern word	NextClusteredSector();
-extern word	FindFreeSector();
-extern struct CacheSec *FindSecByNumber();
-extern struct CacheSec *FindSecByBuffer();
-extern struct CacheSec *NewCacheSector();
-extern void	FreeCacheSector();
-extern void	InitCacheList();
-extern void	FreeCacheList();
-extern void	MSUpdate();
-extern void	StartTimer();
-extern byte    *GetSec();
-extern byte    *EmptySec();
-extern void	PutSec();
-extern void	FreeSec();
-extern void	MarkSecDirty();
-extern void	WriteFat();
-extern int	ReadBootBlock();
-extern int	IdentifyDisk();
-extern int	TDMotorOff();
-extern int	TDGetNumCyls();
+__stkargs word Get8086Word(byte *Word8086);
+__stkargs word OtherEndianWord(long oew);     /* long should become word */
+__stkargs ulong OtherEndianLong(ulong oel);
+void OtherEndianMsd(struct MsDirEntry *msd);
+word ClusterToSector(word cluster);
+word ClusterOffsetToSector(word cluster, word offset);
+word DirClusterToSector(word cluster);
+word SectorToCluster(word sector);
+word NextCluster(word cluster);
+word NextClusteredSector(word sector);
+word FindFreeSector(word prev);
+struct CacheSec *FindSecByNumber(int number);
+struct CacheSec *FindSecByBuffer(byte *buffer);
+struct CacheSec *NewCacheSector(struct MinNode *pred);
+void FreeCacheSector(struct CacheSec *sec);
+void InitCacheList(void);
+void FreeCacheList(void);
+void MSUpdate(int immediate);
+void StartTimer(void);
+byte *GetSec(int sector);
+byte *EmptySec(int sector);
+void PutSec(int sector, byte *data);
+void FreeSec(byte *buffer);
+void MarkSecDirty(byte *buffer);
+void WriteFat(void);
+int AwaitDFx(void);
+int ReadBootBlock(void);
+int IdentifyDisk(char *name, struct DateStamp *date);
+void TDRemChangeInt(void);
+int TDAddChangeInt(struct Interrupt *interrupt);
+int TDChangeNum(void);
+int TDProtStatus(void);
+int TDMotorOff(void);
+int TDClear(void);
+int TDUpdate(void);
+int MyDoIO(struct IOStdReq *ioreq);
 
 /*
  * HANLOCK.C
@@ -272,57 +290,58 @@ extern struct MSFileLock *RootLock;	/* Lock on root directory */
 extern struct MSFileLock *EmptyFileLock;	/* 2nd result of MSLock() */
 
 extern struct DirEntry FakeRootDirEntry;
-extern int	CompareNames();
-extern void	NextDirEntry();
-extern struct DirEntry *FindNext();
-extern struct MSFileLock *MakeLock();
-extern void	WriteLock();
-extern void	PrintDirEntry();
-extern struct MSFileLock *MSLock();
-extern struct MSFileLock *MSDupLock();
-extern struct MSFileLock *MSParentDir();
-extern int	MSUnLock();
-extern void	ExamineDirEntry();
-extern int	MSExamine();
-extern int	MSExNext();
-extern long	MSSetProtect();
-extern void	WriteFileLock();
-extern void	UpdateFileLock();
-extern struct LockList *NewLockList();
-extern void	FreeLockList();
+int CompareNames(struct MsDirEntry *dir, byte *name);
+void NextDirEntry(word *sector, word *offset);
+struct DirEntry *FindNext(struct DirEntry *previous, int createit);
+void PrintDirEntry(struct DirEntry *de);
+struct MSFileLock *MakeLock(struct MSFileLock *parentdir, struct DirEntry *dir, ulong mode);
+struct MSFileLock *MSLock(struct MSFileLock *parentdir, byte *name, ulong mode);
+struct MSFileLock *MSDupLock(struct MSFileLock *fl);
+struct MSFileLock *MSParentDir(struct MSFileLock *fl);
+int MSUnLock(struct MSFileLock *fl);
+void ExamineDirEntry(struct MsDirEntry *msd, struct FileInfoBlock *fib);
+int MSExamine(struct MSFileLock *fl, struct FileInfoBlock *fib);
+int MSExNext(struct MSFileLock *fl, struct FileInfoBlock *fib);
+long MSSetProtect(struct MSFileLock *parentdir, char *name, long mask);
+int CheckLock(struct MSFileLock *lock);
+void WriteFileLock(struct MSFileLock *fl);
+void UpdateFileLock(struct MSFileLock *fl);
+struct LockList *NewLockList(void *cookie);
+void FreeLockList(struct LockList *ll);
 
 /*
  * HANFILE.C
  */
-extern int	GetFat();
-extern void	FreeFat();
-extern word	GetFatEntry();
-extern void	SetFatEntry();
-extern word	FindFreeCluster();
-extern word	ExtendClusterChain();
-extern void	FreeClusterChain();
-extern struct MSFileHandle *MSOpen();
-extern void	MSClose();
-extern long	MSSeek();
-extern long	MSRead();
-extern long	MSWrite();
-extern long	MSDeleteFile();
-extern long	MSSetDate();
-extern struct MSFileLock *MSCreateDir();
+int GetFat(void);
+void FreeFat(void);
+word GetFatEntry(word cluster);
+void SetFatEntry(word cluster, word value);
+word FindFreeCluster(word prev);
+word ExtendClusterChain(word cluster);
+void FreeClusterChain(word cluster);
+struct MSFileHandle *MSOpen(struct MSFileLock *parentdir, char *name, long mode);
+void MSClose(struct MSFileHandle *fh);
+long MSSeek(struct MSFileHandle *fh, long position, long mode);
+long MSRead(struct MSFileHandle *fh, byte *userbuffer, long size);
+long MSWrite(struct MSFileHandle *fh, byte *userbuffer, long size);
+long MSDeleteFile(struct MSFileLock *parentdir, byte *name);
+long MSSetDate(struct MSFileLock *parentdir, byte *name, struct DateStamp *datestamp);
+struct MSFileLock *MSCreateDir(struct MSFileLock *parentdir, byte *name);
+long MSRename(struct MSFileLock *slock, byte *sname, struct MSFileLock *dlock, byte *dname);
 
 /*
  * HANREQ.C
  */
 extern short	Cancel; 	/* Cancel all R/W errors */
-extern long	RetryRwError();
+long RetryRwError(struct IOExtTD *req);
 
 /*
  * HANCMD.C
  */
-extern void	HandleCommand();
+void HandleCommand(char *cmd);
 
 /*
  * DATE.C
  */
-extern void	ToDateStamp();
-extern void	ToMSDate();
+void ToDateStamp(struct DateStamp *datestamp, word date, word time);
+void ToMSDate(word *date, word *time, struct DateStamp *datestamp);

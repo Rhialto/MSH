@@ -1,49 +1,65 @@
-# $Id: Makefile,v 1.30 90/06/04 23:20:34 Rhialto Rel $
+# $Id: Makefile,v 1.40 91/03/03 17:57:18 Rhialto Rel $
 #
 # Makefile for messydos file system handler and -device, for use with the
-# Manx C compiler version 3.6.
+# DICE C compiler.
 #
 # This code is (C) Copyright 1989,1990 by Olaf Seibert. All rights reserved.
 # May not be used or copied without a licence.
 
 #DB =	 -DDEBUG -DHDEBUG
-#DBOBJ =  syslog.o
-#DB =	 -DHDEBUG
-#WACK =  -W
+#DBOBJ = syslog.o
+#DB =	 -DDEBUG
+#WACK =  -s
+REGARGS = -mRR
+CLIB =	cr.lib	# when regargs are used set this to cr.lib
+#CLIB = c.lib	# when no regargs are used set this to c.lib
 
-HOBJ =	pack.o support.o hanmain.o hansec.o hanlock.o hanfile.o hanreq.o \
-	hancmd.o date.o $(DBOBJ)
-HSRC =	pack.c support.c hanmain.c hansec.c hanlock.c hanfile.c hanreq.c \
-	hancmd.c date.c dos.h han.h
-DOBJ =	device.o devio.o $(DBOBJ)
-DSRC =	device.c devio.c dev.h device.h
+HOBJ =	hancrtso.o pack.o support.o hanmain.o hansec.o hanlock.o hanfile.o \
+	hanreq.o hancmd.o date.o $(DBOBJ)
+HSRC =	hancrtso.a pack.c support.c hanmain.c hansec.c hanlock.c hanfile.c \
+	hanreq.c hancmd.c date.c dos.h han.h
+DOBJ =	device1.o device2.o devio1.o devio2.o $(DBOBJ)
+DSRC =	device1.a device2.c devio1.a devio2.c dev.h device.h
 XSRC =	messyfmt.c Makefile ignore.c die.c
 
-#   Options: large code, large data, no startup code, use A4
+.SUFFIXES: .a
+
+#   Options:
 .c.o:
-	cc +Ivd0:amiga.syms +cdbrx3,5 $(DB) $*.c -o $@
+	dcc -c -Ivd0: -proto $(REGARGS) $(DB) $*.c -o $@
+
+.a.o:
+	a68k -q $*.a -o$@
 
 all:	MessyFileSystem messydisk.device
 utils:	die ignore messyfmt
 doc:	dev.man msh.man
 
 messydisk.device: $(DOBJ)
-	ln -o $@ $(WACK) $(DOBJ) -lcl
+	dcc -o $@ -l0 $(REGARGS) $(WACK) $(DOBJ) $(CLIB) amigas13.lib
 
 MessyFileSystem:    $(HOBJ)
-	ln -o $@ $(WACK) $(HOBJ) -lcl
+	dcc -o $@ -l0 $(REGARGS) $(WACK) $(HOBJ) $(CLIB) amigas13.lib
+
+hancrtso.o: hancrtso.a
+	dcc -c -o hancrtso.o hancrtso.a
 
 Die:	die.c
-	cc +Ivd0:amiga.syms +x3,5 die.c
-	ln Die.o -lcl
+	dcc -Ivd0: -proto die.c -o Die
 
 Ignore: ignore.c dev.h device.h
-	cc +Ivd0:amiga.syms +x3,5 ignore.c
-	ln Ignore.o -lcl
+	dcc -Ivd0: -proto ignore.c -o Ignore
 
 MessyFmt:
-	cc +Ivd0:amiga.syms +x3,5 messyfmt.c
-	ln MessyFmt.o -lcl
+	dcc -Ivd0: -proto messyfmt.c -o MessyFmt
+
+Mkci:	mkci.c dev.h device.h
+	dcc -Ivd0: mkci.c -o Mkci
+
+devio1.o: devio1.a c.i
+
+c.i:	mkci
+	mkci c.i
 
 dev.man: dev.n
 	nro dev.n >dev.man
@@ -64,14 +80,14 @@ co:
 # Anything you add yourself will be deleted automagically.
 
 date.o: dev.h han.h date.c
-devio.o: device.h dev.h devio.c
-hanfile.o: dev.h han.h dos.h hanfile.c
+mkci.o: device.h dev.h mkci.c
+hanfile.o: dos.h dev.h han.h hanfile.c
 support.o: dos.h support.c
-device.o: device.h dev.h device.c
-hanlock.o: dev.h han.h dos.h hanlock.c
-hanmain.o: dev.h han.h dos.h hanmain.c
-hansec.o: dev.h han.h dos.h hansec.c
-hanreq.o: dos.h hanreq.c
-messyfmt.o: dev.h han.h messyfmt.c
-pack.o: dev.h han.h dos.h pack.c
+hanmain.o: dos.h dev.h han.h hanmain.c
+hanlock.o: dos.h dev.h han.h hanlock.c
+hansec.o: dos.h dev.h han.h hansec.c
+devio2.o: device.h dev.h devio2.c
+hanreq.o: dos.h dev.h han.h hanreq.c
+pack.o: dos.h dev.h han.h pack.c
+device2.o: device.h dev.h device2.c
 hancmd.o: dev.h han.h hancmd.c

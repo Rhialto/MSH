@@ -1,9 +1,12 @@
 /*-
- *  $Id: dev.h,v 1.30 90/06/04 23:19:21 Rhialto Rel $
+ *  $Id: dev.h,v 1.40 91/03/03 17:56:29 Rhialto Rel $
  *  $Log:	dev.h,v $
+ * Revision 1.40  91/03/03  17:56:29  Rhialto
+ * Freeze for MAXON
+ *
  * Revision 1.30  90/06/04  23:19:21  Rhialto
  * Release 1 Patch 3
- * 
+ *
  *  Include file for users of the messydisk.device
 -*/
 
@@ -33,27 +36,6 @@
 #endif
 #ifndef EXEC_DEVICES_H
 #include "exec/devices.h"
-#endif
-#ifndef RESOURCES_DISK_H
-#include "resources/disk.h"
-#endif
-#ifndef RESOURCES_CIA_H
-#include "resources/cia.h"
-#endif
-#ifndef HARDWARE_CUSTOM_H
-#include "hardware/custom.h"
-#endif
-#ifndef HARDWARE_CIA_H
-#include "hardware/cia.h"
-#endif
-#ifndef HARDWARE_ADKBITS_H
-#include "hardware/adkbits.h"
-#endif
-#ifndef HARDWARE_DMABITS_H
-#include "hardware/dmabits.h"
-#endif
-#ifndef HARDWARE_INTBITS_H
-#include "hardware/intbits.h"
 #endif
 #ifndef DEVICES_TRACKDISK_H
 #include "devices/trackdisk.h"

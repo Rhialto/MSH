@@ -1,9 +1,12 @@
 /*-
- * $Id: date.c,v 1.32 90/11/23 23:55:51 Rhialto Exp $
+ * $Id: date.c,v 1.40 91/03/03 17:55:18 Rhialto Rel $
  * $Log:	date.c,v $
+ * Revision 1.40  91/03/03  17:55:18  Rhialto
+ * Freeze for MAXON
+ *
  * Revision 1.32  90/11/23  23:55:51  Rhialto
  * Prepare for syslog
- * 
+ *
  * Revision 1.30  90/06/04  23:18:11  Rhialto
  * Release 1 Patch 3
  *
@@ -15,7 +18,11 @@
  * not be used or copied without a licence.
  */
 
+#include <amiga.h>
+#include <functions.h>
+#ifndef LIBRARIES_DOS_H
 #include <libraries/dos.h>
+#endif
 #include "han.h"
 
 #ifdef HDEBUG
