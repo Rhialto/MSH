@@ -1,6 +1,9 @@
 /*-
- * $Id: pack.c,v 1.1 89/12/17 19:53:24 Rhialto Exp Locker: Rhialto $
+ * $Id: pack.c,v 1.2 89/12/17 23:06:54 Rhialto Exp Locker: Rhialto $
  * $Log:	pack.c,v $
+ * Revision 1.2  89/12/17  23:06:54  Rhialto
+ * Add ACTION_SET_PROTECT
+ *
  * Revision 1.1  89/12/17  19:53:24  Rhialto
  * Initial revision
  *
@@ -45,7 +48,6 @@
  */
 
 PORT	       *DosPort;	/* Our DOS port... */
-PROC	       *DosProc;	/* Our Process */
 DEVNODE        *DevNode;	/* Our DOS node.. created by DOS for us */
 DEVLIST        *VolNode;	/* Device List structure for our volume
 				 * node */
@@ -101,19 +103,12 @@ messydoshandler()
     dbinit();
 #endif				/* DEBUG */
 
-    DosProc = FindTask(NULL);
-    DosPort = &DosProc->pr_MsgPort;
+    DosPort = &((struct Process *)FindTask(NULL))->pr_MsgPort;
 
     WaitPort(DosPort);      /* Get Startup Packet  */
     msg = GetMsg(DosPort);
     packet = (PACKET *) msg->mn_Node.ln_Name;
 
-    /*
-     * Loading DevNode->dn_Task causes DOS *NOT* to startup a new
-     * instance of the device driver for every reference.   E.G. if
-     * you were writing a CON: device you would want this field to be
-     * NULL.
-     */
 
     DevNode = BTOC(PArg3);
     {
@@ -131,8 +126,8 @@ messydoshandler()
 	Disk.bps = MS_BPS;
 	Disk.lowcyl = 0;
 
-	if (fssm = (struct FileSysStartupMsg *)BADDR(DevNode->dn_Startup)) {
-				    /* Same as BADDR(packet->dp_Arg2) */
+	if (fssm = (struct FileSysStartupMsg *)BTOC(DevNode->dn_Startup)) {
+				    /* Same as BTOC(packet->dp_Arg2) */
 	    UnitNr = fssm->fssm_Unit;
 	    if (fssm->fssm_Device)
 		DevName = (char *)BTOC(fssm->fssm_Device)+1;
@@ -158,8 +153,10 @@ messydoshandler()
 
     if (DOSBase && HanOpenUp()) {
 	/*
-	 * Set dn_Task field which tells DOS not to startup a new
-	 * process on every reference.
+	 * Loading DevNode->dn_Task causes DOS *NOT* to startup a new
+	 * instance of the device driver for every reference.	E.G. if
+	 * you were writing a CON: device you would want this field to be
+	 * NULL.
 	 */
 
 	DevNode->dn_Task = DosPort;
@@ -232,7 +229,7 @@ top:
 		    register struct FileLock *newlock;
 		    struct FileLock *lock;
 		    struct MSFileLock *msfl;
-		    long lockmode;
+		    long	    lockmode;
 
 		    lock = BTOC(PArg1);
 		    if (CheckRead(lock))
@@ -243,10 +240,13 @@ top:
 		    msfl = MSLock(lock ? lock->fl_Key : NULL,
 				  buf,
 				  lockmode);
-		    if (msfl && (newlock = NewFileLock(msfl, lock))) {
-			newlock->fl_Access = lockmode;
-			PRes1 = (long) CTOB(newlock);
-			OpenCount++;
+		    if (msfl) {
+			if (newlock = NewFileLock(msfl, lock)) {
+			    newlock->fl_Access = lockmode;
+			    PRes1 = (long) CTOB(newlock);
+			    OpenCount++;
+			} else
+			    MSUnLock(msfl);
 		    }
 		}
 		break;
@@ -320,10 +320,14 @@ top:
 
 		    msfl = MSDupLock(lock ? lock->fl_Key : NULL);
 
-		    if (msfl && (newlock = NewFileLock(msfl, lock))) {
-			newlock->fl_Access = lock ? lock->fl_Access : SHARED_LOCK;
-			PRes1 = (long) CTOB(newlock);
-			OpenCount++;
+		    if (msfl) {
+			if (newlock = NewFileLock(msfl, lock)) {
+			    newlock->fl_Access =
+				lock ? lock->fl_Access : SHARED_LOCK;
+			    PRes1 = (long) CTOB(newlock);
+			    OpenCount++;
+			} else
+			    MSUnLock(msfl);
 		    }
 		}
 		break;
@@ -351,10 +355,13 @@ top:
 
 		    msfl = MSCreateDir(lock ? lock->fl_Key : NULL, buf);
 
-		    if (msfl && (newlock = NewFileLock(msfl, lock))) {
-			newlock->fl_Access = lock ? lock->fl_Access : SHARED_LOCK;
-			PRes1 = (long) CTOB(newlock);
-			OpenCount++;
+		    if (msfl) {
+			if (newlock = NewFileLock(msfl, lock)) {
+			    newlock->fl_Access = SHARED_LOCK;
+			    PRes1 = (long) CTOB(newlock);
+			    OpenCount++;
+			} else
+			    MSUnLock(msfl);
 		    }
 		}
 		break;
@@ -402,10 +409,12 @@ top:
 		    msfl = MSParentDir(lock ? lock->fl_Key : NULL);
 
 		    if (msfl) {
-			newlock = NewFileLock(msfl, lock);
-			newlock->fl_Access = lock ? lock->fl_Access : SHARED_LOCK;
-			PRes1 = (long) CTOB(newlock);
-			OpenCount++;
+			if (newlock = NewFileLock(msfl, lock)) {
+			    newlock->fl_Access = SHARED_LOCK;
+			    PRes1 = (long) CTOB(newlock);
+			    OpenCount++;
+			} else
+			    MSUnLock(msfl);
 		    }
 		}
 		break;
@@ -614,14 +623,16 @@ struct FileLock *fl;
 	volnode = VolNode;
     }
 
-    newlock = dosalloc((ulong)sizeof (*newlock));
-    newlock->fl_Key = (ulong) msfl;
-    newlock->fl_Task = DosPort;
-    newlock->fl_Volume = (BPTR) CTOB(volnode);
-    Forbid();
-    newlock->fl_Link = volnode->dl_LockList;
-    volnode->dl_LockList = (BPTR) CTOB(newlock);
-    Permit();
+    if (newlock = dosalloc((ulong)sizeof (*newlock))) {
+	newlock->fl_Key = (ulong) msfl;
+	newlock->fl_Task = DosPort;
+	newlock->fl_Volume = (BPTR) CTOB(volnode);
+	Forbid();
+	newlock->fl_Link = volnode->dl_LockList;
+	volnode->dl_LockList = (BPTR) CTOB(newlock);
+	Permit();
+    } else
+	error = ERROR_NO_FREE_STORE;
 
     return newlock;
 }
@@ -667,25 +678,35 @@ NewVolNode(name, date)
 struct DateStamp *date;
 char *name;
 {
-    DOSINFO	   *di = BTOC(((ROOTNODE *) DOSBase->dl_Root)->rn_Info);
-    register DEVLIST *volnode = dosalloc((ulong)sizeof (DEVLIST));
+    DOSINFO	   *di;
+    register DEVLIST *volnode;
     char	   *volname;	    /* This is my volume name */
 
-    volname = dosalloc(32L);
-    volname[0] = strlen(name);
-    strcpy(volname + 1, name);      /* Make sure \0 terminated */
+    di = BTOC(((ROOTNODE *) DOSBase->dl_Root)->rn_Info);
 
-    volnode->dl_Type = DLT_VOLUME;
-    volnode->dl_Task = DosPort;
-    volnode->dl_DiskType = IDDiskType;
-    volnode->dl_Name = CTOB(volname);
-    volnode->dl_VolumeDate = *date;
-    volnode->dl_MSFileLockList = NULL;
+    if (volnode = dosalloc((ulong)sizeof (DEVLIST))) {
+	if (volname = dosalloc(32L)) {
+	    volname[0] = strlen(name);
+	    strcpy(volname + 1, name);      /* Make sure \0 terminated */
 
-    Forbid();
-    volnode->dl_Next = di->di_DevInfo;
-    di->di_DevInfo = (long) CTOB(volnode);
-    Permit();
+	    volnode->dl_Type = DLT_VOLUME;
+	    volnode->dl_Task = DosPort;
+	    volnode->dl_DiskType = IDDiskType;
+	    volnode->dl_Name = CTOB(volname);
+	    volnode->dl_VolumeDate = *date;
+	    volnode->dl_MSFileLockList = NULL;
+
+	    Forbid();
+	    volnode->dl_Next = di->di_DevInfo;
+	    di->di_DevInfo = (long) CTOB(volnode);
+	    Permit();
+	} else {
+	    dosfree(volnode);
+	    volnode = NULL;
+	}
+    } else {
+	error = ERROR_NO_FREE_STORE;
+    }
 
     return volnode;
 }
