@@ -1,6 +1,9 @@
 /*-
- * $Id: support.c,v 1.46 91/10/06 18:25:58 Rhialto Rel $
+ * $Id: support.c,v 1.51 92/04/17 15:36:18 Rhialto Rel $
  * $Log:	support.c,v $
+ * Revision 1.51  92/04/17  15:36:18  Rhialto
+ * Freeze for MAXON.
+ *
  * Revision 1.46  91/10/06  18:25:58  Rhialto
  *
  * Freeze for MAXON
@@ -19,14 +22,13 @@
  *
 -*/
 
-#include <amiga.h>
 #include <functions.h>
 
 typedef unsigned long		ulong;
 typedef unsigned char		byte;
 
-#include "dos.h"
 #include "han.h"
+#include "dos.h"
 
 Prototype void returnpacket(struct DosPacket *packet);
 Prototype int packetsqueued(void);
@@ -215,6 +217,28 @@ long ty;
 	return ("RAWMODE");
     case ACTION_SET_DATE:
 	return ("SET_DATE");
+
+    /* 2.0 stuff: */
+
+    case ACTION_SET_FILE_SIZE:
+	return "ACTION_SET_FILE_SIZE";
+    case ACTION_SAME_LOCK:
+	return "ACTION_SAME_LOCK";
+    case ACTION_WRITE_PROTECT:
+	return "ACTION_WRITE_PROTECT";
+    case ACTION_FH_FROM_LOCK:
+	return "ACTION_FH_FROM_LOCK";
+    case ACTION_IS_FILESYSTEM:
+	return "ACTION_IS_FILESYSTEM";
+    case ACTION_CHANGE_MODE:
+	return "ACTION_CHANGE_MODE";
+    case ACTION_COPY_DIR_FH:
+	return "ACTION_COPY_DIR_FH";
+    case ACTION_EXAMINE_FH:
+	return "ACTION_EXAMINE_FH";
+    case ACTION_PARENT_FH:
+	return "ACTION_PARENT_FH";
+
     default:
 	return ("---------UNKNOWN-------");
     }
