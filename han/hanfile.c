@@ -1,18 +1,20 @@
 /*-
- * $Id: hanfile.c,v 1.1 89/12/17 20:03:11 Rhialto Exp Locker: Rhialto $
+ * $Id: hanfile.c,v 1.2 89/12/17 23:04:39 Rhialto Exp Locker: Rhialto $
  * $Log:	hanfile.c,v $
+ * Revision 1.2  89/12/17  23:04:39  Rhialto
+ * Add ATTR_READONLY support
+ *
  * Revision 1.1  89/12/17  20:03:11  Rhialto
  * Initial revision
  *
+ * HANFILE.C
  *
- *  HANFILE.C
+ * The code for the messydos file system handler.
  *
- *  The code for the messydos file system handler
+ * This parts handles files and the File Allocation Table.
  *
- *  This parts handles files and the File Allocation Table.
- *
- *  This code is (C) Copyright 1989 by Olaf Seibert. All rights reserved. May
- *  not be used or copied without a licence.
+ * This code is (C) Copyright 1989 by Olaf Seibert. All rights reserved. May
+ * not be used or copied without a licence.
 -*/
 
 #include "han.h"
@@ -407,11 +409,11 @@ register long	size;
     word	    prevclust = fl->msfl_Msd.msd_Cluster;
 
     if (CheckLock(fl))
-	return -1L;
+	return -1;
 
     if (fl->msfl_Msd.msd_Attributes & ATTR_READONLY) {
 	error = ERROR_WRITE_PROTECTED;
-	return -1L;
+	return -1;
     }
 
     oldsize = size;
@@ -465,14 +467,20 @@ register long	size;
 		    fh->msfh_Cluster = NextCluster(fh->msfh_Cluster);
 		if (fh->msfh_SeekPos > fl->msfl_Msd.msd_Filesize)
 		    fl->msfl_Msd.msd_Filesize = fh->msfh_SeekPos;
+		fl->msfl_Msd.msd_Attributes &= ~ATTR_ARCHIVED;
 		UpdateFileLock(fl);
-	    } else {		/* Write error. Return amount successfully
-				 * written. */
+	    } else {		/* Write error. */
 	error:
+#if 1
+		return -1;	/* We loose the information about how much
+				 * data we wrote, but the standard file system
+				 * seems to do it this way. */
+#else
 		if (size == oldsize) {
 		    return -1;
 		}
-		return oldsize - size;
+		return oldsize - size;	/* Amount successfully written */
+#endif
 	    }
 	}
     }
@@ -738,9 +746,9 @@ byte	       *dname;
      * temporarily hide the MSFileLock on that spot. Gross hack ahead!
      */
 
-    sfl->msfl_DirOffset = -sfl->msfl_DirOffset;
+    sfl->msfl_DirOffset = ~sfl->msfl_DirOffset;
     dfl = MSLock(dlock, dname, EXCLUSIVE_LOCK ^ MODE_CREATEFILE);
-    sfl->msfl_DirOffset = -sfl->msfl_DirOffset;
+    sfl->msfl_DirOffset = ~sfl->msfl_DirOffset;
 
     if (dfl != NULL || error == ERROR_OBJECT_IN_USE) {
 	error = ERROR_OBJECT_EXISTS;
@@ -812,6 +820,7 @@ undelete:
     MSUnLock(sfl->msfl_Parent);
     sfl->msfl_Parent = dfl->msfl_Parent;
     dfl->msfl_Parent = NULL;
+    sfl->msfl_Msd.msd_Attributes &= ~ATTR_ARCHIVED;
     WriteFileLock(sfl);         /* Write the new name; the old name
 				 * already has been deleted. */
     success = DOSTRUE;
