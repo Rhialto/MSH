@@ -1,6 +1,10 @@
 /*-
- * $Id: devio2.c,v 1.53 92/10/25 02:13:45 Rhialto Rel $
- * $Log:	devio2.c,v $
+ * $Id: devio2.c,v 1.54 1993/06/24 04:56:00 Rhialto Exp $
+ * $Log: devio2.c,v $
+ * Revision 1.54  1993/06/24  04:56:00	Rhialto
+ * split read and write functions; always use RAWREAD/RAWWRITE
+ * under 2.04+. DICE 2.07.54R.
+ *
  * Revision 1.53  92/10/25  02:13:45  Rhialto
  * Add TD_Getgeometry, TD_Eject. Fix some prototypes.
  *  Better read error checking.
@@ -37,11 +41,12 @@
  *
  * The messydisk.device code that does the real work.
  *
- * This code is (C) Copyright 1989-1992 by Olaf Seibert. All rights reserved.
+ * This code is (C) Copyright 1989-1993 by Olaf Seibert. All rights reserved.
  * May not be used or copied without a licence.
 -*/
 
 #include "device.h"
+#include "layout.h"
 
 /*#undef DEBUG			*/
 #ifdef DEBUG
@@ -67,22 +72,22 @@ Prototype void InitDecoding(byte  *decode);
 Prototype long MyDoIO(struct IORequest *req);
 Prototype int TDMotorOn(struct IOExtTD *tdreq);
 Prototype int TDGetNumTracks(struct IOExtTD *tdreq);
-Prototype int TDSeek(UNIT *unit, struct IOStdReq *ioreq, int track);
+Prototype int TDSeek(UNIT *unit, int track);
 Prototype void *GetDrive(struct DiskResourceUnit *drunit);
 Prototype void FreeDrive(void);
 Prototype int GetTrack(struct IOStdReq *ioreq, int track);
 Prototype int CheckChanged(struct IOExtTD *ioreq, UNIT *unit);
 Prototype int DevCloseDown(DEV *dev);
 Prototype int CheckRequest(struct IOExtTD *ioreq, UNIT *unit);
-Prototype UNIT *UnitInit(DEV *dev, ulong UnitNr);
-Prototype int UnitCloseDown(struct IOStdReq *ioreq, DEV *dev, UNIT *unit);
+Prototype UNIT *UnitInit(DEV *dev, ulong UnitNr, ulong Flags);
+Prototype int UnitCloseDown(DEV *dev, UNIT *unit);
 Prototype __geta4 void DiskChangeHandler(__A1 UNIT *unit);
 Prototype void DiskChangeHandler0(void);
 
 #ifndef READONLY
 Prototype word CalculateGapLength(int sectors);
-Prototype int InitWrite(DEV *dev);
-Prototype void FreeBuffer(DEV *dev);
+Prototype int ObtainRawBuffer(DEV *dev, UNIT *unit);
+Prototype void FreeRawBuffer(DEV *dev);
 Prototype void Internal_Update(struct IOStdReq *ioreq, UNIT *unit);
 Prototype __stkargs void EncodeTrack(byte *TrackBuffer, byte *Rawbuffer, word *Crcs, long Cylinder, long Side, long GapLen, long NumSecs, long WriteLen);
 /* should become  ... word Cylinder, word Side, word GapLen, word NumSecs */
@@ -130,36 +135,6 @@ byte		MfmEncode[16] = {
 };
 
 word		MfmEncodeWord[256];
-
-#define SYNC	0x4489
-#define TLEN	12500	    /* In BYTES */
-#define RLEN	(TLEN+1324) /* 1 sector extra */
-#define WLEN	(TLEN+20)   /* 20 bytes more than the theoretical track size */
-
-#define INDEXGAP	40  /* All these values are in WORDS */
-#define INDXGAP 	12
-#define INDXSYNC	 3
-#define INDXMARK	 1
-#define INDEXGAP2	40
-#define INDEXLEN	(INDEXGAP+INDXGAP+INDXSYNC+INDXMARK+INDEXGAP2)
-
-#define IDGAP2		12  /* Sector header: 22 words */
-#define IDSYNC		 3
-#define IDMARK		 1
-#define IDDATA		 4
-#define IDCRC		 2
-#define IDLEN		(IDGAP2+IDSYNC+IDMARK+IDDATA+IDCRC)
-
-#define DATAGAP1	22  /* Sector itself: 552 words */
-#define DATAGAP2	12
-#define DATASYNC	 3
-#define DATAMARK	 1
-#define DATACRC 	 2
-#define DATAGAP3_9	78  /* for 9 or less sectors/track */
-#define DATAGAP3_10	40  /* for 10 sectors/track */
-#define DATALEN 	(DATAGAP1+DATAGAP2+DATASYNC+DATAMARK+MS_BPS+DATACRC)
-
-#define BLOCKLEN	(IDLEN+DATALEN)     /* Total: 574 words */
 
 #define DSKDMAEN	(1<<15)
 #define DSKWRITE	(1<<14)
@@ -243,7 +218,7 @@ struct IOStdReq *ioreq;
 	tdreq->iotd_Req.io_Flags = IOTDF_WORDSYNC;
 	tdreq->iotd_Req.io_Length = unit->mu_ReadLen;
 	tdreq->iotd_Req.io_Data = (APTR)dev->md_Rawbuffer;
-	if ((ioreq->io_Flags & IOMDF_40TRACKS) &&
+	if ((unit->mu_OpenFlags & IOMDF_40TRACKS) &&
 	    (unit->mu_NumTracks == TRACKS(80))) {
 	    tdreq->iotd_Req.io_Offset = 2 * unit->mu_CurrentTrack -
 					TRK2SIDE(unit->mu_CurrentTrack);
@@ -294,7 +269,7 @@ struct IOStdReq *ioreq;
 	tdreq->iotd_Req.io_Flags = IOTDF_INDEXSYNC;
 	tdreq->iotd_Req.io_Length = unit->mu_WriteLen;
 	tdreq->iotd_Req.io_Data = (APTR)dev->md_Rawbuffer;
-	if ((ioreq->io_Flags & IOMDF_40TRACKS) &&
+	if ((unit->mu_OpenFlags & IOMDF_40TRACKS) &&
 	    (unit->mu_NumTracks == TRACKS(80))) {
 	    tdreq->iotd_Req.io_Offset = 2 * unit->mu_CurrentTrack -
 					TRK2SIDE(unit->mu_CurrentTrack);
@@ -571,9 +546,8 @@ REGISTER struct IOExtTD *tdreq;
  */
 
 int
-TDSeek(unit, ioreq, track)
+TDSeek(unit, track)
 UNIT	   *unit;
-struct IOStdReq *ioreq;
 int	    track;
 {
 
@@ -583,7 +557,9 @@ int	    track;
 
     tdreq->iotd_Req.io_Command = TD_SEEK;
     tdreq->iotd_Req.io_Offset = TRK2CYL(track) * (TD_SECTOR * NUMSECS * NUMHEADS);
-    if ((ioreq->io_Flags & IOMDF_40TRACKS) && (unit->mu_NumTracks == TRACKS(80)))
+    if (unit->mu_DiskState & STATEF_HIGHDENSITY)
+	tdreq->iotd_Req.io_Offset *= 2;
+    if ((unit->mu_OpenFlags & IOMDF_40TRACKS) && (unit->mu_NumTracks == TRACKS(80)))
 	tdreq->iotd_Req.io_Offset *= 2;
     DoIO((struct IORequest *)tdreq);
 
@@ -641,12 +617,13 @@ int		track;
 	}
 
 	TDMotorOn(unit->mu_DiskIOReq);
-	if (TDSeek(unit, ioreq, track)) {
+	if (TDSeek(unit, track)) {
 	    debug(("Seek error\n"));
 	    return ioreq->io_Error = IOERR_BADLENGTH;
 	}
 	unit->mu_CurrentTrack = track;
 	ObtainSemaphore(&dev->md_HardwareUse);
+	ObtainRawBuffer(dev, unit);
 	HardwareRead(dev, unit, ioreq);
 	i = DecodeTrack(dev, unit);
 	ReleaseSemaphore(&dev->md_HardwareUse);
@@ -681,7 +658,51 @@ error:
 }
 
 /*
+ * Copy the io_Flags to md_OpenFlags, unless the FIXFLAGS bit is set.
+ * This is because we must be able to modify this pesky 40-track
+ * mode.
+ */
+
+void
+UpdateOpenFlags(struct IOStdReq *ioreq, UNIT *unit)
+{
+    if ((unit->mu_OpenFlags & IOMDF_FIXFLAGS) == 0) {
+	unit->mu_OpenFlags = ioreq->io_Flags & ~IOMDF_FIXFLAGS;
+    }
+}
+
+/*
+ * Determine the type of the connected drive.
+ * The relevant return values are DRIVE3_5_150RPM (21 sectors max)
+ * and DRIVE3_5 or DRIVE5_25 (10 sectors max).
+ */
+
+void
+CheckDriveType(UNIT *unit)
+{
+    struct IOExtTD *tdreq;
+
+    tdreq = unit->mu_DiskIOReq;
+    tdreq->iotd_Req.io_Command = TD_GETDRIVETYPE;
+    DoIO((struct IORequest *)tdreq);
+    if (tdreq->iotd_Req.io_Actual == DRIVE3_5_150RPM) {
+	/* HD drive and HD disk */
+	debug(("HD disk\n"));
+	unit->mu_DiskState |= STATEF_HIGHDENSITY;
+	unit->mu_ReadLen  = 2 * RLEN;
+	unit->mu_WriteLen = 2 * WLEN;
+    } else {
+	/* DD drive or DD disk */
+	debug(("normal disk\n"));
+	unit->mu_DiskState &= ~STATEF_HIGHDENSITY;
+	unit->mu_ReadLen  = RLEN;
+	unit->mu_WriteLen = WLEN;
+    }
+}
+
+/*
  * Test if we can read or write the disk. Is it inserted and writable?
+ * What kind of drive do we have (HD or normal)?
  */
 
 int
@@ -691,21 +712,25 @@ REGISTER UNIT  *unit;
 {
     REGISTER struct IOExtTD *tdreq;
 
+    UpdateOpenFlags(&ioreq->iotd_Req, unit);
+
     if ((ioreq->iotd_Req.io_Command & TDF_EXTCOM) &&
 	ioreq->iotd_Count < unit->mu_ChangeNum) {
 diskchanged:
 	ioreq->iotd_Req.io_Error = TDERR_DiskChanged;
 	return TDERR_DiskChanged;
     }
-    /*
-     * if (ioreq->iotd_Req.io_Offset + ioreq->iotd_Req.io_Length >
-     * (unit->mu_NumTracks * MS_SPT * MS_BPS)) {
-     * ioreq->iotd_Req.io_Error = IOERR_BADLENGTH; goto error; }
-     */
+#if 0
+    if (ioreq->iotd_Req.io_Offset + ioreq->iotd_Req.io_Length >
+	(unit->mu_NumTracks * MS_SPT * MS_BPS)) {
+	ioreq->iotd_Req.io_Error = IOERR_BADLENGTH;
+	goto error;
+    }
+#endif
 
     tdreq = unit->mu_DiskIOReq;
 
-    if (unit->mu_DiskState == STATEF_UNKNOWN) {
+    if (unit->mu_DiskState & STATEF_UNKNOWN) {
 	tdreq->iotd_Req.io_Command = TD_PROTSTATUS;
 	DoIO((struct IORequest *)tdreq);
 	if (tdreq->iotd_Req.io_Error == 0) {
@@ -715,6 +740,9 @@ diskchanged:
 		unit->mu_DiskState = STATEF_PRESENT;
 	} else
 	    unit->mu_DiskState = 0;
+
+	/* Check drive type */
+	CheckDriveType(unit);
     }
     if (!(unit->mu_DiskState & STATEF_PRESENT))
 	goto diskchanged;
@@ -881,8 +909,9 @@ UNIT	       *unit;
     if (!CheckChanged((struct IOExtTD *)ioreq, unit)) {
 	int		track;
 
+	UpdateOpenFlags(ioreq, unit);
 	track = (ioreq->io_Offset / MS_BPS) / unit->mu_SectorsPerTrack;
-	TDSeek(unit, ioreq, track);
+	TDSeek(unit, track);
     }
     TermIO(ioreq);
 }
@@ -902,6 +931,11 @@ UNIT	       *unit;
     req->io_Command = TD_CHANGENUM;
     DoIO((struct IORequest *)req);
 
+#ifdef DEBUG
+    if (unit->mu_ChangeNum != req->io_Actual)
+	debug(("Our changenum %d != trackdisk's %d!\n",
+	       unit->mu_ChangeNum, req->io_Actual));
+#endif
     unit->mu_ChangeNum = req->io_Actual;
     ioreq->io_Actual = req->io_Actual;
     TermIO(ioreq);
@@ -919,11 +953,6 @@ REGISTER DEV   *dev;
     if (!(CiaBResource = OpenResource(CIABNAME)))
 	goto abort;
 
-#ifndef READONLY
-    debug(("init write\n"));
-    if (!InitWrite(dev))
-	goto abort;
-#endif
 
     debug(("init decoding\n"));
     InitDecoding(dev->md_MfmDecode);
@@ -941,7 +970,7 @@ DevCloseDown(dev)
 DEV	       *dev;
 {
 #ifndef READONLY
-    FreeBuffer(dev);
+    FreeRawBuffer(dev);
 #endif
     return 0;			/* Now unitialized */
 }
@@ -951,21 +980,29 @@ DEV	       *dev;
  * Calculate the length between the sectors, given the length of the track
  * and the number of sectors that must fit on it.
  * The proper formula would be
- * (((TLEN/2) - INDEXLEN) / unit->mu_SectorsPerTrack) - BLOCKLEN;
+ * (((TLEN/2) - INDEXLEN) / sectors) - BLOCKLEN;
  */
 
 word
 CalculateGapLength(sectors)
 int		sectors;
 {
-    return (sectors == 10) ? DATAGAP3_10 : DATAGAP3_9;
+    /*return (sectors == 10) ? DATAGAP3_10 : DATAGAP3_9;*/
+    /*return (sectors == 10 || sectors == 20) ? DATAGAP3_10 : DATAGAP3_9;*/
+    int 	    tmp;
+
+    tmp = (sectors <= 10)? TLEN / 2 : 2 * (TLEN / 2);
+
+    tmp = ((tmp - INDEXLEN) / sectors) - BLOCKLEN;
+    if (tmp > DATAGAP3_9)
+	tmp = DATAGAP3_9;
+
+    return tmp;
 }
 #endif
 
 UNIT	       *
-UnitInit(dev, UnitNr)
-DEV	       *dev;
-ulong		UnitNr;
+UnitInit(DEV *dev, ulong UnitNr, ulong Flags)
 {
     REGISTER UNIT  *unit;
     struct Task    *task;
@@ -975,6 +1012,9 @@ ulong		UnitNr;
     unit = AllocMem((long) sizeof (UNIT), MEMF_PUBLIC | MEMF_CLEAR);
     if (unit == NULL)
 	return NULL;
+
+    if (!(unit->mu_TrackBuffer = AllocMem(MS_SPT_MAX*MS_BPS, MEMF_ANY)))
+	goto abort;
 
     if (!(tdreq = CreateExtIO(&unit->mu_DiskReplyPort, (long) sizeof (*tdreq)))) {
 	goto abort;
@@ -1004,6 +1044,7 @@ ulong		UnitNr;
 
     unit->mu_NumTracks = TDGetNumTracks(tdreq);
     unit->mu_UnitNr = UnitNr;
+    unit->mu_OpenFlags = Flags;
     unit->mu_DiskState = STATEF_UNKNOWN;
     unit->mu_CurrentTrack = -1;
     unit->mu_TrackChanged = 0;
@@ -1016,6 +1057,7 @@ ulong		UnitNr;
     unit->mu_DRUnit.dru_Index.is_Node.ln_Pri = 32; /* high pri for index int */
     unit->mu_DRUnit.dru_Index.is_Code = IndexIntCode;
     unit->mu_DRUnit.dru_DiscBlock.is_Code = DskBlkIntCode;
+
 
     /*
      * Now create the Unit task. Remember that it won't start running
@@ -1034,16 +1076,19 @@ ulong		UnitNr;
     NewList(&unit->mu_DiskReplyPort.mp_MsgList);
     Permit();
 
+#ifndef READONLY
+    ObtainRawBuffer(dev, unit);
+#endif
+
     return unit;
 
 abort:
-    UnitCloseDown(NULL, dev, unit);
+    UnitCloseDown(dev, unit);
     return NULL;
 }
 
 int
-UnitCloseDown(ioreq, dev, unit)
-struct IOStdReq *ioreq;
+UnitCloseDown(dev, unit)
 DEV	       *dev;
 REGISTER UNIT  *unit;
 {
@@ -1053,6 +1098,12 @@ REGISTER UNIT  *unit;
      */
 
     if (unit->mu_Port.mp_SigTask) {
+	debug(("RemTask unit task\n"));
+	/*
+	 * The current DICE implementation (2.07.54R) causes MungWall
+	 * to complain here, due to non-use of AllocEntry() in the
+	 * implementation of CreateTask().
+	 */
 	RemTask(unit->mu_Port.mp_SigTask);
     }
     if (unit->mu_DiskChangeReq) {
@@ -1073,10 +1124,17 @@ REGISTER UNIT  *unit;
 	unit->mu_DiskChangeReq = NULL;
     }
     if (unit->mu_DiskIOReq) {
-	if (unit->mu_DiskIOReq->iotd_Req.io_Device)
+	if (unit->mu_DiskIOReq->iotd_Req.io_Device) {
+	    debug(("CloseDevice trackdisk\n"));
 	    CloseDevice((struct IORequest *)unit->mu_DiskIOReq);
+	}
+	debug(("DeleteExtIO trackdisk io req %x\n", unit->mu_DiskIOReq));
 	DeleteExtIO((struct IORequest *)unit->mu_DiskIOReq);
 	unit->mu_DiskIOReq = NULL;
+    }
+    if (unit->mu_TrackBuffer) {
+	debug(("free TrackBuffer %x\n", unit->mu_TrackBuffer));
+	FreeMem(unit->mu_TrackBuffer, MS_SPT_MAX * MS_BPS);
     }
     FreeMem(unit, (long) sizeof (UNIT));
 
@@ -1132,12 +1190,16 @@ __A1 UNIT      *unit;
 
     unit->mu_DiskState = STATEF_UNKNOWN;
     unit->mu_ChangeNum++;
-    unit->mu_SectorsPerTrack = MS_SPT;
+    unit->mu_SectorsPerTrack =
+    unit->mu_CurrentSectors = MS_SPT_DD;
+
     for (ioreq = (struct IOStdReq *) unit->mu_ChangeIntList.mlh_Head;
 	 next = (struct IOStdReq *) ioreq->io_Message.mn_Node.ln_Succ;
 	 ioreq = next) {
 	Cause((struct Interrupt *) ioreq->io_Data);
     }
+
+    WakePort(&unit->mu_Port);
 }
 
 void
@@ -1149,10 +1211,14 @@ REGISTER UNIT  *unit;
     struct DriveGeometry *dg;
     short numtracks;
 
+    debug(("TD_Getgeometry\n"));
     dg = (struct DriveGeometry *)ioreq->io_Data;
 
+    CheckDriveType(unit);
+    UpdateOpenFlags(ioreq, unit);
+
     numtracks = unit->mu_NumTracks;
-    if ((ioreq->io_Flags & IOMDF_40TRACKS) &&
+    if ((unit->mu_OpenFlags & IOMDF_40TRACKS) &&
 	(numtracks == TRACKS(80))) {
 	numtracks = TRACKS(40);
     }
@@ -1171,8 +1237,11 @@ REGISTER UNIT  *unit;
     dg->dg_DeviceType = DG_DIRECT_ACCESS;
     dg->dg_Flags = DGF_REMOVABLE;
 #else
+    debug(("TD_Getgeometry: IOERR_NOCMD\n"));
     ioreq->io_Error = IOERR_NOCMD;
 #endif
+
+    TermIO(ioreq);
 }
 
 #ifndef READONLY
@@ -1185,45 +1254,61 @@ REGISTER UNIT  *unit;
 /* mu_TrackChanged is a flag. When a sector has changed it changes to 1 */
 
 /*
- * InitWrite() has to be called once at startup. It allocates the space
- * for one raw track, and writes the low level stuff between sectors
- * (gaps, syncs etc.)
+ * ObtainRawBuffer() has to be called before reading or writing
+ * a track. It insures the raw buffer is large enough.
  */
 
 int
-InitWrite(dev)
+ObtainRawBuffer(dev, unit)
 DEV	       *dev;
+UNIT	       *unit;
 {
-    if ((dev->md_Rawbuffer =
-	    AllocMem((long)RLEN+2, MEMF_CHIP | MEMF_PUBLIC)) == 0)
-	return 0;
+    if (dev->md_Rawbuffer == NULL ||
+	dev->md_RawbufferSize < unit->mu_ReadLen) {
+	FreeRawBuffer(dev);
+
+	for (;;) {
+	    if (dev->md_Rawbuffer =
+		    AllocMem((long)unit->mu_ReadLen + 8,
+			      MEMF_CHIP | MEMF_PUBLIC)) {
+		dev->md_RawbufferSize = unit->mu_ReadLen;
+		debug(("ObtainRawBuffer: got %08lx\n", dev->md_Rawbuffer));
+		return 0;
+	    }
+	    /*
+	     * Help! No memory! What to do?
+	     * We wait until something happens, such as a disk change
+	     * or a new command coming in, and then try again.
+	     */
+	    debug(("ObtainRawBuffer: no memory\n"));
+	    Wait(1L << unit->mu_Port.mp_SigBit);
+	}
+    }
 
     return 1;
 }
 
 /*
- * FreeBuffer has to be called when msh: closes down, it just frees the
- * memory InitWrite has allocated
+ * FreeRawBuffer has to be called when msh: closes down, it just frees the
+ * memory ObtainRawBuffer has allocated.
  */
 
 void
-FreeBuffer(dev)
+FreeRawBuffer(dev)
 DEV	       *dev;
 {
     if (dev->md_Rawbuffer) {    /* OIS */
-	FreeMem(dev->md_Rawbuffer, (long) RLEN + 2);
+	debug(("FreeRawBuffer: free %08lx\n", dev->md_Rawbuffer));
+	FreeMem(dev->md_Rawbuffer, dev->md_RawbufferSize + 8);
     }
 }
 
 /*
  * This routine doesn't write to the disk, but updates the TrackBuffer to
  * respect the new sector. We have to be sure the TrackBuffer is filled
- * with the current Track. As GetSTS calls Internal_Update if the track
+ * with the current Track. As GetTrack calls Internal_Update if the track
  * changes we don't have to bother about actually writing any data to the
- * disk. GetSTS has to be changed in the following way:
- *
- * if (track != mu_CurrentTrack) { Internal_Update();
- * for (i = 0; i < MS_SPT; i++) ..... etc.
+ * disk.
  */
 
 void
@@ -1284,9 +1369,8 @@ end:
 }
 
 /*
- * This is called by your GetSTS() routine if the Track has changed. It
- * writes the changes back to the disk (a whole track at a time). It has
- * to be called if your device gets a CLOSE instruction too.
+ * This is called by your GetTrack() routine if the Track has changed. It
+ * writes the changes back to the disk (a whole track at a time).
  */
 
 void
@@ -1303,6 +1387,7 @@ REGISTER UNIT  *unit;
 	    unit->mu_CurrentSectors = unit->mu_SectorsPerTrack;
 
 	/*
+
 	 * Only recalculate the CRC on changed sectors. This way, a
 	 * sector with a bad CRC won't suddenly be ``repaired''.
 	 */
@@ -1326,13 +1411,14 @@ REGISTER UNIT  *unit;
 	    SectorGap = CalculateGapLength(unit->mu_CurrentSectors);
 
 	    TDMotorOn(tdreq);
-	    if (TDSeek(unit, ioreq, unit->mu_CurrentTrack)) {
+	    if (TDSeek(unit, unit->mu_CurrentTrack)) {
 		debug(("Seek error\n"));
 		ioreq->io_Error = TDERR_SeekError;
 		goto end;
 	    }
 
 	    ObtainSemaphore(&dev->md_HardwareUse);
+	    /*ObtainRawBuffer(dev, unit);*/
 	    EncodeTrack(unit->mu_TrackBuffer,
 			dev->md_Rawbuffer,
 			unit->mu_CrcBuffer,
@@ -1379,19 +1465,54 @@ UNIT	       *unit;
     track = ioreq->io_Offset / MS_BPS;		   /* Sector number */
     /*
      * Now try to guess the number of sectors the user wants per track.
-     * 40 sectors is the first ambiguous length.
+     * The existence of high-density floppies muddies the water
+     * considerably.
+     * With 40 sectors there is ambiguity: 5 * 8 or 4 * 10.
      */
-    if (length <= MS_SPT_MAX)
-	spt = length;
-    else if (length < 40) {
+    if (track != 0)
+	spt = unit->mu_SectorsPerTrack;
+    else if (length <= 80) {
 	if (length > 0) {
-	    for (spt = 8; spt <= MS_SPT_MAX; spt++) {
+	    int 	    low, high;
+
+	    if (unit->mu_DiskState & STATEF_HIGHDENSITY) {
+		if (length <= MS_SPT_MAX_HD) {
+		    spt = length;
+		    goto found_spt;
+		}
+		low = 15;
+		high = MS_SPT_MAX_HD;
+	    } else {
+		if (length <= MS_SPT_MAX_DD) {
+		    spt = length;
+		    goto found_spt;
+		} else if (length == 40) {
+		    /* solve ambiguity in most desirable? way */
+		    spt = 10;
+		    goto found_spt;
+		}
+		low = 8;
+		high = MS_SPT_MAX_DD;
+	    }
+	    for (spt = low; spt <= high; spt++) {
 		if ((length % spt) == 0)
 		    goto found_spt;
 	    }
 	}
 	/*
-	 * Not 8, 16, 24, 32, 9, 18, 27, 36, 10, 20, or 30? That is an error.
+	 * The following values are OK:
+	 *
+	 * DD: 8, 16, 24, 32, 40, 48, 56, 64
+	 *     9, 18, 27, 36, 45, 54, 63, 72
+	 *    10, 20, 30, 40, 50, 60, 70, 80
+	 *
+	 * HD:15, 30, 45, 60
+	 *    16, 32, 48, 64
+	 *    17, 34, 51, 68
+	 *    18, 36, 54, 72
+	 *    19, 38, 57, 76
+	 *    20, 40, 60, 80
+	 *    21, 42, 63
 	 */
 	ioreq->io_Error = IOERR_BADLENGTH;
 	goto termio;
@@ -1399,6 +1520,7 @@ UNIT	       *unit;
 	spt = unit->mu_SectorsPerTrack;
 
 found_spt:
+    debug(("%d sectors/track\n", spt));
     gaplen = CalculateGapLength(spt);
 
     /*
@@ -1433,6 +1555,7 @@ found_spt:
 	    }
 	}
 	ObtainSemaphore(&dev->md_HardwareUse);
+	ObtainRawBuffer(dev, unit);
 	EncodeTrack(userbuf,
 		    dev->md_Rawbuffer,
 		    unit->mu_CrcBuffer,
@@ -1443,7 +1566,7 @@ found_spt:
 		    unit->mu_WriteLen);
 
 	TDMotorOn(tdreq);
-	if (TDSeek(unit, ioreq, track)) {
+	if (TDSeek(unit, track)) {
 	    debug(("Seek error\n"));
 	    ioreq->io_Error = IOERR_BADLENGTH;
 	    break;
