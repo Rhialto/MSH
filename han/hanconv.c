@@ -1,7 +1,10 @@
 /*-
- * $Id: hanconv.c,v 1.54 1993/06/24 05:12:49 Rhialto Exp $
+ * $Id: hanconv.c,v 1.55 1993/12/30 23:28:00 Rhialto Rel $
  * $Log: hanconv.c,v $
- * Revision 1.54  1993/06/24  05:12:49  Rhialto
+ * Revision 1.55  1993/12/30  23:28:00	Rhialto
+ * Freeze for MAXON5.
+ *
+ * Revision 1.54  1993/06/24  05:12:49	Rhialto
  * DICE 2.07.54R.
  *
  * Revision 1.53  92/10/25  02:41:38  Rhialto
@@ -33,10 +36,10 @@
 
 #include "han.h"
 
-#ifdef CONVERSIONS
+#if CONVERSIONS
 #include "hanconv.h"
 
-#ifdef HDEBUG
+#if HDEBUG
 #   include "syslog.h"
 #else
 #   define	debug(x)

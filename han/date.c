@@ -1,7 +1,10 @@
 /*-
- * $Id: date.c,v 1.54 1993/06/24 05:12:49 Rhialto Exp $
+ * $Id: date.c,v 1.55 1993/12/30 23:28:00 Rhialto Rel $
  * $Log: date.c,v $
- * Revision 1.54  1993/06/24  05:12:49  Rhialto
+ * Revision 1.55  1993/12/30  23:28:00	Rhialto
+ * Freeze for MAXON5.
+ *
+ * Revision 1.54  1993/06/24  05:12:49	Rhialto
  * DICE 2.07.54R.
  *
  * Revision 1.53  92/10/25  02:43:23  Rhialto
@@ -45,7 +48,7 @@
 #include <libraries/dos.h>
 #endif
 
-#ifdef HDEBUG
+#if HDEBUG
 #   include "syslog.h"
 #else
 #   define	debug(x)
@@ -128,7 +131,7 @@ long unixdays(int year, int month, int day)
 #define SECONDS_PER_DAY     ((long) SECONDS_PER_MINUTE * \
 			     MINUTES_PER_HOUR * HOURS_PER_DAY)
 
-#define LeapYear(year)  ((year & 3) == 0)   /* From 1-Mar-1901 to 28-Feb-2100 */
+#define LeapYear(year)	((year & 3) == 0)   /* From 1-Mar-1901 to 28-Feb-2100 */
 
 const int daycount[MONTHS_PER_YEAR] = {
 	31,	28,    31,    30,    31,    30,
@@ -341,7 +344,7 @@ void YrMoDa(intdat, yr, mo, da)
    long *mo;	  /* O: resultant month in form MM */
    long *da;	  /* O: resultant day of month in form DD */
 {
-   register long jdate, day0, day1, day2, day3;
+   long jdate, day0, day1, day2, day3;
 
    jdate = intdat + DDELTA;  /* adjust internal date to Julian */
 
@@ -391,7 +394,7 @@ struct DateStamp *datestamp;
     }
 #else
     {
-	register long days, i, t;
+	long days, i, t;
 	int year, month, day;
 
 	days = datestamp->ds_Days;

@@ -1,7 +1,10 @@
 /*-
- * $Id: hanreq.c,v 1.54 1993/06/24 05:12:49 Rhialto Exp $
+ * $Id: hanreq.c,v 1.55 1993/12/30 23:28:00 Rhialto Rel $
  * $Log: hanreq.c,v $
- * Revision 1.54  1993/06/24  05:12:49  Rhialto
+ * Revision 1.55  1993/12/30  23:28:00	Rhialto
+ * Freeze for MAXON5.
+ *
+ * Revision 1.54  1993/06/24  05:12:49	Rhialto
  * DICE 2.07.54R.
  *
  * Revision 1.53  92/10/25  02:42:27  Rhialto
@@ -45,6 +48,8 @@
 #include "han.h"
 #include "dos.h"
 
+#define IntuitionBase_DECLARED
+
 #ifndef INTUITION_INTUITION_H
 #include <intuition/intuition.h>
 #endif
@@ -54,7 +59,7 @@
 
 extern struct IntuitionBase *IntuitionBase;
 
-#ifdef HDEBUG
+#if HDEBUG
 #   include "syslog.h"
 #else
 #   define	debug(x)
@@ -158,12 +163,16 @@ struct IOExtTD *req;
     struct IntuiText *text;
     long	    result;
 
-    if (Cancel)
+    if (Cancel) {
+	debug(("RetryRwError: Cancel != 0\n"));
 	goto fail;
+    }
 
     window = Getpr_WindowPtr();
-    if (window == (struct Window *)-1)
+    if (window == (struct Window *)-1) {
+	debug(("RetryRwError: pr_WindowPtr == -1\n"));
 	goto fail;
+    }
 
     if (req->iotd_Req.io_Error == TDERR_DiskChanged) {
 	text = MustReplace;
@@ -181,7 +190,7 @@ again:
 			 0L, 0L, 320L, 72L);
 
     if (req->iotd_Req.io_Error == TDERR_DiskChanged && result != FALSE) {
-	TDChangeNum();  /* Get new disk change number */
+	TDChangeNum();	/* Get new disk change number */
 	DiskChanged = 0;
     }
 

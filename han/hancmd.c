@@ -1,7 +1,10 @@
 /*-
- * $Id: hancmd.c,v 1.54 1993/06/24 05:12:49 Rhialto Exp $
+ * $Id: hancmd.c,v 1.55 1993/12/30 23:28:00 Rhialto Rel $
  * $Log: hancmd.c,v $
- * Revision 1.54  1993/06/24  05:12:49  Rhialto
+ * Revision 1.55  1993/12/30  23:28:00	Rhialto
+ * Freeze for MAXON5.
+ *
+ * Revision 1.54  1993/06/24  05:12:49	Rhialto
  * DICE 2.07.54R.
  *
  * Revision 1.53  92/10/25  02:42:51  Rhialto
@@ -44,11 +47,11 @@
 
 #include <stdlib.h>
 #include "han.h"
-#ifdef CONVERSIONS
+#if CONVERSIONS
 #include "hanconv.h"
 #endif /* CONVERSIONS */
 
-#ifdef HDEBUG
+#if HDEBUG
 #   include "syslog.h"
 #else
 #   define	debug(x)
@@ -89,7 +92,7 @@ char	       *cmd;
 	    ltoa(CheckBootBlock, msg + 9);
 	    DisplayMessage(msg);
 	}
-#ifdef CONVERSIONS
+#if CONVERSIONS
     } else if (cmd[1] == 'C') {
 	DefaultConversion = cmd[2] & 31;
 	if (DefaultConversion >= ConvFence)
