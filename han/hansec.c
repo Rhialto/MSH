@@ -1,6 +1,9 @@
 /*-
- * $Id: hansec.c,v 1.2 90/01/23 02:31:50 Rhialto Exp Locker: Rhialto $
+ * $Id: hansec.c,v 1.3 90/01/27 20:20:16 Rhialto Exp $
  * $Log:	hansec.c,v $
+ * Revision 1.3  90/01/27  20:20:16  Rhialto
+ * Sorted sectors when flushing cache
+ *
  * Revision 1.2  90/01/23  02:31:50  Rhialto
  * Add 16-bit FAT support.
  *
@@ -14,14 +17,14 @@
  * Sector-level stuff: read, write, cache, unit conversion.
  * Other interactions (via MyDoIO) with messydisk.device.
  *
- * This code is (C) Copyright 1989 by Olaf Seibert. All rights reserved. May
- * not be used or copied without a licence.
+ * This code is (C) Copyright 1989,1990 by Olaf Seibert. All rights reserved.
+ * May not be used or copied without a licence.
 -*/
 
 #include "han.h"
 #include "dos.h"
 
-#undef DEBUG				/**/
+/*#undef DEBUG				/**/
 #ifdef DEBUG
 #   define	debug(x)  dbprintf x
 #else
@@ -186,7 +189,7 @@ register int	number;
     register struct CacheSec *sec;
     register
 
-    debug(("FindSec %d", number));
+    debug(("FindSecByNumber %d", number));
 
     for (sec = (void *) CacheList.mlh_Head;
 	 nextsec = (void *) sec->sec_Node.mln_Succ; sec = nextsec) {
@@ -232,7 +235,7 @@ NewCacheSector()
     }
     for (sec = (void *) CacheList.mlh_TailPred;
 	 nextsec = (void *) sec->sec_Node.mln_Pred; sec = nextsec) {
-	if ((CurrentCache > MaxCache) && (sec->sec_Refcount == SEC_DIRTY)) {
+	if ((CurrentCache >= MaxCache) && (sec->sec_Refcount == SEC_DIRTY)) {
 	    FreeCacheSector(sec);       /* Also writes it to disk */
 	    continue;
 	}
@@ -261,6 +264,7 @@ void
 FreeCacheSector(sec)
 register struct CacheSec *sec;
 {
+    debug(("FreeCacheSector %d\n", sec->sec_Number));
     Remove(sec);
 #ifndef READONLY
     if (sec->sec_Refcount & SEC_DIRTY) {
@@ -302,7 +306,8 @@ FreeCacheList()
 
 /*
  * Do an insertion sort on tosort in the CacheList. Since it changes the
- * ln_Succ pointer, you must fetch it before calling this routine.
+ * location in the list, you must fetch it before calling this routine.
+ * The list will become ascending.
  */
 
 void
@@ -314,22 +319,27 @@ register struct CacheSec *tosort;
     register word   secno;
 
     secno = tosort->sec_Number;
+    debug(("SortSec %d: ", secno));
 
     for (sec = (void *) CacheList.mlh_Head;
 	 nextsec = (void *) sec->sec_Node.mln_Succ; sec = nextsec) {
-	if (sec == tosort)
+	debug(("%d, ", sec->sec_Number));
+	if (sec == tosort) {
+	    debug(("\n"));
 	    return;			/* No need to move it away */
+	}
 	if (sec->sec_Number > secno)
 	    break;
     }
     /* Insert before sec */
     Remove(tosort);
     Insert(&CacheList, tosort, sec->sec_Node.mln_Pred);
+    debug(("\n"));
 }
 
 /*
- * Write all dirty cache buffers to disk. It would be nice to sort them,
- * but currently we don't do that yet.
+ * Write all dirty cache buffers to disk. They are written from highest to
+ * lowest, and then the FAT is written out.
  */
 
 void
@@ -342,9 +352,6 @@ int		immediate;
     debug(("MSUpdate\n"));
 
 #ifndef READONLY
-    if (FatDirty) {
-	WriteFat();
-    }
     if (DelayState & DELAY_DIRTY) {
 	/*
 	 * First sort all dirty sectors on block number
@@ -356,16 +363,19 @@ int		immediate;
 	    }
 	}
 	/*
-	 * Then do a second scan to write them out.
+	 * Then do a second (backward) scan to write them out.
 	 */
-	for (sec = (void *) CacheList.mlh_Head;
-	     nextsec = (void *) sec->sec_Node.mln_Succ; sec = nextsec) {
+	for (sec = (void *) CacheList.mlh_TailPred;
+	     nextsec = (void *) sec->sec_Node.mln_Pred; sec = nextsec) {
 	    if (sec->sec_Refcount & SEC_DIRTY) {
 		PutSec(sec->sec_Number, sec->sec_Data);
 		sec->sec_Refcount &= ~SEC_DIRTY;
 	    }
 	}
 	DelayState &= ~DELAY_DIRTY;
+    }
+    if (FatDirty) {
+	WriteFat();
     }
 #endif
 
