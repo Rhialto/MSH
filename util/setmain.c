@@ -1,6 +1,13 @@
 /*-
- * $Id: setmain.c,v 1.54 1993/06/24 05:35:45 Rhialto Exp $
+ * $Id: setmain.c,v 1.56 1996/12/22 00:22:33 Rhialto Rel $
  * $Log: setmain.c,v $
+ * Revision 1.56  1996/12/22  00:22:33  Rhialto
+ * Cosmetics.
+ *
+ * Revision 1.55  1993/12/30  23:28:00	Rhialto
+ * Freeze for MAXON5.
+ * New GadToolBox (2.0c), and use font-sensitive option.
+ *
  * Revision 1.54  1993/06/24  05:35:45	Rhialto
  * DICE 2.07.54R.
  *
@@ -56,7 +63,7 @@
 
 #include "setwindow.h"
 
-const char	idString[] = "$VER: MSH-Set $Revision: 1.54 $ $Date: 1993/06/24 05:35:45 $\r\n";
+const char	idString[] = "$""VER: MSH-Set $Revision: 1.56 $ $Date: 1996/12/22 00:22:33 $\r\n";
 
 struct Library *AslBase;
 struct Library *GadToolsBase;
@@ -78,7 +85,6 @@ struct FileRequester *FileRequest;
 
 const char	OkString[] = "Ok";
 const char	PanicString[] = "Panic!";
-const char	RCSId[] = "\0$VER: MSH-Set $Revision: 1.54 $ $Date: 1993/06/24 05:35:45 $, by Olaf Seibert";
 
 void		Show(void);
 void		Hide(void);
@@ -326,7 +332,7 @@ ForgetAllMSHs(void)
     struct Node    *n,
 		   *nn;
 
-    n = MSHList.mlh_Head;
+    n = (struct Node *)MSHList.mlh_Head;
     while (nn = n->ln_Succ) {
 	FreeVec(n);
 	n = nn;
@@ -383,7 +389,7 @@ GetNode(struct MinList *l, int num)
     struct Node    *n,
 		   *nn;
 
-    n = l->mlh_Head;
+    n = (struct Node *)l->mlh_Head;
     while (num > 0 && (nn = n->ln_Succ)) {
 	num--;
 	n = nn;
@@ -739,7 +745,7 @@ top:
 	if (mask & brokermask) {
 	    CxMsg	   *cxmsg;
 
-	    while (cxmsg = GetMsg(BrokerPort)) {
+	    while (cxmsg = (CxMsg *)GetMsg(BrokerPort)) {
 		int		id;
 		int		type;
 
