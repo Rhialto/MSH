@@ -1,5 +1,10 @@
-; $Id: device1.a,v 1.54 1993/06/24 04:56:00 Rhialto Exp $
+; $Id: device1.a,v 1.55 1993/12/30 22:45:10 Rhialto Rel $
 ; $Log: device1.a,v $
+; Revision 1.55  1993/12/30  22:45:10  Rhialto
+; Change return code when loaded from CLI.
+; Remove xref _InitTable.
+; Freeze for MAXON5.
+;
 ; Revision 1.54  1993/06/24  04:56:00  Rhialto
 ; Switch to RTF_AUTOINIT, saves a few bytes. DICE 2.07.54R.
 ;
@@ -198,6 +203,25 @@ _BSET_ACTIVE:
 	sne	d0
 	rts
 	endc	; HANDLE_IO_QUICK
+
+		;   BeginIO(ior)
+
+		section text,code
+
+		xdef	_hyper_BeginIO
+		xdef	_BeginIO
+		xdef	@BeginIO
+
+_hyper_BeginIO:
+_BeginIO:
+		move.l	4(sp),A0
+@BeginIO:
+		move.l	A6,-(sp)
+		move.l	A0,A1
+		move.l	$14(A0),A6   ; io_Device
+		jsr	-30(A6)
+		move.l	(sp)+,A6
+		rts
 
 EndCode
 	end
