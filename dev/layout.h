@@ -1,6 +1,9 @@
 /*-
- * $Id$
- * $Log$
+ * $Id: layout.h,v 1.55 1993/12/30 22:45:10 Rhialto Rel $
+ * $Log: layout.h,v $
+ * Revision 1.55  1993/12/30  22:45:10  Rhialto
+ * Split off from devio2.c.
+ *
  *
  *  This code is (C) Copyright 1989-1993 by Olaf Seibert. All rights reserved.
  *  May not be used or copied without a licence.

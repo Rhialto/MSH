@@ -1,7 +1,12 @@
 ;;;;
 ;
-; $Id: devio1.a,v 1.54 1993/06/24 04:56:00 Rhialto Exp $
+; $Id: devio1.a,v 1.55 1993/12/30 22:45:10 Rhialto Rel $
 ; $Log: devio1.a,v $
+; Revision 1.55  1993/12/30  22:45:10  Rhialto
+; Remove hardware constants (are now in c.i).
+; Trackbuffer is a pointer now instead of an array.
+; Freeze for MAXON5.
+;
 ; Revision 1.54  1993/06/24  04:56:00  Rhialto
 ; DICE 2.07.54R.
 ;

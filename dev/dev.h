@@ -1,6 +1,10 @@
 /*-
- *  $Id: dev.h,v 1.54 1993/06/24 04:56:00 Rhialto Exp $
+ *  $Id: dev.h,v 1.55 1993/12/30 22:45:10 Rhialto Rel $
  *  $Log: dev.h,v $
+ * Revision 1.55  1993/12/30  22:45:10  Rhialto
+ * Revamp flags and track size constants.
+ * Freeze for MAXON5.
+ *
  * Revision 1.54  1993/06/24  04:56:00	Rhialto
  * DICE 2.07.54R.
  *
