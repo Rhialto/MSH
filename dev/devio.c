@@ -1,6 +1,9 @@
 /*-
- * $Id: devio.c,v 1.2 90/01/23 00:41:39 Rhialto Exp Locker: Rhialto $
+ * $Id: devio.c,v 1.3 90/01/27 20:36:04 Rhialto Exp $
  * $Log:	devio.c,v $
+ * Revision 1.3  90/01/27  20:36:04  Rhialto
+ * Variable #sectors/track!
+ *
  * Revision 1.2  90/01/23  00:41:39  Rhialto
  * Remove C version of DecodeTrack.
  *
@@ -73,7 +76,7 @@ byte		MfmEncode[16] = {
 #define DATASYNC	 3
 #define DATAMARK	 1
 #define DATACRC 	 2
-#define DATAGAP3_9	80  /* for 9 or less sectors/track */
+#define DATAGAP3_9	78  /* for 9 or less sectors/track */
 #define DATAGAP3_10	40  /* for 10 sectors/track */
 #define DATALEN 	(DATAGAP1+DATAGAP2+DATASYNC+DATAMARK+MS_BPS+DATACRC)
 
@@ -261,7 +264,7 @@ int		dskwrite;
     FreeDrive();
 }
 
-#if 1
+#if 0
 #define ID_ADDRESS_MARK     0xFE
 #define MFM_ID		    0x5554
 #define DATA_ADDRESS_MARK   0xFB
@@ -1368,6 +1371,7 @@ UNIT	       *unit;
 	CopyMem(userbuf, unit->mu_TrackBuffer + MS_BPS * sector, (long) MS_BPS);
 	unit->mu_TrackChanged = 1;
 	unit->mu_SectorStatus[sector] = CRC_CHANGED;
+
 	ioreq->iotd_Req.io_Actual += MS_BPS;
 	if (--length <= 0)
 	    break;
@@ -1409,6 +1413,9 @@ register UNIT  *unit;
     if (unit->mu_TrackChanged != 0) {
 	debug(("needs to write "));
 
+	if (unit->mu_SectorsPerTrack > unit->mu_CurrentSectors)
+	    unit->mu_CurrentSectors = unit->mu_SectorsPerTrack;
+
 	/*
 	 * Only recalculate the CRC on changed sectors. This way, a
 	 * sector with a bad CRC won't suddenly be ``repaired''.
@@ -1433,7 +1440,8 @@ register UNIT  *unit;
 	    SectorGap = CalculateGapLength(unit->mu_CurrentSectors);
 
 	    ObtainSemaphore(&dev->md_HardwareUse);
-	    EncodeTrack(unit->mu_TrackBuffer, dev->md_Rawbuffer, unit->mu_CrcBuffer,
+	    EncodeTrack(unit->mu_TrackBuffer, dev->md_Rawbuffer,
+			unit->mu_CrcBuffer,
 			unit->mu_CurrentTrack, unit->mu_CurrentSide,
 			SectorGap, unit->mu_CurrentSectors);
 
