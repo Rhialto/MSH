@@ -1,6 +1,9 @@
 /*-
- * $Id$
- * $Log$
+ * $Id: hanfile.c,v 1.1 89/12/17 20:03:11 Rhialto Exp Locker: Rhialto $
+ * $Log:	hanfile.c,v $
+ * Revision 1.1  89/12/17  20:03:11  Rhialto
+ * Initial revision
+ *
  *
  *  HANFILE.C
  *
@@ -406,6 +409,11 @@ register long	size;
     if (CheckLock(fl))
 	return -1L;
 
+    if (fl->msfl_Msd.msd_Attributes & ATTR_READONLY) {
+	error = ERROR_WRITE_PROTECTED;
+	return -1L;
+    }
+
     oldsize = size;
 
     while (size > 0) {
@@ -485,6 +493,10 @@ byte	       *name;
 
     fl = MSLock(parentdir, name, EXCLUSIVE_LOCK);
     if (fl) {
+	if (fl->msfl_Msd.msd_Attributes & ATTR_READONLY) {
+	    error = ERROR_DELETE_PROTECTED;
+	    goto error;
+	}
 	if (fl->msfl_Msd.msd_Attributes & ATTR_DIRECTORY) {
 	    struct FileInfoBlock fib;
 
