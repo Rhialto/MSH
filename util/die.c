@@ -1,15 +1,16 @@
 /*-
- * $Id: Die.c,v 1.46 91/10/06 18:23:22 Rhialto Rel $
+ * $Id: die.c,v 1.46 91/10/06 18:51:29 Rhialto Rel $
  *
  *  DIE.C
  *
- *  This code is (C) Copyright 1989-1991 by Olaf Seibert. All rights reserved.
+ *  This code is (C) Copyright 1989-1992 by Olaf Seibert. All rights reserved.
  *  May not be used or copied without a licence.
 -*/
 
 #include <amiga.h>
 #include <functions.h>
 #include <stdio.h>
+#include <string.h>
 
 #ifndef EXEC_TYPES_H
 #include <exec/types.h>
@@ -22,7 +23,7 @@
 #endif
 
 long
-dos_packet1(struct MsgPort *port, long type, long arg1)
+dos_packet2(struct MsgPort *port, long type, long arg1, long arg2)
 {
     struct StandardPacket *sp;
     struct MsgPort *rp;
@@ -39,6 +40,7 @@ dos_packet1(struct MsgPort *port, long type, long arg1)
     sp->sp_Pkt.dp_Port = rp;
     sp->sp_Pkt.dp_Type = type;
     sp->sp_Pkt.dp_Arg1 = arg1;
+    sp->sp_Pkt.dp_Arg2 = arg2;
     PutMsg(port, &sp->sp_Msg);
     WaitPort(rp);
     GetMsg(rp);
@@ -52,12 +54,25 @@ int
 main(int argc, char **argv)
 {
     struct MsgPort *filehandler;
+    long	    flags = 0;
+    long	    id = 0;
 
+    if (argc == 3 && stricmp(argv[1], "unshare") == 0) {
+	id = 'Msh\0';
+	flags = 1;
+	argc--;
+	argv++;
+    }
+    if (argc == 3 && stricmp(argv[1], "unload") == 0) {
+	id = 'Msh\0';
+	flags = 1 | 2;
+	argc--;
+	argv++;
+    }
     if (argc == 2) {
 	if (filehandler = DeviceProc(argv[1])) {
-	    dos_packet1(filehandler, ACTION_DIE, DOSTRUE);
+	    dos_packet2(filehandler, ACTION_DIE, id, flags);
 	}
     } else
-	printf("Usage: die DEV:\n");
+	puts("Usage: die [unshare|unload] MSH-DEV:");
 }
-
