@@ -1,5 +1,8 @@
-; $Id: hancrtso.a,v 1.46 91/10/06 18:25:52 Rhialto Rel $
-; $Log: hancrtso.a,v $
+; $Id: hancrtso.a,v 1.51 92/04/17 15:34:37 Rhialto Rel $
+; $Log:	hancrtso.a,v $
+; Revision 1.51  92/04/17  15:34:37  Rhialto
+; Freeze for MAXON.
+; 
 ; Revision 1.46  91/10/06  18:25:52  Rhialto
 ;
 ; Freeze for MAXON
