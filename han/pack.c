@@ -1,6 +1,9 @@
 /*-
- * $Id: pack.c,v 1.46 91/10/06 18:26:16 Rhialto Rel $
+ * $Id: pack.c,v 1.51 92/04/17 15:34:59 Rhialto Rel $
  * $Log:	pack.c,v $
+ * Revision 1.51  92/04/17  15:34:59  Rhialto
+ * Freeze for MAXON. DosType->Interleave; extra uninhibits fixed.
+ *
  * Revision 1.46  91/10/06  18:26:16  Rhialto
  *
  * Freeze for MAXON
@@ -34,11 +37,8 @@
  *  This has been stripped and refilled with messydos code
  *  by Olaf Seibert.
  *
- *  This code is (C) Copyright 1989,1990 by Olaf Seibert. All rights reserved.
+ *  This code is (C) Copyright 1989-1992 by Olaf Seibert. All rights reserved.
  *  May not be used or copied without a licence.
- *
- *  Please note that we are NOT pure, so if you wish to mount
- *  multiple MSDOS units, you must use different copies of this driver.
  *
  *  This file forms the interface between the actual handler code and all
  *  AmigaDOS requirements. It shields it from ugly stuff like BPTRs, BSTRs,
@@ -46,12 +46,11 @@
  *  Also, most protection against non-inserted disks is done here.
 -*/
 
-#include <amiga.h>
 #include <functions.h>
-#include <string.h>
 #include "han.h"
 #include "dos.h"
 
+#include <string.h>
 #ifdef HDEBUG
 #   include "syslog.h"
 #else
@@ -117,7 +116,7 @@ short		WriteProtect;	/* Are we software-writeprotected? */
 struct Interrupt ChangeInt = {
     { 0 },			/* is_Node */
     0,				/* is_Data */
-    ChangeIntHand0,		 /* is_Code */
+    ChangeIntHand0,		/* is_Code */
 };
 
 /*
@@ -271,15 +270,23 @@ top:
 	    PRes1 = DOSFALSE;
 	    PRes2 = 0;
 	    error = 0;
-	    debug(("Packet: %3ld %08lx %08lx %08lx %10s\n",
+	    debug(("Packet: %4ld %08lx %08lx %08lx %s\n",
 		     PType, PArg1, PArg2, PArg3, typetostr(PType)));
 
 	    DosPacket = packet; 	/* For the System Requesters */
 	    switch (PType) {
 	    case ACTION_DIE:		/* attempt to die?  */
-		done = (PArg1 == 'Msh\0') ? PArg2 : 0;   /* Argh! Hack! */
+		done = (PArg1 == MSH_MAGIC) ? PArg2 : 0;   /* Argh! Hack! */
 		break;
-	    case ACTION_CURRENT_VOLUME: /* -		      VolNode,UnitNr */
+	    case ACTION_CURRENT_VOLUME: /* -,Magic,Count -> VolNode,UnitNr,Private */
+		if (PArg2 == MSH_MAGIC) {
+		    PArg2 = (long)PrivateInfo();
+		    if (PArg3 > 0) {
+			OpenCount++;
+		    } else if (PArg3 < 0) {
+			OpenCount--;
+		    }
+		}
 		PRes1 = (long) CTOB(VolNode);
 		PRes2 = UnitNr;
 		break;
@@ -296,7 +303,7 @@ top:
 		    btos((byte *)PArg2, buf);
 		    if ((lockmode = PArg3) != EXCLUSIVE_LOCK)
 			lockmode = SHARED_LOCK;
-		    msfl = MSLock(MSFL(lock ? lock->fl_Key : NULL),
+		    msfl = MSLock(MSFL(lock ? lock->fl_Key : 0),
 				  buf,
 				  lockmode);
 		    PRes1 = MakeFileLock(msfl, lock, lockmode);
@@ -333,7 +340,7 @@ top:
 		    if (CheckWrite(lock))
 			break;
 		    btos((byte *)PArg2, buf);
-		    PRes1 = MSDeleteFile(MSFL(lock ? lock->fl_Key : NULL),
+		    PRes1 = MSDeleteFile(MSFL(lock ? lock->fl_Key : 0),
 					 buf);
 		}
 		break;
@@ -348,9 +355,9 @@ top:
 			break;
 		    btos((byte *)PArg2, buf);
 		    btos((byte *)PArg4, buf2);
-		    PRes1 = MSRename(MSFL(slock ? slock->fl_Key : NULL),
+		    PRes1 = MSRename(MSFL(slock ? slock->fl_Key : 0),
 				     buf,
-				     MSFL(dlock ? dlock->fl_Key : NULL),
+				     MSFL(dlock ? dlock->fl_Key : 0),
 				     buf2);
 		}
 		break;
@@ -359,6 +366,7 @@ top:
 		    MaxCache = 1;
 		} else
 		    PRes1 = DOSTRUE;
+		PRes2 = MaxCache;
 		debug(("Now %ld cache sectors\n", (long)MaxCache));
 		break;
 	    case ACTION_COPY_DIR:	/* Lock 		   Lock      */
@@ -368,7 +376,7 @@ top:
 
 		    lock = BTOC(PArg1);
 
-		    msfl = MSDupLock(MSFL(lock ? lock->fl_Key : NULL));
+		    msfl = MSDupLock(MSFL(lock ? lock->fl_Key : 0));
 
 		    PRes1 = MakeFileLock(msfl, lock,
 					 lock ? lock->fl_Access : SHARED_LOCK);
@@ -382,7 +390,7 @@ top:
 		    if (CheckWrite(lock))
 			break;
 		    btos((byte *)PArg3, buf);
-		    PRes1 = MSSetProtect(MSFL(lock ? lock->fl_Key : NULL),
+		    PRes1 = MSSetProtect(MSFL(lock ? lock->fl_Key : 0),
 					buf, PArg4);
 		}
 		break;
@@ -396,7 +404,7 @@ top:
 			break;
 		    btos((byte *)PArg2, buf);
 
-		    msfl = MSCreateDir(MSFL(lock ? lock->fl_Key : NULL),
+		    msfl = MSCreateDir(MSFL(lock ? lock->fl_Key : 0),
 				       buf);
 
 		    PRes1 = MakeFileLock(msfl, lock, SHARED_LOCK);
@@ -411,7 +419,7 @@ top:
 		    if (CheckRead(lock))
 			break;
 		    */
-		    PRes1 = MSExamine(MSFL(lock ? lock->fl_Key : NULL),
+		    PRes1 = MSExamine(MSFL(lock ? lock->fl_Key : 0),
 				      BTOC(PArg2));
 		}
 		break;
@@ -422,7 +430,8 @@ top:
 		    lock = BTOC(PArg1);
 		    if (CheckRead(lock))
 			break;
-		    PRes1 = MSExNext(MSFL(lock ? lock->fl_Key : NULL), BTOC(PArg2));
+		    PRes1 = MSExNext(MSFL(lock ? lock->fl_Key : 0),
+				     BTOC(PArg2));
 		}
 		break;
 	    case ACTION_DISK_INFO:	/* InfoData	       Bool:TRUE     */
@@ -444,7 +453,7 @@ top:
 
 		    lock = BTOC(PArg1);
 
-		    msfl = MSParentDir(MSFL(lock ? lock->fl_Key : NULL));
+		    msfl = MSParentDir(MSFL(lock ? lock->fl_Key : 0));
 
 		    PRes1 = MakeFileLock(msfl, lock, SHARED_LOCK);
 		}
@@ -469,7 +478,7 @@ top:
 		    if (CheckWrite(lock))
 			break;
 		    btos((byte *)PArg3, buf);
-		    PRes1 = MSSetDate(MSFL(lock ? lock->fl_Key : NULL),
+		    PRes1 = MSSetDate(MSFL(lock ? lock->fl_Key : 0),
 				      buf,
 				      (struct DateStamp *)PArg4);
 		}
@@ -524,7 +533,7 @@ top:
 			break;
 		    btos((byte *)PArg3, buf);
 		    debug(("'%s' ", buf));
-		    msfh = MSOpen(MSFL(lock ? lock->fl_Key : NULL),
+		    msfh = MSOpen(MSFL(lock ? lock->fl_Key : 0),
 				  buf,
 				  PType);
 		    if (msfh) {
@@ -547,9 +556,7 @@ top:
 		break;
 #ifdef ACTION_SET_FILE_SIZE
 	    case ACTION_SET_FILE_SIZE:
-		PRes1 = MSSetFileSize(
-			    MSFH(((struct FileHandle *)BTOC(PArg1))->fh_Arg1),
-			    PArg2, PArg3);
+		PRes1 = MSSetFileSize(MSFH(PArg1), PArg2, PArg3);
 		break;
 #endif
 #ifdef ACTION_WRITE_PROTECT
@@ -584,7 +591,7 @@ top:
 		    lock = BTOC(PArg2);
 		    if (CheckRead(lock))
 			break;
-		    msfh = MSOpenFromLock(MSFL(lock ? lock->fl_Key : NULL));
+		    msfh = MSOpenFromLock(MSFL(lock ? lock->fl_Key : 0));
 		    if (msfh) {
 			fh->fh_Arg1 = (long) msfh;
 			PRes1 = DOSTRUE;
@@ -604,43 +611,39 @@ top:
 		case ACTION_CHANGE_MODE:
 		    switch (PArg1) {
 		    case CHANGE_FH:
-			PRes1 = MSChangeModeFH(MSFH(((struct FileHandle *)BTOC(PArg2))->fh_Arg1), PArg3);
+			PRes1 = MSChangeModeFH(MSFH(((struct FileHandle *)
+				    BTOC(PArg2))->fh_Arg1), PArg3);
 			break;
 		    case CHANGE_LOCK:
-			PRes1 = MSChangeModeLock(MSFL(((struct FileLock *)BTOC(PArg2))->fh_Key), PArg3);
+			PRes1 = MSChangeModeLock(MSFL(((struct FileLock *)
+				    BTOC(PArg2))->fl_Key), PArg3);
 			break;
 		    }
 		    break;
 #endif
 #ifdef ACTION_COPY_DIR_FH
-	    case ACTION_COPY_DIR_FH:	/* FH			   Lock      */
+	    case ACTION_COPY_DIR_FH:	/* fh_Arg1		   Lock      */
 	    case ACTION_PARENT_FH:
 		{
-		    struct FileHandle *fh;
 		    struct MSFileLock *msfl;
 
-		    fh = BTOC(PArg1);
-		    /*
 		    if (PType == ACTION_PARENT_FH)
-			msfl = MSParentOfFH(MSFH(fh->fh_Arg1));
+			msfl = MSParentOfFH(MSFH(PArg1));
 		    else
-			msfl = MSDupLockFromFH(MSFH(fh->fh_Arg1));
-		    */
+			msfl = MSDupLockFromFH(MSFH(PArg1));
+		    /*
 		    msfl = ((PType == ACTION_PARENT_FH) ?
-			    MSParentOfFH : MSDupLockFromFH) (MSFH(fh->fh_Arg1));
+			    MSParentOfFH : MSDupLockFromFH) (MSFH(PArg1));
+		    */
 
-		    PRes1 = MakeFileLock(msfl, lock, SHARED_LOCK);
+		    /* User has inserted disk by now, so we can use VolNode */
+		    PRes1 = MakeFileLock(msfl, NULL, SHARED_LOCK);
 		}
 		break;
 #endif
 #ifdef ACTION_EXAMINE_FH
-	    case ACTION_EXAMINE_FH:	 /* FH,Fib		   Bool      */
-		{
-		    struct FileHandle *fh;
-
-		    fh = BTOC(PArg1);
-		    PRes1 = MSExamineFH(MSFH(fh->fh_Arg1), BTOC(PArg2));
-		}
+	    case ACTION_EXAMINE_FH:	 /* fh_Arg1,Fib 		Bool	  */
+		PRes1 = MSExamineFH(MSFH(PArg1), BTOC(PArg2));
 		break;
 #endif
 		/*
