@@ -1,4 +1,4 @@
-# $Id: Makefile,v 1.53 92/10/25 03:31:10 Rhialto Rel $
+# $Id: Makefile,v 1.54 1993/06/24 05:12:49 Rhialto Exp $
 #
 # Makefile for messydos file system handler, for use with the
 # DICE C compiler.
@@ -6,16 +6,19 @@
 # This code is (C) Copyright 1989-1992 by Olaf Seibert. All rights reserved.
 # May not be used or copied without a licence.
 
-#DB =	 -DHDEBUG -I/syslog
-#DBOBJ = /syslog/syslog.o
-#WACK =  -s
+#DBOBJ = /syslog/syslogi.o
+#DB =	 -d1 -DHDEBUG -I/syslog
+#WACK =  -d1 -s
 REGARGS = -mRR -mi
 PURE = -r -mS
 HDR =	-Hhan.sym=han.h -Hdos.sym=dos.h
+HDRL =	-Hhanl.sym=han.h -Hdos.sym=dos.h
 INC =	-I/han -I/dev -H/han/han.sym=/han/han.h -H/han/dos.sym=/han/dos.h
 
 HOBJ =	hancrtso.o pack.o support.o hanmain.o hansec.o hanlock.o hanfile.o \
 	hanconv.o hanreq.o hancmd.o date.o han2.o $(DBOBJ)
+HLOBJ = hancrtso.o pack.ol support.o hanmain.ol hansec.ol hanlock.ol hanfile.ol \
+	hanconv.o hanreq.o hancmd.o date.o han2.ol $(DBOBJ)
 HSRC =	hancrtso.a pack.c support.c hanmain.c hansec.c hanlock.c hanfile.c \
 	hanconv.c hanreq.c hancmd.c date.c han2.c dos.h han.h hanconv.h
 XSRC =	Makefile /util/messyfmt.c /util/die.c \
@@ -28,31 +31,40 @@ XSRC =	Makefile /util/messyfmt.c /util/die.c \
 .c.o:
 	dcc -c -proto -I/dev $(REGARGS) $(PURE) $(DB) $(HDR) $*.c -o $@
 
+.c.ol:
+	dcc -c -proto -I/dev $(REGARGS) $(PURE) $(DB) $(HDRL) -DLONGNAMES=1 $*.c -o $@
+
 .a.o:
 	a68k -q $*.a -o$@
 
-all:	precompile /MessyFileSystem
+all:	precompile /MessyFileSystem /LMFileSystem
 utils:	precompile /c/Die /c/MessyFmt /c/LoadConv /c/MSH-Set /c/MSH-Format
 doc:	dev.man msh.man
 
 /MessyFileSystem:    hanproto.h $(HOBJ)
 	dcc -o $@ -l0 $(REGARGS) $(PURE) $(WACK) $(HOBJ) -lc -lamiga20
 
+/LMFileSystem:	  hanproto.h $(HLOBJ)
+	dcc -o $@ -l0 $(REGARGS) $(PURE) $(WACK) $(HLOBJ) -lc -lamiga20
+
 hancrtso.o: hancrtso.a
 	dcc -c -o hancrtso.o hancrtso.a
 
 hanproto.h: $(HSRC)
-	-delete hanproto.h han.sym
+	-delete hanproto.h han.sym hanl.sym
 	makeproto -o hanproto.h $(HSRC)
 
 # Dependencies for precompiled header files
 han.sym: han.h
 	-delete han.sym
 
+hanl.sym: han.h
+	-delete hanl.sym
+
 dos.sym: dos.h
 	-delete dos.sym
 
-precompile: han.sym dos.sym
+precompile: han.sym hanl.sym dos.sym
 
 ###
 
@@ -74,7 +86,7 @@ precompile: han.sym dos.sym
 	dcc -c -proto $(DB) $(INC) /util/setmain.c -o /util/setmain.o
 
 /util/setwindow.o: /util/setwindow.c /util/setwindow.h
-	dcc -c -proto $(DB) $(INC)  /util/setwindow.c -o /util/setwindow.o
+	dcc -c -proto $(DB) $(INC) /util/setwindow.c -o /util/setwindow.o
 
 ###
 
@@ -123,9 +135,14 @@ hancmd.o: /syslog/syslog.h hanconv.h  /dev/dev.h han.h hancmd.c
 hanreq.o: /syslog/syslog.h dos.h  /dev/dev.h han.h hanreq.c
 hanconv.o: /syslog/syslog.h hanconv.h  /dev/dev.h han.h hanconv.c
 hanfile.o: /syslog/syslog.h hanconv.h dos.h  /dev/dev.h han.h hanfile.c
+hanfile.ol: /syslog/syslog.h hanconv.h dos.h  /dev/dev.h han.h hanfile.c
 hanlock.o: /syslog/syslog.h dos.h  /dev/dev.h han.h hanlock.c
+hanlock.ol: /syslog/syslog.h dos.h  /dev/dev.h han.h hanlock.c
 hansec.o: /syslog/syslog.h dos.h  /dev/dev.h han.h hansec.c
+hansec.ol: /syslog/syslog.h dos.h  /dev/dev.h han.h hansec.c
 hanmain.o: /syslog/syslog.h hanconv.h dos.h  /dev/dev.h han.h hanmain.c
+hanmain.ol: /syslog/syslog.h hanconv.h dos.h  /dev/dev.h han.h hanmain.c
 support.o: dos.h  /dev/dev.h han.h support.c
 pack.o: /syslog/syslog.h dos.h	/dev/dev.h han.h pack.c
+pack.ol: /syslog/syslog.h dos.h  /dev/dev.h han.h pack.c
 hancrtso.o: hancrtso.a
