@@ -1,6 +1,9 @@
 /*-
- * $Id: devio.c,v 1.40 91/03/03 17:56:00 Rhialto Rel $
- * $Log:	devio.c,v $
+ * $Id: devio2.c,v 1.42 91/06/13 23:47:34 Rhialto Exp $
+ * $Log:	devio2.c,v $
+ * Revision 1.42  91/06/13  23:47:34  Rhialto
+ * DICE conversion
+ *
  * Revision 1.40  91/03/03  17:56:00  Rhialto
  * Freeze for MAXON
  *
@@ -28,10 +31,7 @@
 
 /*#undef DEBUG			/**/
 #ifdef DEBUG
-#   define	debug(x)  syslog x
-    void initsyslog(void);
-    void syslog(char *, ...);
-    void uninitsyslog(void);
+#   include "syslog.h"
 #else
 #   define	debug(x)
 #endif
@@ -307,7 +307,7 @@ find_id:
 	}
 	sector = DecodeByte(decode, *rawbuf++);
 	debug(("#%2ld %4x, ", sector, (long)Len-0xC));
-	if (sector > MS_SPT_MAX) {
+	if (sector > MS_SPT_MAX || sector < 1) {
 	    debug(("Bogus sector number)\n"));
 	    goto find_id;
 	}

@@ -1,7 +1,10 @@
 ;;;;
 ;
-; $Id: devio1.a,v 1.42 91/06/14 00:04:44 Rhialto Exp $
+; $Id: devio1.a,v 1.43 91/09/28 01:31:11 Rhialto Exp $
 ; $Log: devio1.a,v $
+; Revision 1.43  91/09/28  01:31:11  Rhialto
+; Split out asm for DICE conversion.
+;
 ; Revision 1.42  91/06/14  00:04:44  Rhialto
 ; DICE conversion
 ;
@@ -259,6 +262,8 @@ fid_endsync:
 	bsr	DecodeByte	    ; side #
 	moveq.l #0,d0		    ; clear high part
 	bsr	DecodeByte	    ; sector #
+	tst.w	d0
+	beq.s	find_id 	    ; sector number too small (0)?
 	cmp.w	#MS_SPT_MAX,d0	    ; sector number too large?
 	bgt.s	find_id
 	cmp.w	maxsec(a5),d0       ; what is the highest sector number?
