@@ -1,9 +1,10 @@
-# $Id: Makefile,v 1.3 89/12/17 20:22:35 Rhialto Exp Locker: Rhialto $
+# $Id: Makefile,v 1.4 90/01/27 20:40:15 Rhialto Exp $
 #
-#   Makefile for messydos file system handler and -device.
+# Makefile for messydos file system handler and -device, for use with the
+# Manx C compiler version 3.6.
 #
-#   This code is (C) Copyright 1989 by Olaf Seibert. All rights reserved. May
-#   not be used or copied without a licence.
+# This code is (C) Copyright 1989,1990 by Olaf Seibert. All rights reserved.
+# May not be used or copied without a licence.
 
 HOBJ =	pack.o support.o hanmain.o hansec.o hanlock.o hanfile.o hanreq.o date.o
 HSRC =	pack.c support.c hanmain.c hansec.c hanlock.c hanfile.c hanreq.c date.c \
@@ -11,7 +12,7 @@ HSRC =	pack.c support.c hanmain.c hansec.c hanlock.c hanfile.c hanreq.c date.c \
 DOBJ =	device.o devio.o
 DSRC =	device.c devio.c dev.h device.h
 XSRC =	messyfmt.c Makefile
-DB =	-DDEBUG
+#DB =	 -DDEBUG
 #WACK =  -W
 
 #   Options: large code, large data, no startup code, use A4
@@ -53,10 +54,10 @@ co:
 	RCS:co -l $(HSRC) $(DSRC) $(XSRC)
 
 device.o: dev.h device.h
-devio.o:  dev.h device.h
-hanmain.o:  han.h dev.h
-hansec.o:  han.h dev.h
-hanlock.o:  dos.h han.h dev.h
-hanfile.o:  dos.h han.h dev.h
-support.o:  dos.h
+devio.o: dev.h device.h
+hanmain.o: han.h dev.h
+hansec.o: han.h dev.h
+hanlock.o: dos.h han.h dev.h
+hanfile.o: dos.h han.h dev.h
+support.o: dos.h
 pack.o: dos.h han.h dev.h
