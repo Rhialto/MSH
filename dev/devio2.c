@@ -1,9 +1,13 @@
 /*-
- * $Id: devio2.c,v 1.44 91/10/02 21:07:42 Rhialto Exp $
+ * $Id: devio2.c,v 1.46 91/10/06 18:27:22 Rhialto Rel $
  * $Log:	devio2.c,v $
+ * Revision 1.46  91/10/06  18:27:22  Rhialto
+ *
+ * Freeze for MAXON
+ *
  * Revision 1.44  91/10/02  21:07:42  Rhialto
  * Fix bug that sectors with number 0 are accepted and crash.
- * 
+ *
  * Revision 1.42  91/06/13  23:47:34  Rhialto
  * DICE conversion
  *
@@ -172,21 +176,24 @@ struct IOStdReq *ioreq;
     /* Set up disk parameters */
 
 /*
- * This is the adkcon setup: MFM mode, wordsync, no MSBsync, fast mode.
+ * This is the adkcon setup: MFM mode, (wordsync), no MSBsync, fast mode.
  * The precomp is 0 nanoseconds for the outer half of the disk, 120 for
  * the rest.
  */
     {
 	REGISTER word adk;
 
-	custom.adkcon = ADKF_PRECOMP1|ADKF_PRECOMP0|ADKF_MSBSYNC;
+	custom.adkcon = ADKF_PRECOMP1|ADKF_PRECOMP0|ADKF_MSBSYNC|ADKF_WORDSYNC;
 
-	adk = ADKF_SETCLR|ADKF_MFMPREC|ADKF_FAST|ADKF_WORDSYNC;
+	adk = ADKF_SETCLR|ADKF_MFMPREC|ADKF_FAST;
 
 	/* Are we on the inner half ? */
 	if (unit->mu_CurrentCylinder > unit->mu_NumCyls >> 1) {
 	    adk |= ADKF_PRECOMP0;
 	}
+	/* Do we need wordsync ? */
+	if (!dskwrite)
+	    adk |= ADKF_WORDSYNC;
 	custom.adkcon = adk;
     }
 
