@@ -1,20 +1,20 @@
-# $Id: Makefile.dev,v 1.54 1993/06/24 04:56:00 Rhialto Exp $
+# $Id: Makefile.dev,v 1.55 1993/12/30 22:45:10 Rhialto Rel $
 #
 # Makefile for messydos device, for use with the DICE C compiler.
 #
-# This code is (C) Copyright 1989-1992 by Olaf Seibert. All rights reserved.
+# This code is (C) Copyright 1989-1995 by Olaf Seibert. All rights reserved.
 # May not be used or copied without a licence.
 
-#DBOBJ = /syslog/syslogi.o
-#DB =	 -d1 -DDEBUG -I/syslog
-#WACK =  -d1 -s
+# DBOBJ = /syslog/syslogi.o
+# DB =	  -d2 -DDEBUG=1 -I/syslog
+# WACK =  -d2 -s
 REGARGS = -mRR -mi
 PURE = -mS
 HDR =	-Hdevice.sym=device.h
 
 DOBJ =	device1.o device2.o devio1.o devio2.o $(DBOBJ)
 DSRC =	device1.a device2.c devio1.a devio2.c dev.h device.h layout.h
-XSRC =	mkci.c Makefile.dev /util/ignore.c
+XSRC =	mkci.c Makefile /util/ignore.c
 
 .SUFFIXES: .a
 
@@ -28,7 +28,7 @@ XSRC =	mkci.c Makefile.dev /util/ignore.c
 all:	/messydisk.device /c/Ignore
 
 /messydisk.device: devproto.h $(DOBJ)
-	dcc -o $@ -l0 $(REGARGS) $(WACK) $(DOBJ) -lc -lamiga20
+	dcc -o $@ -l0 $(REGARGS) $(WACK) $(DOBJ) -lc -lamiga30
 
 Mkci:	mkci.c dev.h device.h
 	dcc mkci.c $(HDR) -o Mkci
@@ -54,6 +54,9 @@ co:
 
 depend:
 	mkd -I/syslog/ -f $(DSRC) $(XSRC)
+
+clean:
+	delete *.o *.sym mkci c.i /c/Ignore
 
 # DO NOT DELETE THIS LINE - important for making dependencies!
 #|.c|$*.o|
