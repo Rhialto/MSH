@@ -1,6 +1,9 @@
 /*-
- * $Id: hanfile.c,v 1.7 90/03/11 17:45:06 Rhialto Rel $
+ * $Id: hanfile.c,v 1.30a $
  * $Log:	hanfile.c,v $
+ * Revision 1.30  90/06/04  23:17:33  Rhialto
+ * Release 1 Patch 3
+ *
  * HANFILE.C
  *
  * The code for the messydos file system handler.
@@ -277,6 +280,7 @@ makefh:
 	EmptyFileLock = NULL;
 	fl->msfl_Msd.msd_Attributes = ATTR_ARCHIVED;
 	UpdateFileLock(fl);
+	UpdateFileLock(fl->msfl_Parent);
 
 	goto makefh;
     }
@@ -547,6 +551,7 @@ byte	       *name;
 	    FreeClusterChain(fl->msfl_Msd.msd_Cluster);
 	fl->msfl_Msd.msd_Name[0] = DIR_DELETED;
 	WriteFileLock(fl);
+	UpdateFileLock(fl->msfl_Parent);
 	MSUnLock(fl);
 
 	return DOSTRUE;
@@ -641,6 +646,7 @@ byte	       *name;
 	    parentdir = MSParentDir(fl);
 	    if (parentdir == NULL)      /* Cannot happen */
 		parentdir = MSDupLock(RootLock);
+	    UpdateFileLock(parentdir);
 
 	    /*
 	     * Create the ".." entry.
@@ -833,6 +839,8 @@ undelete:
     sfl->msfl_Msd.msd_Attributes |= ATTR_ARCHIVED;
     WriteFileLock(sfl);         /* Write the new name; the old name
 				 * already has been deleted. */
+    UpdateFileLock(sfl->msfl_Parent);
+    UpdateFileLock(dfl->msfl_Parent);
     success = DOSTRUE;
 
 error:
