@@ -1,5 +1,5 @@
 /*
- * $Id: Ignore.c,v 1.46 91/10/06 18:26:11 Rhialto Rel $
+ * $Id: ignore.c,v 1.51 92/04/17 15:39:31 Rhialto Rel $
  *
  *  IGNORE.C
  *
@@ -9,18 +9,17 @@
  *  May not be used or copied without a licence.
  */
 
-#include <amiga.h>
-#include <functions.h>
 #include <string.h>
 #include <stdlib.h>
-#include "dev.h"
 #include "device.h"
+#include <functions.h>
 
 Puts(char *string)
 {
     Write(Output(), string, (long)strlen(string));
 }
 
+int
 main(int argc, char **argv)
 {
     struct MsgPort *port;
@@ -66,4 +65,6 @@ main(int argc, char **argv)
 	DeletePort(port);
     } else
 	Puts("No memory for replyport\n");
+
+    return 0;
 }
