@@ -1,6 +1,6 @@
 
 /*
- *  $Id$
+ *  $Id: dos.h,v 1.1 89/12/17 20:06:01 Rhialto Exp Locker: Rhialto $
  */
 
 #ifdef NOTDEF
@@ -24,6 +24,9 @@
 #define ACTION_OPENNEW	    1006L
 #define ACTION_CLOSE	    1007L
 #define ACTION_SEEK	    1008L
+
+#define FIBB_HIDDEN 7L
+#define FIBF_HIDDEN (1L<<FIBB_HIDDEN)
 
 #define CTOB(x) (void *)(((long)(x))>>2)    /*  BCPL conversion */
 #define BTOC(x) (void *)(((long)(x))<<2)
