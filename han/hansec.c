@@ -1,6 +1,9 @@
 /*-
- * $Id: hansec.c,v 1.35 91/03/03 17:42:19 Rhialto Exp $
+ * $Id: hansec.c,v 1.40 91/03/03 18:36:08 Rhialto Rel $
  * $Log:	hansec.c,v $
+ * Revision 1.40  91/03/03  18:36:08  Rhialto
+ * Freeze for MAXON
+ *
  * Revision 1.35  91/03/03  17:42:19  Rhialto
  * Cache list is now two lists: LRU and sorted by sector.
  *
@@ -27,11 +30,17 @@
  * May not be used or copied without a licence.
 -*/
 
-#include "dos.h"
+#include <amiga.h>
+#include <functions.h>
+#include <string.h>
 #include "han.h"
+#include "dos.h"
 
 #ifdef HDEBUG
 #   define	debug(x)  syslog x
+    void initsyslog(void);
+    void syslog(char *, ...);
+    void uninitsyslog(void);
 #else
 #   define	debug(x)
 #endif
@@ -39,6 +48,20 @@
 struct MsgPort *DiskReplyPort;
 struct IOExtTD *DiskIOReq;
 struct IOStdReq *DiskChangeReq;
+
+struct DiskParam DefaultDisk = {
+    MS_BPS,
+    MS_SPC,
+    MS_RES,
+    MS_NFATS,
+    MS_NDIRS,
+    MS_NSECTS,
+    0,	    /* MEDIA */
+    MS_SPF,
+    MS_SPT,
+    MS_NSIDES,
+    0,	    /* NHID */
+};
 
 struct DiskParam Disk;
 byte	       *Fat;
@@ -60,6 +83,9 @@ short		CheckBootBlock; /* Do we need to check the bootblock? */
 			OFFSETOF(CacheSec, sec_LRUNode)))
 #define NN_TO_SEC(nn)   ((struct CacheSec *) nn)
 
+long dos_packet1(struct MsgPort *port, long type, long arg1);
+
+#if 0
 word
 Get8086Word(Word8086)
 register byte  *Word8086;
@@ -71,34 +97,21 @@ word
 OtherEndianWord(oew)
 word		oew;
 {
-/* INDENT OFF */
-#asm
-	move.w	8(a5),d0
-	rol.w	#8,d0
-#endasm
-    /* INDENT ON */
-    /*
-     * return (oew << 8) | ((oew >> 8) & 0xff);
-     */
+     return  (oew << 8) |
+	    ((oew >> 8) & 0xff);
 }
 
 ulong
 OtherEndianLong(oel)
 ulong		oel;
 {
-/* INDENT OFF */
-#asm
-	move.l	8(a5),d0
-	rol.w	#8,d0
-	swap	d0
-	rol.w	#8,d0
-#endasm
-    /* INDENT ON */
-    /*
-     * return ((oel &       0xff) << 24) | ((oel &     0xff00) <<  8) |
-     * ((oel &   0xff0000) >>  8) | ((oel & 0xff000000) >> 24);
-     */
+     return ((oel &       0xff) << 24) |
+	    ((oel &     0xff00) <<  8) |
+	    ((oel &   0xff0000) >>  8) |
+	    ((oel & 0xff000000) >> 24);
+
 }
+#endif
 
 void
 OtherEndianMsd(msd)
@@ -145,6 +158,7 @@ register word	sector;
 
 /*
  * Get the next cluster in a chain. Sort-of checks for special entries.
+ * Claims that the file ends if something strange happens.
  */
 
 word
@@ -153,7 +167,11 @@ word cluster;
 {
     register word entry;
 
-    return (entry = GetFatEntry(cluster)) >= 0xFFF7 ? FAT_EOF : entry;
+    entry = GetFatEntry(cluster);
+    if (entry >= 0xFFF7 || entry == 0 || entry > Disk.maxclst)
+	return FAT_EOF;
+    else
+	return entry;
 }
 
 word
@@ -233,8 +251,9 @@ register int	number;
     while (nextsec = sec->sec_NumberNode.mln_Succ) {
 	if (sec->sec_Number == number) {
 	    debug((" (%lx) %lx\n", (long)sec->sec_Refcount, sec));
-	    Remove(&sec->sec_LRUNode);
-	    AddHead(&CacheList.LRUList, &sec->sec_LRUNode);
+	    Remove((struct Node *)&sec->sec_LRUNode);
+	    AddHead((struct List *)&CacheList.LRUList,
+		    (struct Node *)&sec->sec_LRUNode);
 	    return sec;
 	}
 	debug(("cache %ld %lx; ", (long)sec->sec_Number, sec));
@@ -276,7 +295,7 @@ struct CacheSec *
 FindSecByBuffer(buffer)
 byte	       *buffer;
 {
-    return (struct CacheSec *) (buffer - OFFSETOF(CacheSec, sec_Data));
+    return (struct CacheSec *) (buffer - OFFSETOF(CacheSec, sec_Data[0]));
 }
 
 /*
@@ -285,6 +304,9 @@ byte	       *buffer;
  * We start looking at the end of the list, which is the bottom of the LRU
  * stack. If that fails, allocate more memory anyway. Not that is likely
  * anyway, since we currently lock only one sector at a time.
+ *
+ * The desired predecessor in the numerically sorted list is given so
+ * we don't have to look it up again.
  */
 
 struct CacheSec *
@@ -305,12 +327,21 @@ struct MinNode *pred;
 	 nextsec = sec->sec_LRUNode.mln_Pred;
 	 sec = LRU_TO_SEC(nextsec)) {
 	if ((CurrentCache >= MaxCache) && (sec->sec_Refcount == SEC_DIRTY)) {
+	    /*
+	     * If the predecessor is being (re)moved, it is no longer a
+	     * stable point to attach the new or recycled sector to so we
+	     * need to step back on the list.
+	     */
+	    if (&sec->sec_NumberNode == pred)
+		pred = sec->sec_NumberNode.mln_Pred;
 	    FreeCacheSector(sec);       /* Also writes it to disk */
 	    continue;
 	}
-	if (sec->sec_Refcount == 0) {    /* Implies not SEC_DIRTY */
-	    Remove(&sec->sec_LRUNode);
-	    Remove(&sec->sec_NumberNode);
+	if (sec->sec_Refcount == 0) {   /* Implies not SEC_DIRTY */
+	    if (&sec->sec_NumberNode == pred) /* Same comment */
+		pred = sec->sec_NumberNode.mln_Pred;
+	    Remove((struct Node *)&sec->sec_LRUNode);
+	    Remove((struct Node *)&sec->sec_NumberNode);
 	    goto move;
 	}
     }
@@ -321,8 +352,11 @@ struct MinNode *pred;
 add:
 	CurrentCache++;
 move:
-	AddHead(&CacheList.LRUList, &sec->sec_LRUNode);
-	Insert(&CacheList.NumberList, &sec->sec_NumberNode, pred);
+	AddHead((struct List *) &CacheList.LRUList,
+		(struct Node *) &sec->sec_LRUNode);
+	Insert((struct List *) &CacheList.NumberList,
+	       (struct Node *) &sec->sec_NumberNode,
+	       (struct Node *) pred);
     } else
 	error = ERROR_NO_FREE_STORE;
 
@@ -340,8 +374,8 @@ FreeCacheSector(sec)
 register struct CacheSec *sec;
 {
     debug(("FreeCacheSector %ld\n", (long)sec->sec_Number));
-    Remove(&sec->sec_LRUNode);
-    Remove(&sec->sec_NumberNode);
+    Remove((struct Node *)&sec->sec_LRUNode);
+    Remove((struct Node *)&sec->sec_NumberNode);
 #ifndef READONLY
     if (sec->sec_Refcount & SEC_DIRTY) {
 	PutSec(sec->sec_Number, sec->sec_Data);
@@ -360,8 +394,8 @@ InitCacheList()
 {
     extern struct CacheSec *sec;    /* Of course this does not exist... */
 
-    NewList(&CacheList.LRUList);
-    NewList(&CacheList.NumberList);
+    NewList((struct List *)&CacheList.LRUList);
+    NewList((struct List *)&CacheList.NumberList);
     CurrentCache = 0;
     CacheBlockSize = Disk.bps + sizeof (*sec) - sizeof (sec->sec_Data);
 }
@@ -441,12 +475,12 @@ StartTimer()
 {
     DelayState |= DELAY_RUNNING1 | DELAY_RUNNING2;
 
-    if (CheckIO(TimeIOReq)) {
-	WaitIO(TimeIOReq);
+    if (CheckIO((struct IORequest *)TimeIOReq)) {
+	WaitIO((struct IORequest *)TimeIOReq);
 	TimeIOReq->tr_node.io_Command = TR_ADDREQUEST;
 	TimeIOReq->tr_time.tv_secs = 3;
 	TimeIOReq->tr_time.tv_micro = 0;
-	SendIO(TimeIOReq);
+	SendIO((struct IORequest *)TimeIOReq);
     }
 }
 
@@ -487,7 +521,7 @@ int		sector;
 	    req->iotd_Req.io_Data = (APTR)sec->sec_Data;
 	    req->iotd_Req.io_Offset = Disk.lowcyl + (long) sector * Disk.bps;
 	    req->iotd_Req.io_Length = Disk.bps;
-	    MyDoIO(req);
+	    MyDoIO(&req->iotd_Req);
 	} while (req->iotd_Req.io_Error != 0 && RetryRwError(req));
 
 	StartTimer();
@@ -545,7 +579,7 @@ byte	       *data;
 	req->iotd_Req.io_Data = (APTR) data;
 	req->iotd_Req.io_Offset = Disk.lowcyl + (long) sector * Disk.bps;
 	req->iotd_Req.io_Length = Disk.bps;
-	MyDoIO(req);
+	MyDoIO(&req->iotd_Req);
     } while (req->iotd_Req.io_Error != 0 && RetryRwError(req));
 
     StartTimer();
@@ -619,14 +653,42 @@ WriteFat()
 
 #endif
 
+long
+dos_packet1(port, type, arg1)
+struct MsgPort *port;
+long type, arg1;
+{
+    struct StandardPacket *sp;
+    struct MsgPort *rp;
+    long res1;
+
+    if ((rp = CreatePort(NULL, 0L)) == NULL)
+	return DOS_FALSE;
+    if ((sp = AllocMem((long)sizeof(*sp), MEMF_PUBLIC|MEMF_CLEAR)) == NULL) {
+	DeletePort(rp);
+	return DOS_FALSE;
+    }
+    sp->sp_Msg.mn_Node.ln_Name = (char *)&sp->sp_Pkt;
+    sp->sp_Pkt.dp_Link = &sp->sp_Msg;
+    sp->sp_Pkt.dp_Port = rp;
+    sp->sp_Pkt.dp_Type = type;
+    sp->sp_Pkt.dp_Arg1 = arg1;
+    PutMsg(port, &sp->sp_Msg);
+    WaitPort(rp);
+    GetMsg(rp);
+    res1 = sp->sp_Pkt.dp_Res1;
+    FreeMem(sp, (long)sizeof(*sp));
+    DeletePort(rp);
+    return res1;
+}
+
 int
 AwaitDFx()
 {
     debug(("AwaitDFx\n"));
     if (DosType) {
 	static char	dfx[] = "DFx:";
-	void	       *dfxProc,
-		       *DeviceProc();
+	void	       *dfxProc;
 	char		xinfodata[sizeof(struct InfoData) + 3];
 	struct InfoData *infoData;
 	int		triesleft;
@@ -639,15 +701,15 @@ AwaitDFx()
 	    if ((dfxProc = DeviceProc(dfx)) == NULL)
 		break;
 
-	    dos_packet(dfxProc, ACTION_DISK_INFO, CTOB(infoData));
+	    dos_packet1(dfxProc, ACTION_DISK_INFO, (long)CTOB(infoData));
 	    debug(("AwaitDFx %lx\n", infoData->id_DiskType));
 	    if (infoData->id_DiskType == ID_NO_DISK_PRESENT) {
 		/* DFx has not noticed yet. Wait a bit. */
-		WaitIO(TimeIOReq);
+		WaitIO((struct IORequest *)TimeIOReq);
 		TimeIOReq->tr_node.io_Command = TR_ADDREQUEST;
 		TimeIOReq->tr_time.tv_secs = 0;
 		TimeIOReq->tr_time.tv_micro = 750000L;	/* .75 s */
-		SendIO(TimeIOReq);
+		SendIO((struct IORequest *)TimeIOReq);
 		continue;
 	    }
 	    if (infoData->id_DiskType == ID_DOS_DISK) {
@@ -689,34 +751,39 @@ ReadBootBlock()
 
 	Cancel = 1;
 	if (bootblock = GetSec(0)) {
-	    word bps;
+	    word	oldbps;
 
-	    if (CheckBootBlock &&
+	    if ((CheckBootBlock & CHECK_BOOTJMP) &&
 				/* Atari: empty or 68000 JMP */
-		/*bootblock[0] != 0x00 && bootblock[0] != 0x4E &&*/
+		bootblock[0] != 0x00 && bootblock[0] != 0x4E &&
 				/* 8086 ml for a jump */
 		bootblock[0] != 0xE9 && bootblock[0] != 0xEB) {
 		goto bad_disk;
 	    }
-	    bps = Get8086Word(bootblock + 0x0b);
-	    Disk.spc = bootblock[0x0d];
-	    Disk.res = Get8086Word(bootblock + 0x0e);
-	    Disk.nfats = bootblock[0x10];
-	    Disk.ndirs = Get8086Word(bootblock + 0x11);
-	    Disk.nsects = Get8086Word(bootblock + 0x13);
-	    Disk.media = bootblock[0x15];
-	    Disk.spf = Get8086Word(bootblock + 0x16);
-	    Disk.spt = Get8086Word(bootblock + 0x18);
-	    Disk.nsides = Get8086Word(bootblock + 0x1a);
-	    Disk.nhid = Get8086Word(bootblock + 0x1c);
+	    oldbps = Disk.bps;
+	    if (CheckBootBlock & CHECK_USE_DEFAULT) {
+		Disk = DefaultDisk;
+	    } else {
+		Disk.bps = Get8086Word(bootblock + 0x0b);
+		Disk.spc = bootblock[0x0d];
+		Disk.res = Get8086Word(bootblock + 0x0e);
+		Disk.nfats = bootblock[0x10];
+		Disk.ndirs = Get8086Word(bootblock + 0x11);
+		Disk.nsects = Get8086Word(bootblock + 0x13);
+		Disk.media = bootblock[0x15];
+		Disk.spf = Get8086Word(bootblock + 0x16);
+		Disk.spt = Get8086Word(bootblock + 0x18);
+		Disk.nsides = Get8086Word(bootblock + 0x1a);
+		Disk.nhid = Get8086Word(bootblock + 0x1c);
+	    }
 	    FreeSec(bootblock);
 
+	recalculate:
 	    /*
 	     *	Maybe the sector size just changed. Who knows?
 	     */
-	    if (Disk.bps != bps) {
+	    if (Disk.bps != oldbps) {
 		FreeCacheList();
-		Disk.bps = bps;
 		InitCacheList();
 	    }
 
@@ -750,6 +817,28 @@ ReadBootBlock()
 	    debug(("%lx\tclusters total\n", (long)Disk.maxclst));
 	    debug(("%lx\tbytes per cluster\n", (long)Disk.bpc));
 	    debug(("%lx\t16-bits FAT?\n", (long)Disk.fat16bits));
+
+	    /*
+	     * Sanity check.
+	     */
+	    if (CheckBootBlock & CHECK_SANITY) {
+		if (Disk.spc < 1 ||
+		    Disk.nfats < 1 ||
+		    Disk.ndirs < 8 ||
+		    Disk.nsects < 640 ||
+		    Disk.spf < 1 ||
+		    Disk.spt < 1 ||
+		    Disk.nsides < 1 ||
+		    Disk.ndirsects < 1) {
+		    if (CheckBootBlock & CHECK_SAN_DEFAULT) {
+			debug(("Bad bootblock; using default values.\n"));
+			oldbps = Disk.bps;
+			Disk = DefaultDisk;
+			goto recalculate;
+		    } else
+			goto bad_disk;
+		}
+	    }
 
 	    IDDiskType = ID_DOS_DISK;
 #ifdef READONLY
@@ -845,14 +934,14 @@ TDRemChangeInt()
 				 * TD_REMCHANGEINT */
 	req->iotd_Req.io_Command = TD_REMCHANGEINT;
 	req->iotd_Req.io_Data = (void *) DiskChangeReq;
-	MyDoIO(req);
-	WaitIO(DiskChangeReq);
+	MyDoIO(&req->iotd_Req);
+	WaitIO(&DiskChangeReq->iotd_Req);
 #else
 	Forbid();
-	Remove(DiskChangeReq);
+	Remove(&DiskChangeReq->io_Message.mn_Node);
 	Permit();
 #endif
-	DeleteExtIO(DiskChangeReq);
+	DeleteExtIO((struct IORequest *)DiskChangeReq);
 	DiskChangeReq = NULL;
     }
 }
@@ -878,7 +967,7 @@ struct Interrupt *interrupt;
 	DiskChangeReq->io_Unit = req->iotd_Req.io_Unit;
 	DiskChangeReq->io_Command = TD_ADDCHANGEINT;
 	DiskChangeReq->io_Data = (void *) interrupt;
-	SendIO(DiskChangeReq);
+	SendIO((struct IORequest *)DiskChangeReq);
 
 	return 0;
     }
@@ -896,7 +985,7 @@ TDChangeNum()
     register struct IOExtTD *req = DiskIOReq;
 
     req->iotd_Req.io_Command = TD_CHANGENUM;
-    MyDoIO(req);
+    MyDoIO(&req->iotd_Req);
     req->iotd_Count = req->iotd_Req.io_Actual;
 
     return req->iotd_Req.io_Actual;
@@ -915,7 +1004,7 @@ TDProtStatus()
     register struct IOExtTD *req = DiskIOReq;
 
     req->iotd_Req.io_Command = TD_PROTSTATUS;
-    MyDoIO(req);
+    MyDoIO(&req->iotd_Req);
 
     if (req->iotd_Req.io_Error)
 	return -1;
@@ -935,7 +1024,7 @@ TDMotorOff()
 
     req->iotd_Req.io_Command = TD_MOTOR;
     req->iotd_Req.io_Length = 0;
-    MyDoIO(req);
+    MyDoIO(&req->iotd_Req);
 
     return req->iotd_Req.io_Actual;
 }
@@ -951,7 +1040,7 @@ TDClear()
 
     req->iotd_Req.io_Command = CMD_CLEAR;
 
-    return MyDoIO(req);
+    return MyDoIO(&req->iotd_Req);
 }
 
 #ifndef READONLY
@@ -966,7 +1055,7 @@ TDUpdate()
 
     req->iotd_Req.io_Command = ETD_UPDATE;
 
-    return MyDoIO(req);
+    return MyDoIO(&req->iotd_Req);
 }
 #endif
 
@@ -975,6 +1064,6 @@ MyDoIO(ioreq)
 register struct IOStdReq *ioreq;
 {
     ioreq->io_Flags |= IOF_QUICK;	/* Preserve IOMDF_40TRACKS */
-    BeginIO(ioreq);
-    return WaitIO(ioreq);
+    BeginIO((struct IORequest *)ioreq);
+    return WaitIO((struct IORequest *)ioreq);
 }
