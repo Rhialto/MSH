@@ -1,15 +1,16 @@
 /*-
- * $Id: device.c,v 1.2 89/12/17 21:24:31 Rhialto Exp Locker: Rhialto $
+ * $Id: device.c,v 1.3 89/12/17 21:29:37 Rhialto Exp Locker: Rhialto $
  * $Log:	device.c,v $
+ * Revision 1.3  89/12/17  21:29:37  Rhialto
  * Revision 1.1  89/12/17  20:03:55  Rhialto
  *
- *  DEVICE.C
+ * DEVICE.C
  *
- *  The messydisk.device code that makes it a real Exec .device.
- *  Mostly based on the 1.1 RKM example and Matt Dillon's library code.
+ * The messydisk.device code that makes it a real Exec .device.
+ * Mostly based on the 1.1 RKM example and Matt Dillon's library code.
  *
- *  This code is (C) Copyright 1989 by Olaf Seibert. All rights reserved. May
- *  not be used or copied without a licence.
+ * This code is (C) Copyright 1989 by Olaf Seibert. All rights reserved. May
+ * not be used or copied without a licence.
 -*/
 
 #include "dev.h"
@@ -59,7 +60,7 @@ _RomTag:
 /* INDENT ON */
 
 char		DevName[] = "messydisk.device";
-char		idString[] = "messydisk.device $Revision$ $Date$\r\n";
+char		idString[] = "messydisk.device $Revision: 1.3 $ $Date: 89/12/17 21:29:37 $\r\n";
 
 /*
  * -30-6*X  Library vectors:
@@ -406,6 +407,7 @@ Immediate:
     Permit();                   /* Enable(); is a bit too strong for us. */
 #endif
     debug(("BeginIO: Immediate\n"));
+    ioreq->io_Error = TDERR_NoError;
     PerformIO(ioreq, unit);
     return;
 
