@@ -1,6 +1,12 @@
 /*-
- * $Id: hanfile.c,v 1.51 92/04/17 15:37:53 Rhialto Rel $
+ * $Id: hanfile.c,v 1.53 92/10/25 02:29:23 Rhialto Rel $
  * $Log:	hanfile.c,v $
+ * Revision 1.53  92/10/25  02:29:23  Rhialto
+ * Default conversion settable.
+ * OFFSET_END seeks were done in the wrong direction ARGH!
+ * Protect seek pos from being past EOF (due to SetFileSize).
+ * Count free clusters instead of free sectors.
+ *
  * Revision 1.51  92/04/17  15:37:53  Rhialto
  * Freeze for MAXON.
  *
@@ -35,11 +41,10 @@
  *
  * This parts handles files and the File Allocation Table.
  *
- * This code is (C) Copyright 1989-1991 by Olaf Seibert. All rights reserved.
+ * This code is (C) Copyright 1989-1993 by Olaf Seibert. All rights reserved.
  * May not be used or copied without a licence.
 -*/
 
-#include <functions.h>
 #include <string.h>
 #include "han.h"
 #include "dos.h"
@@ -88,7 +93,7 @@ GetFat()
     }
     FatDirty = FALSE;
     for (i = 0; i < Disk.spf; i++) {
-	if (secptr = GetSec(Disk.res + i)) {
+	if (secptr = ReadSec(Disk.res + i)) {
 	    CopyMem(secptr, Fat + i * Disk.bps, (long) Disk.bps);
 	    FreeSec(secptr);
 	} else {
@@ -476,15 +481,13 @@ register long	size;
 	word		offset;
 	word		sector;
 	byte	       *diskbuffer;
-	long		insector;
 	long		tocopy;
 
 	offset = fh->msfh_SeekPos % Disk.bpc;
 	sector = ClusterOffsetToSector(fh->msfh_Cluster, (word) offset);
-	if (diskbuffer = GetSec(sector)) {
+	if (diskbuffer = ReadSec(sector)) {
 	    offset %= Disk.bps;
-	    insector = Disk.bps - offset;
-	    tocopy = lmin(size, insector);
+	    tocopy = lmin(size, Disk.bps - offset);
 
 #ifdef CONVERSIONS
 	    (rd_Conv[fh->msfh_Conversion])(diskbuffer + offset, userbuffer,
@@ -562,19 +565,18 @@ register long	size;
 	    word	    offset;
 	    word	    sector;
 	    byte	   *diskbuffer;
-	    long	    insector;
 	    long	    tocopy;
 
 	    offset = fh->msfh_SeekPos % Disk.bpc;
 	    sector = ClusterOffsetToSector(fh->msfh_Cluster, (word) offset);
 	    offset %= Disk.bps;
-	    insector = Disk.bps - offset;
-	    tocopy = lmin(size, insector);
+	    tocopy = lmin(size, Disk.bps - offset);
 
-	    if (tocopy == Disk.bps)
+	    /*if (tocopy == Disk.bps)*/
+	    if (offset == 0 && fh->msfh_SeekPos >= fl->msfl_Msd.msd_Filesize)
 		diskbuffer = EmptySec(sector);
 	    else
-		diskbuffer = GetSec(sector);
+		diskbuffer = ReadSec(sector);
 
 	    if (diskbuffer != NULL) {
 #ifdef CONVERSIONS
@@ -743,6 +745,7 @@ byte	       *name;
 	     * Turn the file into a directory.
 	     */
 	    fl->msfl_Msd.msd_Attributes = ATTR_DIRECTORY | ATTR_ARCHIVED;
+	    fl->msfl_Refcount = 1;	/* Make it non-exclusive */
 	    UpdateFileLock(fl);
 
 	    /*
@@ -856,7 +859,7 @@ byte	       *dname;
 	byte	       *sec;
 	byte		old;
 
-	if ((sec = GetSec(sfl->msfl_DirSector)) == NULL)
+	if ((sec = ReadSec(sfl->msfl_DirSector)) == NULL)
 	    goto some_error;
 	scache = FindSecByBuffer(sec);
 	oldstatus = scache->sec_Refcount;
@@ -911,7 +914,7 @@ undelete:
 	struct MsDirEntry *dir;
 
 	if (dir = (struct MsDirEntry *)
-	    GetSec(DirClusterToSector(sfl->msfl_Msd.msd_Cluster))) {
+	    ReadSec(DirClusterToSector(sfl->msfl_Msd.msd_Cluster))) {
 	    parentdir = MSParentDir(dfl);
 	    /*
 	     * Copy everything except the name which must remain "..". But
