@@ -1,6 +1,9 @@
 /*-
- * $Id: support.c,v 1.53 92/10/25 02:24:40 Rhialto Rel $
- * $Log:	support.c,v $
+ * $Id: support.c,v 1.54 1993/06/24 05:12:49 Rhialto Exp $
+ * $Log: support.c,v $
+ * Revision 1.54  1993/06/24  05:12:49	Rhialto
+ * DICE 2.07.54R.
+ *
  * Revision 1.53  92/10/25  02:24:40  Rhialto
  * Add 2.0 stuff for debugging. Rearrange some #includes for precompilation.
  *
@@ -222,6 +225,8 @@ long ty;
 	return "ACTION_SET_FILE_SIZE";
     case ACTION_SAME_LOCK:
 	return "ACTION_SAME_LOCK";
+    case ACTION_CHANGE_SIGNAL:
+	return "ACTION_CHANGE_SIGNAL ???";
     case ACTION_WRITE_PROTECT:
 	return "ACTION_WRITE_PROTECT";
     case ACTION_FH_FROM_LOCK:
@@ -236,6 +241,31 @@ long ty;
 	return "ACTION_EXAMINE_FH";
     case ACTION_PARENT_FH:
 	return "ACTION_PARENT_FH";
+    case ACTION_FORMAT:
+	return "ACTION_FORMAT";
+    case ACTION_MAKE_LINK:
+	return "ACTION_MAKE_LINK";
+    case ACTION_READ_LINK:
+	return "ACTION_READ_LINK";
+    case ACTION_LOCK_RECORD:
+	return "ACTION_LOCK_RECORD";
+    case ACTION_FREE_RECORD:
+	return "ACTION_FREE_RECORD";
+    case ACTION_EXAMINE_ALL:
+	return "ACTION_EXAMINE_ALL";
+    case ACTION_ADD_NOTIFY:
+	return "ACTION_ADD_NOTIFY";
+    case ACTION_REMOVE_NOTIFY:
+	return "ACTION_REMOVE_NOTIFY";
+
+    /* 3.0 stuff: */
+
+    case ACTION_EXAMINE_ALL_END:
+	return "ACTION_EXAMINE_ALL_END";
+    case ACTION_SET_OWNER:
+	return "ACTION_SET_OWNER";
+    case ACTION_SERIALIZE_DISK:
+	return "ACTION_SERIALIZE_DISK";
 
     default:
 	return ("---------UNKNOWN-------");
