@@ -1,5 +1,8 @@
-; $Id: hancrtso.a,v 1.54 1993/06/24 05:12:49 Rhialto Exp $
+; $Id: hancrtso.a,v 1.55 1993/12/30 23:02:45 Rhialto Rel $
 ; $Log: hancrtso.a,v $
+; Revision 1.55  1993/12/30  23:02:45  Rhialto
+; *** empty log message ***
+;
 ; Revision 1.54  1993/06/24  05:12:49  Rhialto
 ; DICE 2.07.54R.
 ;
@@ -352,5 +355,24 @@ _ChangeIntHand0:
 	jsr	_ChangeIntHand	; C code
 	move.l	(sp)+,a4
 	rts
+
+		;   BeginIO(ior)
+
+		section text,code
+
+		xdef	_hyper_BeginIO
+		xdef	_BeginIO
+		xdef	@BeginIO
+
+_hyper_BeginIO:
+_BeginIO:
+		move.l	4(sp),A0
+@BeginIO:
+		move.l	A6,-(sp)
+		move.l	A0,A1
+		move.l	$14(A0),A6   ; io_Device
+		jsr	-30(A6)
+		move.l	(sp)+,A6
+		rts
 
 	END
