@@ -1,6 +1,9 @@
 /*-
- * $Id: hanlock.c,v 1.46 91/10/06 18:26:37 Rhialto Rel $
+ * $Id: hanlock.c,v 1.52 92/09/06 01:51:25 Rhialto Exp $
  * $Log:	hanlock.c,v $
+ * Revision 1.51  92/04/17  15:37:41  Rhialto
+ * Freeze for MAXON.
+ *
  * Revision 1.46  91/10/06  18:26:37  Rhialto
  *
  * Freeze for MAXON
@@ -323,7 +326,7 @@ ulong		mode;
     struct DirEntry sde;
     byte	   *nextpart;
     byte	    component[8 + 3];	/* Note: not null-terminated */
-    int 	    createit;
+    int 	    createit = 0;
     word	    freesec;
     word	    freeoffset;
 
@@ -366,6 +369,7 @@ ulong		mode;
      * Start with the directory entry of the parent dir.
      */
 
+newdir0:
     sde.de_Msd = parentdir->msfl_Msd;
     sde.de_Sector = parentdir->msfl_DirSector;
     sde.de_Offset = parentdir->msfl_DirOffset;
@@ -375,34 +379,43 @@ ulong		mode;
 #endif
 
 newdir:
+    if (name[0] == '/') {       /* Parentdir */
+	name++;
+	if (newlock = MSParentDir(parentdir)) {
+	    MSUnLock(parentdir);
+	    parentdir = newlock;
+	    goto newdir0;
+	}
+	error = ERROR_OBJECT_NOT_FOUND;
+	goto some_error;
+    } else if (name[0] == '\0') {
+	/*
+	 * Are we at the end of the name? Then we are finished now. This
+	 * works because sde contains the directory entry of parentdir.
+	 */
+	goto exit;
+    } else {			/* Filename or directory part */
+	nextpart = ToMSName(component, name);
+	debug(("Component: '%.11s'\n", component));
+	if (nextpart[0] != '/') {
+	    nextpart = NULL;
+#ifndef READONLY
+	    /*
+	     * See if we are requested to get an empty spot in the directory
+	     * if the given name does not exist already. The value of mode is
+	     * not important until we actually create the filelock.
+	     */
+	    if (!(mode & MODE_CREATEFILE)) {
+		mode ^= MODE_CREATEFILE;
+		createit = 1;
+	    }
+#endif
+	} else
+	    nextpart++; 	/* Skip over '/' */
+    }
+
     freesec = SEC_EOF;		/* Means none found yet */
 
-    nextpart = ToMSName(component, name);
-    debug(("Component: '%.11s'\n", component));
-    if (nextpart[0] != '/') {
-	nextpart = NULL;
-#ifndef READONLY
-	/*
-	 * See if we are requested to get an empty spot in the directory
-	 * if the given name does not exist already. The value of mode is
-	 * not important until we actually create the filelock.
-	 */
-	if (!(mode & MODE_CREATEFILE)) {
-	    mode ^= MODE_CREATEFILE;
-	    createit = 1;
-	} else
-	    createit = 0;
-#endif
-    } else
-	nextpart++;
-
-    /*
-     * Are we at the end of the name? Then we are finished now. This works
-     * because sde contains the directory entry of parentdir.
-     */
-
-    if (name[0] == '\0')
-	goto exit;
 
     /*
      * If there is more name, we enter the directory, and here we get the
@@ -782,7 +795,7 @@ register struct MSFileLock *fl;
 	if (block) {
 	    CopyMem((char *)&fl->msfl_Msd, (char *)block + fl->msfl_DirOffset,
 		    (long) sizeof (fl->msfl_Msd));
-	    OtherEndianMsd((struct MSDirEntry *)(block + fl->msfl_DirOffset));
+	    OtherEndianMsd((struct MsDirEntry *)(block + fl->msfl_DirOffset));
 	    MarkSecDirty(block);
 	    FreeSec(block);
 	}
