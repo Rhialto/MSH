@@ -1,6 +1,9 @@
 /*-
- * $Id: hanfile.c,v 1.42 91/06/13 23:56:14 Rhialto Exp $
+ * $Id: hanfile.c,v 1.43 91/09/28 01:45:39 Rhialto Exp $
  * $Log:	hanfile.c,v $
+ * Revision 1.43  91/09/28  01:45:39  Rhialto
+ * Changed to newer syslog stuff.
+ *
  * Revision 1.42  91/06/13  23:56:14  Rhialto
  * DICE conversion
  *
@@ -22,7 +25,7 @@
  *
  * This parts handles files and the File Allocation Table.
  *
- * This code is (C) Copyright 1989,1990 by Olaf Seibert. All rights reserved.
+ * This code is (C) Copyright 1989-1991 by Olaf Seibert. All rights reserved.
  * May not be used or copied without a licence.
 -*/
 
@@ -31,12 +34,17 @@
 #include <string.h>
 #include "han.h"
 #include "dos.h"
-
+#ifdef CONVERSIONS
+#   include "hanconv.h"
+#endif
 #ifdef HDEBUG
 #   include "syslog.h"
 #else
 #   define	debug(x)
 #endif
+
+struct MSFileHandle *MakeMSFileHandle(struct MSFileLock *fl, long mode);
+long		FilePos(struct MSFileHandle *fh, long position, long mode);
 
 extern char	DotDot[1 + 8 + 3];
 
@@ -234,6 +242,38 @@ register word	cluster;
 
 #endif				/* READONLY */
 
+struct MSFileHandle *
+MakeMSFileHandle(fl, mode)
+struct MSFileLock *fl;
+long		mode;
+{
+    struct MSFileHandle *fh;
+
+    if (fl->msfl_Msd.msd_Attributes & ATTR_DIR) {
+	error = ERROR_OBJECT_WRONG_TYPE;
+	fh = NULL;
+    } else if (fh = AllocMem((long) sizeof (*fh), MEMF_PUBLIC)) {
+#ifndef READONLY
+	/* Do we need to truncate the file? */
+	if ((mode == MODE_NEWFILE) && fl->msfl_Msd.msd_Cluster) {
+	    FreeClusterChain(fl->msfl_Msd.msd_Cluster);
+	    fl->msfl_Msd.msd_Cluster = 0;
+	    fl->msfl_Msd.msd_Filesize = 0;
+	    UpdateFileLock(fl);
+	}
+#endif
+	fh->msfh_Cluster = fl->msfl_Msd.msd_Cluster;
+	fh->msfh_SeekPos = 0;
+	fh->msfh_FileLock = fl;
+#ifdef CONVERSIONS
+	fh->msfh_Conversion = ConvNone;
+#endif
+    } else {
+	error = ERROR_NO_FREE_STORE;
+    }
+    return fh;
+}
+
 /*
  * This routine opens a file.
  */
@@ -259,28 +299,20 @@ long		mode;
 	lockmode = SHARED_LOCK;
     }
 
+#ifdef CONVERSIONS
+    ConversionImbeddedInFileName = ConvNone;
+#endif
     if (fl = MSLock(parentdir, name, lockmode)) {
 makefh:
-	if (fl->msfl_Msd.msd_Attributes & ATTR_DIR) {
-	    error = ERROR_OBJECT_WRONG_TYPE;
-	    MSUnLock(fl);
-	} else if (fh = AllocMem((long) sizeof (*fh), MEMF_PUBLIC)) {
-#ifndef READONLY
-	    /* Do we need to truncate the file? */
-	    if (mode == MODE_NEWFILE && fl->msfl_Msd.msd_Cluster) {
-		FreeClusterChain(fl->msfl_Msd.msd_Cluster);
-		fl->msfl_Msd.msd_Cluster = 0;
-		fl->msfl_Msd.msd_Filesize = 0;
-		UpdateFileLock(fl);
-	    }
+	fh = MakeMSFileHandle(fl, mode);
+	if (fh) {
+#ifdef CONVERSIONS
+	    fh->msfh_Conversion = ConversionImbeddedInFileName;
 #endif
-	    fh->msfh_Cluster = fl->msfl_Msd.msd_Cluster;
-	    fh->msfh_SeekPos = 0;
-	    fh->msfh_FileLock = fl;
 	} else {
-	    error = ERROR_NO_FREE_STORE;
 	    MSUnLock(fl);
 	}
+
 	return fh;
     }
 #ifndef READONLY
@@ -319,6 +351,24 @@ register struct MSFileHandle *fh;
 }
 
 long
+FilePos(fh, position, mode)
+struct MSFileHandle *fh;
+long		position;
+long		mode;
+{
+    switch (mode) {
+    default:
+    case OFFSET_BEGINNING:
+	return position;
+    case OFFSET_CURRENT:
+	return fh->msfh_SeekPos + position;
+	break;
+    case OFFSET_END:
+	return fh->msfh_FileLock->msfl_Msd.msd_Filesize - position;
+    }
+}
+
+long
 MSSeek(fh, position, mode)
 struct MSFileHandle *fh;
 long		position;
@@ -331,17 +381,7 @@ long		mode;
     word	    oldcluster;
     word	    newcluster;
 
-    switch (mode) {
-    case OFFSET_BEGINNING:
-	newpos = position;
-	break;
-    case OFFSET_CURRENT:
-	newpos += position;
-	break;
-    case OFFSET_END:
-	newpos = filesize - position;
-	break;
-    }
+    newpos = FilePos(fh, position, mode);
 
     if (newpos < 0 || newpos > filesize) {
 	error = ERROR_SEEK_ERROR;
@@ -398,7 +438,12 @@ register long	size;
 	    insector = Disk.bps - offset;
 	    tocopy = lmin(size, insector);
 
+#ifdef CONVERSIONS
+	    (rd_Conv[fh->msfh_Conversion])(diskbuffer + offset, userbuffer,
+					   tocopy);
+#else
 	    CopyMem(diskbuffer + offset, userbuffer, tocopy);
+#endif
 	    userbuffer += tocopy;
 	    size -= tocopy;
 	    FreeSec(diskbuffer);
@@ -481,7 +526,11 @@ register long	size;
 		diskbuffer = GetSec(sector);
 
 	    if (diskbuffer != NULL) {
+#ifdef CONVERSIONS
+		(wr_Conv[fh->msfh_Conversion])(userbuffer, diskbuffer + offset, tocopy);
+#else
 		CopyMem(userbuffer, diskbuffer + offset, tocopy);
+#endif
 		userbuffer += tocopy;
 		size -= tocopy;
 		MarkSecDirty(diskbuffer);
