@@ -1,6 +1,10 @@
 /*-
- *  $Id: han.h,v 1.43 91/09/28 01:50:02 Rhialto Exp $
+ *  $Id: han.h,v 1.46 91/10/06 18:26:52 Rhialto Rel $
  *  $Log:	han.h,v $
+ * Revision 1.46  91/10/06  18:26:52  Rhialto
+ *
+ * Freeze for MAXON
+ *
  * Revision 1.43  91/09/28  01:50:02  Rhialto
  * Byteswap routines no longer __stkargs.
  *
@@ -127,6 +131,8 @@ struct DiskParam {
 #define CHECK_SAN_DEFAULT 0x04	/* use default values when bpb not ok */
 #define CHECK_USE_DEFAULT 0x08	/* always use default values */
 
+#define NICE_TO_DFx	(1L<<16)/* flag bit in de_Interleave */
+#define PROMISE_NOT_TO_DIE  (1L<<17)/* flag bit in de_Interleave */
 
 /*
  * A pointer to an MSFileLock is put into the fl_Key field of a DOS
@@ -215,153 +221,11 @@ extern void    *CheckIO();
 extern long	AutoRequest();
 */
 
-/*
- * PACK.C
- */
-extern char    *DevName;
-extern long	UnitNr;
-extern long	DosType;
-extern ulong	DevFlags;
-extern struct DosPacket *DosPacket;
-extern struct DeviceList *VolNode;
-extern short	DiskChanged;
-int MayFreeVolNode(struct DeviceList *volnode);
+#ifndef Prototype
+#define Prototype   extern
+#endif
+#ifndef Local
+#define Local	    static
+#endif
 
-/*
- * HANMAIN.C
- */
-byte ToUpper(byte ch);
-long lmin(long a, long b);
-byte *ZapSpaces(byte *begin, byte *end);
-byte *ToMSName(byte *dest, byte  *source);
-long MSDiskInfo(struct InfoData *infodata);
-void MSDiskInserted(struct LockList **locks, void *cookie);
-int MSDiskRemoved(struct LockList **locks);
-void HanCloseDown(void);
-int HanOpenUp(void);
-long MSRelabel(byte *newname);
-
-/*
- * HANSEC.C
- */
-extern struct MsgPort *DiskReplyPort;
-extern struct IOExtTD *DiskIOReq;
-extern struct IOStdReq *DiskChangeReq;
-extern struct DiskParam Disk;
-extern byte    *Fat;
-extern short	FatDirty;	/* Fat must be written to disk */
-extern short	error;		/* To put the error value; for Result2 */
-extern long	IDDiskState;	/* InfoData.id_DiskState */
-extern long	IDDiskType;	/* InfoData.id_DiskType */
-extern struct timerequest *TimeIOReq;	/* For motor-off delay */
-extern struct Cache CacheList;/* Sector cache */
-extern int	CurrentCache;	/* How many cached buffers do we have */
-extern int	MaxCache;	/* Maximum amount of cached buffers */
-extern ulong	BufMemType;
-extern long	CacheBlockSize; /* Size of disk block + overhead */
-extern int	DelayState;
-word Get8086Word(byte *Word8086);
-word OtherEndianWord(long oew);     /* long should become word */
-ulong OtherEndianLong(ulong oel);
-void OtherEndianMsd(struct MsDirEntry *msd);
-word ClusterToSector(word cluster);
-word ClusterOffsetToSector(word cluster, word offset);
-word DirClusterToSector(word cluster);
-word SectorToCluster(word sector);
-word NextCluster(word cluster);
-word NextClusteredSector(word sector);
-word FindFreeSector(word prev);
-struct CacheSec *FindSecByNumber(int number);
-struct CacheSec *FindSecByBuffer(byte *buffer);
-struct CacheSec *NewCacheSector(struct MinNode *pred);
-void FreeCacheSector(struct CacheSec *sec);
-void InitCacheList(void);
-void FreeCacheList(void);
-void MSUpdate(int immediate);
-void StartTimer(void);
-byte *GetSec(int sector);
-byte *EmptySec(int sector);
-void PutSec(int sector, byte *data);
-void FreeSec(byte *buffer);
-void MarkSecDirty(byte *buffer);
-void WriteFat(void);
-int AwaitDFx(void);
-int ReadBootBlock(void);
-int IdentifyDisk(char *name, struct DateStamp *date);
-void TDRemChangeInt(void);
-int TDAddChangeInt(struct Interrupt *interrupt);
-int TDChangeNum(void);
-int TDProtStatus(void);
-int TDMotorOff(void);
-int TDClear(void);
-int TDUpdate(void);
-int MyDoIO(struct IOStdReq *ioreq);
-
-/*
- * HANLOCK.C
- */
-extern struct LockList *LockList;	/* List of all locked files we
-					 * have. Note this is not the same
-					 * as all locks we have */
-extern struct MSFileLock *RootLock;	/* Lock on root directory */
-extern struct MSFileLock *EmptyFileLock;	/* 2nd result of MSLock() */
-
-extern struct DirEntry FakeRootDirEntry;
-int CompareNames(struct MsDirEntry *dir, byte *name);
-void NextDirEntry(word *sector, word *offset);
-struct DirEntry *FindNext(struct DirEntry *previous, int createit);
-void PrintDirEntry(struct DirEntry *de);
-struct MSFileLock *MakeLock(struct MSFileLock *parentdir, struct DirEntry *dir, ulong mode);
-struct MSFileLock *MSLock(struct MSFileLock *parentdir, byte *name, ulong mode);
-struct MSFileLock *MSDupLock(struct MSFileLock *fl);
-struct MSFileLock *MSParentDir(struct MSFileLock *fl);
-int MSUnLock(struct MSFileLock *fl);
-void ExamineDirEntry(struct MsDirEntry *msd, struct FileInfoBlock *fib);
-int MSExamine(struct MSFileLock *fl, struct FileInfoBlock *fib);
-int MSExNext(struct MSFileLock *fl, struct FileInfoBlock *fib);
-long MSSetProtect(struct MSFileLock *parentdir, char *name, long mask);
-int CheckLock(struct MSFileLock *lock);
-void WriteFileLock(struct MSFileLock *fl);
-void UpdateFileLock(struct MSFileLock *fl);
-struct LockList *NewLockList(void *cookie);
-void FreeLockList(struct LockList *ll);
-
-/*
- * HANFILE.C
- */
-int GetFat(void);
-void FreeFat(void);
-word GetFatEntry(word cluster);
-void SetFatEntry(word cluster, word value);
-word FindFreeCluster(word prev);
-word ExtendClusterChain(word cluster);
-void FreeClusterChain(word cluster);
-struct MSFileHandle *MakeMSFileHandle(struct MSFileLock *fl, long mode);
-struct MSFileHandle *MSOpen(struct MSFileLock *parentdir, char *name, long mode);
-void MSClose(struct MSFileHandle *fh);
-long		FilePos(struct MSFileHandle *fh, long position, long mode);
-long MSSeek(struct MSFileHandle *fh, long position, long mode);
-long MSRead(struct MSFileHandle *fh, byte *userbuffer, long size);
-long MSWrite(struct MSFileHandle *fh, byte *userbuffer, long size);
-long MSDeleteFile(struct MSFileLock *parentdir, byte *name);
-long MSSetDate(struct MSFileLock *parentdir, byte *name, struct DateStamp *datestamp);
-struct MSFileLock *MSCreateDir(struct MSFileLock *parentdir, byte *name);
-long MSRename(struct MSFileLock *slock, byte *sname, struct MSFileLock *dlock, byte *dname);
-
-/*
- * HANREQ.C
- */
-extern short	Cancel; 	/* Cancel all R/W errors */
-long RetryRwError(struct IOExtTD *req);
-void		DisplayMessage(char *msg);
-
-/*
- * HANCMD.C
- */
-void HandleCommand(char *cmd);
-
-/*
- * DATE.C
- */
-void ToDateStamp(struct DateStamp *datestamp, word date, word time);
-void ToMSDate(word *date, word *time, struct DateStamp *datestamp);
+#include "hanproto.h"

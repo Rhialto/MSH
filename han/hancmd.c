@@ -1,9 +1,13 @@
 /*-
- * $Id: hancmd.c,v 1.45 91/10/04 00:12:32 Rhialto Exp $
+ * $Id: hancmd.c,v 1.46 91/10/06 18:25:10 Rhialto Rel $
  * $Log:	hancmd.c,v $
+ * Revision 1.46  91/10/06  18:25:10  Rhialto
+ *
+ * Freeze for MAXON
+ *
  * Revision 1.45  91/10/04  00:12:32  Rhialto
  * Add confirmation requesters and a switch for them
- * 
+ *
  * Revision 1.43  91/09/28  01:33:22  Rhialto
  * DICE conversion.
  *
@@ -40,10 +44,10 @@
 #   define	debug(x)
 #endif
 
-extern int	CheckBootBlock;
-static void	ltoa(unsigned long l, char *a);
+Prototype void HandleCommand(char *cmd);
+Local void	ltoa(unsigned long l, char *a);
 
-int		DoMessages = 1;
+Local int	DoMessages = 1;
 
 static void
 ltoa(l, a)

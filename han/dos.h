@@ -1,10 +1,14 @@
 
 /*
- *  $Id: dos.h,v 1.42 91/06/14 00:05:47 Rhialto Exp $
+ *  $Id: dos.h,v 1.46 91/10/06 18:26:32 Rhialto Rel $
  *  $Log:	dos.h,v $
+ * Revision 1.46  91/10/06  18:26:32  Rhialto
+ *
+ * Freeze for MAXON
+ *
  * Revision 1.42  91/06/14  00:05:47  Rhialto
  * DICE conversion
- * 
+ *
  * Revision 1.40  91/03/03  17:55:29  Rhialto
  * Freeze for MAXON
  *
@@ -70,6 +74,10 @@
 #define DE_DOSTYPE	    16L
 #endif
 
+#ifndef ID_MSDOS_DISK
+#define ID_MSDOS_DISK	    0x4D534400L     /* 'MSD\0' */
+#endif
+
 #define CTOB(x)         (((long)(x))>>2)    /*  BCPL conversion */
 #define BTOC(x) (void *)(((long)(x))<<2)
 
@@ -106,30 +114,3 @@ typedef struct DosLibrary	DOSLIB;
 #define PRes2 (packet->dp_Res2)
 
 #define dl_MSFileLockList   dl_unused
-
-
-/*
- *  (void *)  in C means 'pointer to anything'.  I use it
- *  extensively.
- */
-
-extern void *AbsExecBase;
-
-void returnpacket(struct DosPacket *packet);
-int packetsqueued(void);
-void *dosalloc(ulong bytes);
-void dosfree(ulong *ptr);
-void btos(byte *bstr, byte *buf);
-void *GetHead(LIST *list);
-void *GetTail(LIST *list);
-char *typetostr(long ty);
-
-struct DeviceList *NewVolNode(char *name, struct DateStamp *date);
-void FreeVolNode(DEVLIST *volnode);
-struct FileLock *NewFileLock(struct MSFileLock *msfl, struct FileLock *fl);
-long FreeFileLock(struct FileLock *lock);
-int DiskRemoved(void);
-void DiskInserted(DEVLIST *volnode);
-DEVLIST *WhichDiskInserted(void);
-int CheckRead(struct FileLock *lock);
-int CheckWrite(struct FileLock *lock);

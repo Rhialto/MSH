@@ -1,13 +1,17 @@
-; $Id: device1.a,v 1.42 91/06/14 00:08:48 Rhialto Exp $
-; $Log:	device1.a,v $
+; $Id: device1.a,v 1.46 91/10/06 18:25:18 Rhialto Rel $
+; $Log: device1.a,v $
+; Revision 1.46  91/10/06  18:25:18  Rhialto
+;
+; Freeze for MAXON
+;
 ; Revision 1.42  91/06/14  00:08:48  Rhialto
 ; DICE conversion
-; 
+;
+	    include	"c.i"
 ;;;;
 ;
 ;   Some constants that need to be modified on specific versions
 
-VERSION     equ 	34
 RTPRI	    equ 	0
 
 ;;;;
@@ -29,6 +33,7 @@ RTPRI	    equ 	0
 ;
 	xref	_DevName
 	xref	_idString
+	xref	@Init
 	xdef	_RomTag
 _RomTag:
 	dc.w	$4AFC		; RTC_MATCHWORD
@@ -40,7 +45,7 @@ _RomTag:
 	dc.b	RTPRI		; rt_Pri
 	dc.l	_DevName	; rt_Name
 	dc.l	_idString	; rt_IdString
-	dc.l	_Init		; rt_Init
+	dc.l	@Init		; rt_Init
 
 ;;;;
 ;
@@ -50,38 +55,60 @@ _RomTag:
 ; already put our device pointer in A6 for us.	Exec has turned off task
 ; switching while in these routines (via Forbid/Permit), so we should not
 ; take too long in them.
+;
+; These glue routines are not necessary when using the special
+; __D0 keywords of DICE. When we do use these, don't forget to make sure
+; the C routines expect the arguments on the stack (i.e. __stkargs)
 
-	xdef	_Init
-	xref	_CInit
-_Init:				;a0=segment list
-	movem.l D2-D3/A0/A6,-(sp)
-	jsr	_CInit
-	movem.l (sp)+,D2-D3/A0/A6
+	ifne	0
+	xdef	__Init
+	xref	_Init
+__Init: 			;a0=segment list
+	move.l	A0,-(sp)
+	jsr	_Init
+	addq	#4,sp
 	rts
 
 	xdef	__DevOpen
 	xref	_DevOpen
 __DevOpen:			;d0=unitnum,d1=flags,a1=ioreq,a6=device
-	movem.l D0-D3/A1/A6,-(sp)
+	movem.l D0-D1/A1/A6,-(sp)
 	jsr	_DevOpen
-	movem.l (sp)+,D0-D3/A1/A6
+	lea	16(sp),sp
 	rts
 
 	xdef	__DevClose
 	xref	_DevClose
 __DevClose:			;a1=ioreq,a6=device
-	movem.l D2-D3/A1/A6,-(sp)
+	movem.l A1/A6,-(sp)
 	jsr	_DevClose
-	movem.l (sp)+,D2-D3/A1/A6
+	addq	#8,sp
 	rts
 
 	xdef	__DevExpunge
 	xref	_DevExpunge
 __DevExpunge:			;a6=device
-	movem.l D2-D3/A6,-(sp)
+	movem.l A6,-(sp)
 	jsr	_DevExpunge
-	movem.l (sp)+,D2-D3/A6
+	addq	#4,sp
 	rts
+
+	xdef	__DevBeginIO
+	xref	_DevBeginIO
+__DevBeginIO:			;a1=ioreq,a6=device
+	movem.l A1/A6,-(sp)
+	jsr	_DevBeginIO
+	addq	#8,sp
+	rts
+
+	xdef	__DevAbortIO
+	xref	_DevAbortIO
+__DevAbortIO:			;a1=ioreq,a6=device
+	movem.l A1/A6,-(sp)
+	jsr	_DevAbortIO
+	addq	#8,sp
+	rts
+	endc
 
 	xdef	__LibNull
 	xref	_LibNull
@@ -89,24 +116,9 @@ __LibNull:
 	clr.l	d0
 	rts
 
-	xdef	__DevBeginIO
-	xref	_DevBeginIO
-__DevBeginIO:			;a1=ioreq,a6=device
-	movem.l D2-D3/A1/A6,-(sp)
-	jsr	_DevBeginIO
-	movem.l (sp)+,D2-D3/A1/A6
-	rts
-
-	xdef	__DevAbortIO
-	xref	_DevAbortIO
-__DevAbortIO:			;a1=ioreq,a6=device
-	movem.l D2-D3/A1/A6,-(sp)
-	jsr	_DevAbortIO
-	movem.l (sp)+,D2-D3/A1/A6
-	rts
-
 
 ;#ifdef HANDLE_IO_QUICK
+	ifne	0
 ;;;;
 ;
 ;   C interface to the atomic set bit and test old value instruction.
@@ -116,11 +128,14 @@ __DevAbortIO:			;a1=ioreq,a6=device
 ;   Old value of the bit returned all over d0.w
 
 	xdef	_BSET_ACTIVE
+	xdef	@BSET_ACTIVE
 _BSET_ACTIVE:
 	move.l	4(sp),a0
+@BSET_ACTIVE:
 	bset	#0,(a0)         ; UNITB_ACTIVE
 	sne	d0
 	rts
+	endc
 
 EndCode
 	end

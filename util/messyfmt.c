@@ -1,6 +1,9 @@
 /*
- * $Id: messyfmt.c,v 1.48 91/11/03 00:50:10 Rhialto Exp $
+ * $Id: messyfmt.c,v 1.49 91/11/15 23:04:19 Rhialto Exp $
  * $Log:	messyfmt.c,v $
+ * Revision 1.49  91/11/15  23:04:19  Rhialto
+ * Now suggest a reasonable FAT size when prompting
+ *
  * Revision 1.48  91/11/03  00:50:10  Rhialto
  * Add command line options ASK, QUICK and BOOT.
  *
@@ -34,7 +37,7 @@
 #include <signal.h>
 #include "han.h"
 
-ulong		BootBlock[] = {
+const ulong	BootBlock[] = {
     0xEB349049, 0x424D2020, 0x332E3200, 0x02020100,	/* ...IBM  3.2..... */
     0x027000A0, 0x05F90300, 0x09000200, 0x00000000,
     0x00000000, 0x00000000, 0x00000000, 0x0000000F,

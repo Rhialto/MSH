@@ -1,6 +1,9 @@
 /*-
- * $Id: date.c,v 1.46 91/10/06 18:27:01 Rhialto Rel $
+ * $Id: date.c,v 1.50 92/02/12 21:24:58 Rhialto Exp $
  * $Log:	date.c,v $
+ * Revision 1.50  92/02/12  21:24:58  Rhialto
+ * New date-to-days function.
+ *
  * Revision 1.46  91/10/06  18:27:01  Rhialto
  *
  * Freeze for MAXON
@@ -21,8 +24,8 @@
  *
  * Two date conversion routines: DateStamp <-> MSDOS date/time.
  *
- * This code is (C) Copyright 1989 by Olaf Seibert. All rights reserved. May
- * not be used or copied without a licence.
+ * This code is (C) Copyright 1989-1992 by Olaf Seibert. All rights reserved.
+ * May not be used or copied without a licence.
  */
 
 #include <amiga.h>
@@ -37,6 +40,9 @@
 #else
 #   define	debug(x)
 #endif
+
+Prototype void ToDateStamp(struct DateStamp *datestamp, word date, word time);
+Prototype void ToMSDate(word *date, word *time, struct DateStamp *datestamp);
 
 /*
 Article 2344 of alt.sources.d:
@@ -86,7 +92,7 @@ long unixdays(int year, int month, int day)
     if ( month % 5 > 2 ) day += 1;
 #else	/* for those who like table look-up ! */
     {
-	static int monthdays[12] = {
+	static const int monthdays[12] = {
 	    0, 31, 61, 92, 122, 153, 184, 214, 245, 275, 306, 337 };
 	day += monthdays[month];
     }
@@ -111,7 +117,7 @@ long unixdays(int year, int month, int day)
 
 #define LeapYear(year)  ((year & 3) == 0)   /* From 1-Mar-1901 to 28-Feb-2100 */
 
-int daycount[MONTHS_PER_YEAR] = {
+const int daycount[MONTHS_PER_YEAR] = {
 	31,	28,    31,    30,    31,    30,
 	31,	31,    30,    31,    30,    31
 };
@@ -202,7 +208,7 @@ void
 ToMSDate(date, time, datestamp)
 word *date;
 word *time;
-register struct DateStamp *datestamp;
+struct DateStamp *datestamp;
 {
     {
 	word hours, minutes, seconds;
