@@ -1,6 +1,10 @@
 /*-
- * $Id: hanlock.c,v 1.54 1993/06/24 05:12:49 Rhialto Exp $
+ * $Id: hanlock.c,v 1.55 1993/12/30 23:28:00 Rhialto Rel $
  * $Log: hanlock.c,v $
+ * Revision 1.55  1993/12/30  23:28:00	Rhialto
+ * Freeze for MAXON5.
+ * Lots of small changes for LONGNAMES option.
+ *
  * Revision 1.54  1993/06/24  05:12:49	Rhialto
  * DICE 2.07.54R.
  *
@@ -59,7 +63,7 @@
 #include "dos.h"
 #include <string.h>
 
-#ifdef HDEBUG
+#if HDEBUG
 #   include "syslog.h"
 #else
 #   define	debug(x)
@@ -73,13 +77,15 @@ Prototype struct MSFileLock *MakeLock(struct MSFileLock *parentdir, struct DirEn
 Prototype struct MSFileLock *MSLock(struct MSFileLock *parentdir, byte *name, ulong mode);
 Prototype struct MSFileLock *MSDupLock(struct MSFileLock *fl);
 Prototype struct MSFileLock *MSParentDir(struct MSFileLock *fl);
-Prototype int MSUnLock(struct MSFileLock *fl);
+Prototype long MSUnLock(struct MSFileLock *fl);
 Prototype void ExamineDirEntry(struct MsDirEntry *msd, struct FileInfoBlock *fib);
-Prototype int MSExamine(struct MSFileLock *fl, struct FileInfoBlock *fib);
-Prototype int MSExNext(struct MSFileLock *fl, struct FileInfoBlock *fib);
+Prototype long MSExamine(struct MSFileLock *fl, struct FileInfoBlock *fib);
+Prototype long MSExNext(struct MSFileLock *fl, struct FileInfoBlock *fib);
 Prototype long MSSetProtect(struct MSFileLock *parentdir, char *name, long mask);
 Prototype int CheckLock(struct MSFileLock *lock);
+Prototype void WriteDirtyFileLock(struct MSFileLock *fl);
 Prototype void WriteFileLock(struct MSFileLock *fl);
+Prototype void DirtyFileLock(struct MSFileLock *fl);
 Prototype void UpdateFileLock(struct MSFileLock *fl);
 Prototype struct LockList *NewLockList(void *cookie);
 Prototype void FreeLockList(struct LockList *ll);
@@ -102,9 +108,9 @@ const struct DirEntry FakeRootDirEntry = {
 	0,			/* msd_Time */
 	DATE_MIN,		/* msd_Date, 1/1/80 */
 	0,			/* msd_Cluster */
-	0			/* msd_Filesize */
+	0,			/* msd_Filesize */
 	ATTR_VOLUMELABEL,	/* msd_Attributes */
-	"Unnamed              ",/* msd_Name */
+	"Unnamed              " /* msd_Name */
     },
     ROOT_SEC,			/* de_Sector */
     -2				/* de_Offset */
@@ -135,8 +141,8 @@ const byte DotDot[1 + L_8 + L_3] = "..          ";
 
 int
 CompareNames(dir, name)
-register struct MsDirEntry *dir;
-register byte  *name;
+struct MsDirEntry *dir;
+byte  *name;
 {
     if (dir->msd_Name[0] & DIR_DELETED_MASK)
 	return CMP_FREE_SLOT;
@@ -158,8 +164,8 @@ register byte  *name;
 
 void
 NextDirEntry(sector, offset)
-register word  *sector;
-register word  *offset;
+word  *sector;
+word  *offset;
 {
     if ((*offset += MS_DIRENTSIZE) >= Disk.bps) {
 	*offset = 0;
@@ -183,7 +189,7 @@ register word  *offset;
 
 struct DirEntry *
 FindNext(previous, createit)
-register struct DirEntry *previous;
+struct DirEntry *previous;
 int		createit;
 {
     byte	   *sector;
@@ -193,7 +199,7 @@ int		createit;
 
     if (previous->de_Sector == SEC_EOF) {
 	error = ERROR_OBJECT_NOT_FOUND;
-#ifndef READONLY
+#if ! READONLY
 	if (createit) {
 	    int 	    clearblocks;
 
@@ -233,7 +239,7 @@ int		createit;
     return NULL;
 }
 
-#ifdef HDEBUG
+#if HDEBUG
 
 void PrintDirEntry(struct DirEntry *de);
 
@@ -279,13 +285,13 @@ struct MSFileLock *parentdir;
 struct DirEntry *dir;
 ulong		mode;
 {
-    register struct MSFileLock *fl;
+    struct MSFileLock *fl;
     struct MSFileLock *nextfl;
 
     if (mode != EXCLUSIVE_LOCK || (dir->de_Msd.msd_Attributes & ATTR_DIR))
 	mode = SHARED_LOCK;
 
-#ifdef HDEBUG
+#if HDEBUG
     debug(("MakeLock: "));
     PrintDirEntry(dir);
 #endif
@@ -300,7 +306,7 @@ ulong		mode;
     for (fl = (struct MSFileLock *) LockList->ll_List.mlh_Head;
 	 nextfl = (struct MSFileLock *) fl->msfl_Node.mln_Succ;
 	 fl = nextfl) {
-#ifdef HDEBUG
+#if HDEBUG
 	debug(("> "));
 	PrintDirEntry((struct DirEntry *)&fl->msfl_Msd);
 #endif
@@ -355,7 +361,7 @@ ulong		mode;
 {
     byte	   *sector;
     struct MSFileLock *newlock;
-    register struct DirEntry *de;
+    struct DirEntry *de;
     struct DirEntry sde;
     byte	   *nextpart;
     byte	    component[L_8 + L_3];	/* Note: not null-terminated */
@@ -370,7 +376,7 @@ ulong		mode;
      * See if we have an absolute path name (starting at the root).
      */
     {
-	register byte  *colon;
+	byte  *colon;
 
 	if (colon = strchr(name, ':')) {
 	    debug(("name == %lx \"%s\"\n", name, name));
@@ -392,7 +398,7 @@ ulong		mode;
      * Get a copy of the parent dir lock, so we can walk it over the
      * directory tree.
      */
-#ifdef HDEBUG
+#if HDEBUG
     if (!parentdir)
 	debug(("Parentdir == NULL\n"));
 #endif
@@ -406,7 +412,7 @@ newdir0:
     sde.de_Msd = parentdir->msfl_Msd;
     sde.de_Sector = parentdir->msfl_DirSector;
     sde.de_Offset = parentdir->msfl_DirOffset;
-#ifdef HDEBUG
+#if HDEBUG
     debug(("pdir %08lx: ", parentdir));
     PrintDirEntry((struct DirEntry *)&parentdir->msfl_Msd);
 #endif
@@ -432,7 +438,7 @@ newdir:
 	debug(("Component: '%.11s'\n", component));
 	if (nextpart[0] != '/') {
 	    nextpart = NULL;
-#ifndef READONLY
+#if ! READONLY
 	    /*
 	     * See if we are requested to get an empty spot in the directory
 	     * if the given name does not exist already. The value of mode is
@@ -474,7 +480,7 @@ newdir:
 	    }
 	    /* Fall through */
 	case CMP_NOT_EQUAL:
-	    de = FindNext(&sde, createit);      /* Try next directory
+	    de = FindNext(&sde, createit);	/* Try next directory
 						 * entry */
 	    continue;
 	case CMP_OK_DIR:
@@ -516,11 +522,11 @@ exit:
 	newlock = MakeLock(parentdir, &sde, mode);
     } else {
 	newlock = NULL;
-#ifndef READONLY
-	if (createit &&         /* Do we want to make it? */
+#if ! READONLY
+	if (createit && 	/* Do we want to make it? */
 	    error == ERROR_OBJECT_NOT_FOUND &&	/* does it not exist yet? */
 	    nextpart == NULL) { /* do we have the last part of the name */
-	    if (freesec != SEC_EOF) {   /* is there any room? */
+	    if (freesec != SEC_EOF) {	/* is there any room? */
 		if (IDDiskState == ID_VALIDATED) {
 		    error = 0;
 		    setmem(&sde.de_Msd, sizeof (sde.de_Msd), 0);
@@ -571,7 +577,7 @@ struct MSFileLock *fl;
 
 struct MSFileLock *
 MSParentDir(fl)
-register struct MSFileLock *fl;
+struct MSFileLock *fl;
 {
     if (fl == NULL) {
 	error = ERROR_OBJECT_NOT_FOUND;
@@ -587,21 +593,22 @@ register struct MSFileLock *fl;
  * This routine UnLocks a file.
  */
 
-int
+long
 MSUnLock(fl)
 struct MSFileLock *fl;
 {
-#ifdef HDEBUG
+#if HDEBUG
     debug(("MSUnLock %08lx: ", fl));
     PrintDirEntry((struct DirEntry *)&fl->msfl_Msd);
 #endif
 
     if (fl) {
-	if (fl->msfl_Flags & MSFL_DIRTY) {
-	    WriteFileLock(fl);
-	}
 	if (--fl->msfl_Refcount <= 0) {
 	    struct LockList *list;
+
+	    if (fl->msfl_Flags & MSFL_DIRTY) {
+		WriteFileLock(fl);
+	    }
 
 	    list = (struct LockList *) fl->msfl_Node.mln_Pred;
 	    Remove((struct Node *)fl);
@@ -640,9 +647,9 @@ struct MSFileLock *fl;
 void
 ExamineDirEntry(msd, fib)
 struct MsDirEntry *msd;
-register struct FileInfoBlock *fib;
+struct FileInfoBlock *fib;
 {
-#ifdef HDEBUG
+#if HDEBUG
     debug(("+ "));
     PrintDirEntry((struct DirEntry *)msd);
 #endif
@@ -655,21 +662,20 @@ register struct FileInfoBlock *fib;
     } else {
 #if LONGNAMES
 	strncpy(&fib->fib_FileName[1], msd->msd_Name, L_8);
-	fib->fib_FileName[1 + L_8] = 0;
+	(void) ZapSpaces(&fib->fib_FileName[2], &fib->fib_FileName[1 + L_8]);
 #else
-	register byte  *end,
+	byte  *end,
 		       *dot;
 
 	strncpy(&fib->fib_FileName[1], msd->msd_Name, L_8);
 	/* Keep at least one character, even a space, before the dot */
 	dot = ZapSpaces(&fib->fib_FileName[2], &fib->fib_FileName[1 + L_8]);
-	if (strncmp(msd->msd_Ext, "INF", 3) == 0) {
+	if (strncmp(msd->msd_Ext, "INF", L_3) == 0) {
 	    strcpy(dot, ".info");
 	} else {
 	    dot[0] = ' ';
-	    strncpy(dot + 1, msd->msd_Ext, 3);
-	    dot[4] = '\0';
-	    end = ZapSpaces(dot, dot + 4);
+	    strncpy(dot + 1, msd->msd_Ext, L_3);
+	    end = ZapSpaces(dot, dot + 1 + L_3);
 	    if (end > dot)
 		dot[0] = '.';
 	}
@@ -702,10 +708,10 @@ register struct FileInfoBlock *fib;
  * we use the low bit in fib_DiskKey instead. Yech.
  */
 
-int
+long
 MSExamine(fl, fib)
 struct MSFileLock *fl;
-register struct FileInfoBlock *fib;
+struct FileInfoBlock *fib;
 {
     if (fl == NULL)
 	fl = RootLock;
@@ -718,10 +724,10 @@ register struct FileInfoBlock *fib;
     return DOSTRUE;
 }
 
-int
+long
 MSExNext(fl, fib)
 struct MSFileLock *fl;
-register struct FileInfoBlock *fib;
+struct FileInfoBlock *fib;
 {
     word	    sector = fib->fib_DiskKey >> 16;
     word	    offset = (word) fib->fib_DiskKey;
@@ -758,7 +764,7 @@ skip:
 		(msd.msd_Attributes & ATTR_VOLUMELABEL)) {
 		goto skip;
 	    }
-	    OtherEndianMsd(&msd);       /* Get correct endianness */
+	    OtherEndianMsd(&msd);	/* Get correct endianness */
 	    fib->fib_DiskKey = ((ulong) sector << 16) | offset;
 	    ExamineDirEntry(&msd, fib);
 
@@ -776,11 +782,11 @@ end:
 
 long
 MSSetProtect(parentdir, name, mask)
-register struct MSFileLock *parentdir;
+struct MSFileLock *parentdir;
 char	   *name;
 long	   mask;
 {
-    register struct MSFileLock *lock;
+    struct MSFileLock *lock;
 
     if (parentdir == NULL)
 	parentdir = RootLock;
@@ -796,22 +802,22 @@ long	   mask;
 	/* hidden -> hidden */
 	if (mask & FIBF_HIDDEN)
 	    lock->msfl_Msd.msd_Attributes |= ATTR_HIDDEN;
-	/* archived=0 (default) -> archived=1 (default) */
+	/* archive=0 (default) -> archived=1 (default) */
 	if (!(mask & FIBF_ARCHIVE))
 	    lock->msfl_Msd.msd_Attributes |= ATTR_ARCHIVED;
 	WriteFileLock(lock);
 	MSUnLock(lock);
-	return TRUE;
+	return DOSTRUE;
     }
 
-    return FALSE;
+    return DOSFALSE;
 }
 
 int
 CheckLock(lock)
-register struct MSFileLock *lock;
+struct MSFileLock *lock;
 {
-    register struct MSFileLock *parent;
+    struct MSFileLock *parent;
 
     if (lock) {
 	while (parent = lock->msfl_Parent)
@@ -822,16 +828,27 @@ register struct MSFileLock *lock;
     return error;
 }
 
-#ifndef READONLY
+#if ! READONLY
+
+void
+WriteDirtyFileLock(fl)
+struct MSFileLock *fl;
+{
+    debug(("WriteDirtyFileLock %08lx\n", fl));
+
+    if (fl && (fl->msfl_Flags & MSFL_DIRTY)) {
+	WriteFileLock(fl);
+    }
+}
 
 void
 WriteFileLock(fl)
-register struct MSFileLock *fl;
+struct MSFileLock *fl;
 {
     debug(("WriteFileLock %08lx\n", fl));
 
     if (fl && (short) fl->msfl_DirOffset >= 0) {
-	register byte  *block = ReadSec(fl->msfl_DirSector);
+	byte  *block = ReadSec(fl->msfl_DirSector);
 
 	if (block) {
 	    CopyMem((char *)&fl->msfl_Msd, (char *)block + fl->msfl_DirOffset,
@@ -846,7 +863,7 @@ register struct MSFileLock *fl;
 
 void
 UpdateFileLock(fl)
-register struct MSFileLock *fl;
+struct MSFileLock *fl;
 {
     debug(("UpdateFileLock %08lx\n", fl));
 
@@ -859,6 +876,18 @@ register struct MSFileLock *fl;
 	fl->msfl_Flags |= MSFL_DIRTY;
     }
 }
+
+void
+DirtyFileLock(fl)
+struct MSFileLock *fl;
+{
+    debug(("DirtyFileLock %08lx\n", fl));
+
+    if (fl) {
+	fl->msfl_Flags |= MSFL_DIRTY;
+    }
+}
+
 
 #endif
 
@@ -884,9 +913,9 @@ struct LockList *ll;
     debug(("FreeLockList %08lx\n", ll));
 
     if (ll) {
-	MayFreeVolNode(ll->ll_Cookie);  /* not too happy about this */
+	MayFreeVolNode(ll->ll_Cookie);	/* not too happy about this */
 	FreeMem(ll, (long) sizeof (*ll));
-	if (ll == LockList)     /* locks on current volume */
+	if (ll == LockList)	/* locks on current volume */
 	    LockList = NULL;
     }
 }
