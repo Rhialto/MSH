@@ -1,6 +1,9 @@
 /*-
- * $Id: hansec.c,v 1.53 92/10/25 02:27:32 Rhialto Rel $
- * $Log:	hansec.c,v $
+ * $Id: hansec.c,v 1.54 1993/06/24 05:12:49 Rhialto Exp $
+ * $Log: hansec.c,v $
+ * Revision 1.54  1993/06/24  05:12:49	Rhialto
+ * try heuristics for the cache. DICE 2.07.54R.
+ *
  * Revision 1.53  92/10/25  02:27:32  Rhialto
  * No real change.
  *
@@ -59,7 +62,9 @@
 Prototype struct MsgPort *DiskReplyPort;
 Prototype struct IOExtTD *DiskIOReq;
 Prototype struct IOStdReq *DiskChangeReq;
+Prototype struct DiskParam DefaultDisk;
 Prototype struct DiskParam Disk;
+Prototype struct Partition Partition;
 Prototype byte *Fat;
 Prototype short FatDirty;
 Prototype short error;
@@ -74,7 +79,9 @@ Prototype short CheckBootBlock;
 Prototype word	Get8086Word(byte *Word8086);
 Prototype word	OtherEndianWord(long oew);     /* long should become word */
 Prototype ulong OtherEndianLong(ulong oel);
-Prototype void	OtherEndianMsd(struct MsDirEntry *msd);
+#ifndef OtherEndianMsd
+/*Prototype void  OtherEndianMsd (struct MsDirEntry *msd);*/
+#endif
 Prototype word	ClusterToSector(word cluster);
 Prototype word	ClusterOffsetToSector(word cluster, word offset);
 Prototype word	DirClusterToSector(word cluster);
@@ -93,7 +100,7 @@ Prototype void	StartTimer(int);
 Prototype byte *ReadSec(int sector);
 Prototype byte *EmptySec(int sector);
 Prototype void	WriteSec(int sector, byte *data);
-Prototype struct CacheSec *MayWriteTrack(struct CacheSec *cache);
+Prototype void	MayWriteTrack(struct CacheSec *cache);
 Prototype void	FreeSec(byte *buffer);
 Prototype void	MarkSecDirty(byte *buffer);
 Prototype void	WriteFat(void);
@@ -114,7 +121,7 @@ struct IOExtTD *DiskIOReq;
 struct IOStdReq *DiskChangeReq;
 int		HeadOnTrack;
 
-const struct DiskParam DefaultDisk = {
+struct DiskParam DefaultDisk = {
     MS_BPS,
     MS_SPC,
     MS_RES,
@@ -129,6 +136,7 @@ const struct DiskParam DefaultDisk = {
 };
 
 struct DiskParam Disk;
+struct Partition Partition;
 byte	       *Fat;
 short		FatDirty;	/* Fat must be written to disk */
 
@@ -141,7 +149,7 @@ int		CurrentCache;	/* How many cached buffers do we have */
 int		MaxCache;	/* Maximum amount of cached buffers */
 long		CacheBlockSize; /* Size of disk block + overhead */
 ulong		BufMemType;
-char		CacheDirty;
+char		CacheDirty;	/* Cache must be written to disk */
 char		DelayCount;
 short		CheckBootBlock; /* Do we need to check the bootblock? */
 
@@ -179,6 +187,7 @@ ulong		oel;
 }
 #endif
 
+#ifndef OtherEndianMsd
 void
 OtherEndianMsd(msd)
 register struct MsDirEntry *msd;
@@ -188,6 +197,7 @@ register struct MsDirEntry *msd;
     msd->msd_Cluster = OtherEndianWord(msd->msd_Cluster);
     msd->msd_Filesize = OtherEndianLong(msd->msd_Filesize);
 }
+#endif
 
 word
 ClusterToSector(cluster)
@@ -444,7 +454,7 @@ register struct CacheSec *sec;
     debug(("FreeCacheSector %ld\n", (long)sec->sec_Number));
 
     if (sec->sec_Refcount & ~SEC_DIRTY) {
-	debug(("\n\t*** PANIC!!! Refcount not 0 !!! ***\n\n"));
+	debug(("\n\t*** PANIC!!! Refcount not 0 !!! (%x) ***\n\n", sec->sec_Refcount));
 	sec->sec_Refcount &= SEC_DIRTY;
     }
 
@@ -508,6 +518,9 @@ int		immediate;
     if (immediate)
 	DelayCount = 1;
 
+    if (DelayCount == 0)
+	return;
+
 #ifndef READONLY
     writingfat = DelayCount <= 2 && FatDirty;
 
@@ -517,7 +530,6 @@ int		immediate;
 	int		lowtrack, hightrack;
 	int		offset;
 
-# if 1
 	if (CurrentCache > 0) {
 	    if (writingfat) {
 		lowtrack = 0;
@@ -553,33 +565,21 @@ int		immediate;
 		}
 	    }
 	}
-# else
-	/*
-	 * Do a backward scan to write them out.
-	 */
-	for (sec = NN_TO_SEC(CacheList.NumberList.mlh_TailPred);
-	     nextsec = sec->sec_NumberNode.mln_Pred;
-	     sec = NN_TO_SEC(nextsec)) {
-	    if (sec->sec_Refcount & SEC_DIRTY) {
-		WriteSec(sec->sec_Number, sec->sec_Data);
-		sec->sec_Refcount &= ~SEC_DIRTY;
-	    }
-	}
-# endif
 	CacheDirty = 0;
     }
-    if (DelayCount <= 2 && FatDirty)
+    if (writingfat)
 	WriteFat();
 #endif
 
     if (DelayCount <= 1) {
 #ifndef READONLY
+	debug(("MSUpdate, do TDUpdate\n"));
 	while (TDUpdate() != 0 && RetryRwError(DiskIOReq))
 	    ;
 #endif
 	TDMotorOff();
     }
-    if (DelayCount && --DelayCount)
+    if (--DelayCount)
 	StartTimer(0);
 }
 
@@ -639,7 +639,7 @@ int		sector;
 	do {
 	    req->iotd_Req.io_Command = ETD_READ;
 	    req->iotd_Req.io_Data = (APTR)sec->sec_Data;
-	    req->iotd_Req.io_Offset = Disk.lowcyl + (long) sector * Disk.bps;
+	    req->iotd_Req.io_Offset = Partition.offset + (long) sector * Disk.bps;
 	    req->iotd_Req.io_Length = Disk.bps;
 	    MyDoIO(&req->iotd_Req);
 	} while (req->iotd_Req.io_Error != 0 && RetryRwError(req));
@@ -651,6 +651,7 @@ int		sector;
 	    return sec->sec_Data;
 	}
 	error = ERROR_NOT_A_DOS_DISK;
+	sec->sec_Refcount = 0;
 	FreeCacheSector(sec);
     }
     return NULL;
@@ -697,7 +698,7 @@ byte	       *data;
     do {
 	req->iotd_Req.io_Command = ETD_WRITE;
 	req->iotd_Req.io_Data = (APTR) data;
-	req->iotd_Req.io_Offset = Disk.lowcyl + (long) sector * Disk.bps;
+	req->iotd_Req.io_Offset = Partition.offset + (long) sector * Disk.bps;
 	req->iotd_Req.io_Length = Disk.bps;
 	MyDoIO(&req->iotd_Req);
     } while (req->iotd_Req.io_Error != 0 && RetryRwError(req));
@@ -714,7 +715,7 @@ byte	       *data;
  * still in use. (Not that this is expected to occur often, though).
  */
 
-struct CacheSec *
+void
 MayWriteTrack(cache)
 struct CacheSec *cache;
 {
@@ -722,6 +723,9 @@ struct CacheSec *cache;
     struct MinNode *cn;
     int 	    lowsec;
     int 	    highsec;
+
+    if (CacheDirty == 0)
+	return;
 
     lowsec = (cache->sec_Number / Disk.spt) * Disk.spt;
     highsec = lowsec + Disk.spt;
@@ -742,7 +746,6 @@ struct CacheSec *cache;
 	    c->sec_Refcount &= ~SEC_DIRTY;
 	}
     }
-    return c;
 }
 
 #endif
@@ -882,10 +885,11 @@ AwaitDFx()
 	dfx[2] = '0' + UnitNr;
 	infoData = (struct InfoData *)(((long)&xinfodata[3]) & ~3L);
 
+	if ((dfxProc = DeviceProc(dfx)) == NULL)
+	    return 0;
+
 	for (triesleft = 10; triesleft; triesleft--) {
 	    debug(("AwaitDFx %ld\n", (long)triesleft));
-	    if ((dfxProc = DeviceProc(dfx)) == NULL)
-		break;
 
 	    dos_packet1(dfxProc, ACTION_DISK_INFO, (long)CTOB(infoData));
 	    debug(("AwaitDFx %lx\n", infoData->id_DiskType));
@@ -944,7 +948,10 @@ ReadBootBlock()
 		bootblock[0] != 0x00 && bootblock[0] != 0x4E &&
 				/* 8086 ml for a jump */
 		bootblock[0] != 0xE9 && bootblock[0] != 0xEB) {
-		goto bad_disk;
+
+		FreeSec(bootblock);
+		IDDiskType = ID_NOT_REALLY_DOS;
+		goto not_dos_disk;
 	    }
 	    oldbps = Disk.bps;
 	    if (CheckBootBlock & CHECK_USE_DEFAULT) {
@@ -984,6 +991,14 @@ ReadBootBlock()
 /*	    Disk.fat16bits = Disk.nsects > 20740;  / * DOS3.2 magic value */
 	    Disk.fat16bits = Disk.maxclst >= 0xFF7; /* DOS3.0 magic value */
 
+	    /*
+	     * We set this for the benefit of ouside programs; this value
+	     * will not be used directly by us, since it is reset to one
+	     * of the defaults on every disk change or format.
+	     */
+	    if (Environ)
+		Environ->de_BlocksPerTrack = Disk.spt;
+
 	    debug(("%lx\tbytes per sector\n", (long)Disk.bps));
 	    debug(("%lx\tsectors per cluster\n", (long)Disk.spc));
 	    debug(("%lx\treserved blocks\n", (long)Disk.res));
@@ -1021,8 +1036,10 @@ ReadBootBlock()
 			oldbps = Disk.bps;
 			Disk = DefaultDisk;
 			goto recalculate;
-		    } else
-			goto bad_disk;
+		    } else {
+			IDDiskType = ID_NOT_REALLY_DOS;
+			goto not_dos_disk;
+		    }
 		}
 	    }
 
@@ -1045,10 +1062,11 @@ ReadBootBlock()
 	} else {
 	    debug(("Can't read %ld.\n", (long)DiskIOReq->iotd_Req.io_Error));
 	bad_disk:
+	    IDDiskType = ID_UNREADABLE_DISK;
+	not_dos_disk:
 	    FreeCacheList();
 	    error = ERROR_NO_DISK;
-	    IDDiskType = ID_UNREADABLE_DISK;
-	    IDDiskState = ID_WRITE_PROTECTED;
+	    IDDiskState = ID_VALIDATING;
 	}
 	Cancel = oldCancel;
     }
@@ -1090,11 +1108,11 @@ struct DateStamp *date;
 		}
 		dirent++;
 	    }
-	    strncpy(name, Disk.vollabel.de_Msd.msd_Name, 8 + 3);
-	    name[8 + 3] = '\0';
-	    ZapSpaces(name, name + 8 + 3);
-	    ToDateStamp(date, Disk.vollabel.de_Msd.msd_CreationDate,
-			Disk.vollabel.de_Msd.msd_CreationTime);
+	    strncpy(name, Disk.vollabel.de_Msd.msd_Name, L_8 + L_3);
+	    name[L_8 + L_3] = '\0';
+	    ZapSpaces(name, name + L_8 + L_3);
+	    ToDateStamp(date, msd_CreationDate(Disk.vollabel.de_Msd),
+			      msd_CreationTime(Disk.vollabel.de_Msd));
 	    debug(("Disk is called '%s'\n", name));
 
 	    FreeSec(dirblock);
@@ -1199,8 +1217,7 @@ TDProtStatus()
 }
 
 /*
- * Switch the drive motor off. Return previous state. Don't use this when
- * you have allocated the disk via GetDrive().
+ * Switch the drive motor off. Return previous state.
  */
 
 int
