@@ -1,7 +1,10 @@
 ;;;;
 ;
-; $Id: devio.c,v 1.40 91/03/03 17:56:00 Rhialto Rel $
-; $Log:        devio.c,v $
+; $Id: devio1.a,v 1.42 91/06/14 00:04:44 Rhialto Exp $
+; $Log: devio1.a,v $
+; Revision 1.42  91/06/14  00:04:44  Rhialto
+; DICE conversion
+;
 ; Revision 1.40  91/03/03  17:56:00  Rhialto
 ; Freeze for MAXON
 ;
@@ -75,9 +78,9 @@ ciaicrf_flg	equ	1<<4	; flg interrupt (disk index)
 _SafeEnableICR: 		    ; the argument is passed as a long for now
 	move.l	a6,-(sp)
 	move.l	_CiaBResource,a6
-	move.b	4+4+3(sp),d0        ; skip a6,retadr
+	move.l	4+4(sp),d0          ; skip a6,retadr
 	jsr	_LVOSetICR(a6)      ; clear pending interrupt
-	move.b	4+3(sp),d0
+	move.l	4+4(sp),d0          ; skip a6,retadr
 	or.b	#$80,d0 	    ; then enable it
 	jsr	_LVOAbleICR(a6)
 	move.l	(sp)+,a6
@@ -134,13 +137,19 @@ _RVOGiveUnit	equ	lib_base-(3*lib_vectsize)
 _RVOGetUnitID	equ	lib_base-(4*lib_vectsize)
 
 ;_AllocUnit:
+;	move.l	a6,-(sp)
 ;	move.l	_DRResource,a6
 ;	move.l	4(sp),d0
-;	jmp	_RVOAllocUnit(a6)
+;	jsr	_RVOAllocUnit(a6)
+;	move.l	(sp)+,a6
+;	rts
 ;_FreeUnit:
+;	move.l	a6,-(sp)
 ;	move.l	_DRResource,a6
 ;	move.l	4(sp),d0
-;	jmp	_RVOFreeUnit(a6)
+;	jsr	_RVOFreeUnit(a6)
+;	move.l	(sp)+,a6
+;	rts
 
 	xdef	_GetUnit
 _GetUnit:
@@ -152,9 +161,12 @@ _GetUnit:
 	rts
 
 ;_GetUnitID:
+;	move.l	a6,-(sp)
 ;	move.l	_DRResource,a6
 ;	move.l	4(sp),d0
-;	jmp	_RVOGetUnitID(a6)
+;	jsr	_RVOGetUnitID(a6)
+;	move.l	(sp)+,a6
+;	rts
 
 	xdef	_GiveUnit
 _GiveUnit:
