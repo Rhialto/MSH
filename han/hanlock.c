@@ -1,6 +1,9 @@
 /*-
- * $Id: hanlock.c,v 1.2 89/12/17 23:05:33 Rhialto Exp Locker: Rhialto $
+ * $Id: hanlock.c,v 1.3 90/01/23 00:36:57 Rhialto Exp Locker: Rhialto $
  * $Log:	hanlock.c,v $
+ * Revision 1.3  90/01/23  00:36:57  Rhialto
+ * Add an #ifndef READONLY.
+ *
  * Revision 1.2  89/12/17  23:05:33  Rhialto
  * Add MSSetProtect
  *
@@ -482,7 +485,6 @@ struct MSFileLock *fl;
 	    list = (struct LockList *) fl->msfl_Node.mln_Pred;
 	    Remove(fl);
 	    debug(("Remove()d %08lx\n", fl));
-	    MSUnLock(fl->msfl_Parent);
 
 	    /*
 	     * We may need to get rid of the LockList if it is empty. This
@@ -490,17 +492,21 @@ struct MSFileLock *fl;
 	     * MSDiskRemoved(). Please note that we are not even sure that
 	     * 'list' really is the list header, therefore the careful
 	     * test if fl refers to a volume label (root lock) which is
-	     * finally UnLock()ed.
+	     * finally UnLock()ed. Because of the recursion, we only try to
+	     * free the LockList iff there is no parent anymore, since
+	     * otherwise list may be invalid by the time we use it.
 	     */
-
-	    if ((fl->msfl_Msd.msd_Attributes & ATTR_VOLUMELABEL) &&
-		((void *) list->ll_List.mlh_Head ==
-		 (void *) &list->ll_List.mlh_Tail)
-		) {
-		FreeLockList(list);
+	    if (fl->msfl_Parent) {
+		MSUnLock(fl->msfl_Parent);
+	    } else {
+		if ((fl->msfl_Msd.msd_Attributes & ATTR_VOLUMELABEL) &&
+		    ((void *) list->ll_List.mlh_Head ==
+		     (void *) &list->ll_List.mlh_Tail)
+		    ) {
+		    FreeLockList(list);
+		}
 	    }
 	    FreeMem(fl, (long) sizeof (*fl));
-
 	}
     }
     return DOSTRUE;
