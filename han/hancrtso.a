@@ -1,5 +1,8 @@
-; $Id$
-; $Log$
+; $Id: hancrtso.a,v 1.42 91/06/14 00:07:56 Rhialto Exp $
+; $Log: hancrtso.a,v $
+; Revision 1.42  91/06/14  00:07:56  Rhialto
+; DICE conversion
+;
 		;   C.A
 		;
 		;   (c)Copyright 1990, Matthew Dillon, All Rights Reserved
@@ -266,14 +269,20 @@ __ExitSP	ds.l	1
 
 ;;;;
 ;
-; Some byte-swapping routines for extra bonus points
+; Some byte-swapping routines for extra bonus points.
+;
+; word Get8086Word(A0 byte *Word8086);
+; word OtherEndianWord(D0 long oew);    /* long should become word */
+; ulong OtherEndianLong(D0 ulong oel);
 ;
 
 	section text,code
 
 	xdef _Get8086Word
+	xdef @Get8086Word
 _Get8086Word:
 	move.l	4(sp),a0        ; get (unaligned) address
+@Get8086Word:
 	move.b	(a0)+,d1        ; get low order byte
 	move.b	(a0),d0         ; get high order byte
 	asl.w	#8,d0		; shift it into position
@@ -281,14 +290,18 @@ _Get8086Word:
 	rts
 
 	xdef _OtherEndianWord
+	xdef @OtherEndianWord
 _OtherEndianWord:
 	move.w	4+2(sp),d0      ; arg is passed as a long for now
+@OtherEndianWord:
 	rol.w	#8,d0
-	rts
+	rts			; we leave junk in the high word of d0.
 
 	xdef _OtherEndianLong
+	xdef @OtherEndianLong
 _OtherEndianLong:
 	move.l	4(sp),d0
+@OtherEndianLong:
 	rol.w	#8,d0
 	swap	d0
 	rol.w	#8,d0
