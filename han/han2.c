@@ -1,6 +1,10 @@
 /*-
- * $Id: han2.c,v 1.43 91/09/28 01:30:07 Rhialto Exp $
+ * $Id: han2.c,v 1.46 91/10/06 18:26:04 Rhialto Rel $
  * $Log:	han2.c,v $
+ * Revision 1.46  91/10/06  18:26:04  Rhialto
+ *
+ * Freeze for MAXON
+ *
  * Revision 1.43  91/09/28  01:30:07  Rhialto
  * Preliminary - not functional yet
  *
@@ -28,14 +32,14 @@
 #   define	debug(x)
 #endif
 
-long		MSSameLock(struct MSFileLock *lock1, struct MSFileLock *lock2);
-struct MSFileHandle *MSOpenFromLock(struct MSFileLock *lock);
-struct MSFileLock *MSDupLockFromFH(struct MSFileHandle *msfh);
-struct MSFileLock *MSParentOfFH(struct MSFileHandle *msfh);
-long		MSExamineFH(struct MSFileHandle *msfh, struct FileInfoBlock *fib);
-long		MSSetFileSize(struct MSFileHandle *msfh, long pos, long mode);
-long		MSChangeModeLock(struct MSFileLock *object, long newmode);
-long		MSChangeModeFH(struct MSFileHandle *object, long newmode);
+Prototype long	MSSameLock(struct MSFileLock *lock1, struct MSFileLock *lock2);
+Prototype struct MSFileHandle *MSOpenFromLock(struct MSFileLock *lock);
+Prototype struct MSFileLock *MSDupLockFromFH(struct MSFileHandle *msfh);
+Prototype struct MSFileLock *MSParentOfFH(struct MSFileHandle *msfh);
+Prototype long	MSExamineFH(struct MSFileHandle *msfh, struct FileInfoBlock *fib);
+Prototype long	MSSetFileSize(struct MSFileHandle *msfh, long pos, long mode);
+Prototype long	MSChangeModeLock(struct MSFileLock *object, long newmode);
+Prototype long	MSChangeModeFH(struct MSFileHandle *object, long newmode);
 
 /*	DOS Object Management */
 BPTR DupLockFromFH( BPTR fh );
