@@ -1,6 +1,8 @@
 /*-
- * $Id$
- * $Log$
+ * $Id: hanreq.c,v 1.1 89/12/17 20:03:24 Rhialto Rel Locker: Rhialto $
+ * $Log:	hanreq.c,v $
+ * Revision 1.1  89/12/17  20:03:24  Rhialto
+ * Initial revision
  *
  *  HANREQ.C
  *
@@ -13,11 +15,9 @@
 -*/
 
 #include "dos.h"
-#include <exec/io.h>
-#include <devices/trackdisk.h>
 #include <intuition/intuition.h>
 
-#ifdef DEBUG
+#ifdef HDEBUG
 #   define	debug(x)  dbprintf x
 #else
 #   define	debug(x)
@@ -116,15 +116,13 @@ struct IOExtTD *req;
     if (VolNode)
 	text[1].IText = (UBYTE *)BTOC(VolNode->dl_Name)+1;
     else
-	text[1].IText = NULL;
+	text[1].IText = (UBYTE *)"";
 
 again:
     result = AutoRequest(window, text, &Positive, &Negative,
-		       0L, 0L, 320L, 72L);
+			 0L, 0L, 320L, 72L);
 
     if (req->iotd_Req.io_Error == TDERR_DiskChanged && result != FALSE) {
-	if (DiskChanged == 0)   /* Cheating, huh ? */
-	    goto again;
 	TDChangeNum();  /* Get new disk change number */
 	DiskChanged = 0;
     }

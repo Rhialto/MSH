@@ -1,6 +1,9 @@
 /*-
- * $Id: hansec.c,v 1.3 90/01/27 20:20:16 Rhialto Exp $
+ * $Id: hansec.c,v 1.4 90/02/10 21:30:54 Rhialto Rel $
  * $Log:	hansec.c,v $
+ * Revision 1.4  90/02/10  21:30:54  Rhialto
+ * Tuned cache a bit.
+ *
  * Revision 1.3  90/01/27  20:20:16  Rhialto
  * Sorted sectors when flushing cache
  *
@@ -21,11 +24,11 @@
  * May not be used or copied without a licence.
 -*/
 
-#include "han.h"
 #include "dos.h"
+#include "han.h"
 
-/*#undef DEBUG				/**/
-#ifdef DEBUG
+/*#undef HDEBUG 			 /**/
+#ifdef HDEBUG
 #   define	debug(x)  dbprintf x
 #else
 #   define	debug(x)
@@ -145,7 +148,7 @@ word cluster;
 {
     register word entry;
 
-    return (entry = GetFatEntry(cluster)) >= 0xFFF0 ? FAT_EOF : entry;
+    return (entry = GetFatEntry(cluster)) >= 0xFFF7 ? FAT_EOF : entry;
 }
 
 word
@@ -617,7 +620,7 @@ ReadBootBlock()
 	    Disk.bpc = Disk.bps * Disk.spc;
 	    Disk.vollabel = FakeRootDirEntry;
 /*	    Disk.fat16bits = Disk.nsects > 20740;   /* DOS3.2 magic value */
-	    Disk.fat16bits = Disk.maxclst > 0xFF6;  /* DOS3.0 magic value */
+	    Disk.fat16bits = Disk.maxclst >= 0xFF7; /* DOS3.0 magic value */
 
 	    debug(("%x\tbytes per sector\n", Disk.bps));
 	    debug(("%x\tsectors per cluster\n", Disk.spc));
@@ -664,7 +667,7 @@ ReadBootBlock()
 	    IDDiskState = ID_WRITE_PROTECTED;
 	}
     }
-#ifdef DEBUG
+#ifdef HDEBUG
     else debug(("No disk inserted %d.\n", DiskIOReq->iotd_Req.io_Error));
 #endif
     return 1;

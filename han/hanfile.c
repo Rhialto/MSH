@@ -1,6 +1,9 @@
 /*-
- * $Id: hanfile.c,v 1.5 90/01/27 20:26:51 Rhialto Exp $
+ * $Id: hanfile.c,v 1.6 90/02/10 21:38:26 Rhialto Rel $
  * $Log:	hanfile.c,v $
+ * Revision 1.6  90/02/10  21:38:26  Rhialto
+ * Optimized 12-bit fat unpacking.
+ *
  * Revision 1.5  90/01/27  20:26:51  Rhialto
  * Fixed ATTR_ARCHIVED bit in MSWrite()
  *
@@ -26,10 +29,10 @@
  * May not be used or copied without a licence.
 -*/
 
-#include "han.h"
 #include "dos.h"
+#include "han.h"
 
-#ifdef DEBUG
+#ifdef HDEBUG
 #   define	debug(x)  dbprintf x
 #else
 #   define	debug(x)
@@ -115,10 +118,10 @@ word		cluster;
 	}
 
 	/*
-	 * Convert the special values 0xFF0 .. 0xFFF to 16 bits so they
+	 * Convert the special values 0xFF7 .. 0xFFF to 16 bits so they
 	 * can be checked consistently.
 	 */
-	if (twoentries >= 0xFF0)
+	if (twoentries >= 0xFF7)
 	    twoentries |= 0xF000;
 
 	return twoentries;
@@ -821,7 +824,7 @@ undelete:
 		OtherEndianMsd(&dir[1]);
 		MarkSecDirty(dir);
 	    }
-#ifdef DEBUG
+#ifdef HDEBUG
 	    else
 		debug(("!!! No \"..\" found ??\n"));
 #endif
@@ -845,7 +848,7 @@ undelete:
     MSUnLock(sfl->msfl_Parent);
     sfl->msfl_Parent = dfl->msfl_Parent;
     dfl->msfl_Parent = NULL;
-    sfl->msfl_Msd.msd_Attributes &= ~ATTR_ARCHIVED;
+    sfl->msfl_Msd.msd_Attributes |= ATTR_ARCHIVED;
     WriteFileLock(sfl);         /* Write the new name; the old name
 				 * already has been deleted. */
     success = DOSTRUE;

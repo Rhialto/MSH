@@ -1,5 +1,5 @@
 /*-
- *  $Id: han.h,v 1.3 90/01/23 02:31:07 Rhialto Exp Locker: Rhialto $
+ *  $Id: han.h,v 1.4 90/01/27 20:33:22 Rhialto Rel $
  *
  *  The header file for the MESSYDOS: file system handler
  *
@@ -9,9 +9,8 @@
 
 #define MODE_READWRITE	1004L
 #define MODE_CREATEFILE (1L<<31)
-#define FILE_DIR    1
-#define FILE_FILE   -1
-
+#define FILE_DIR     2		/* Must be even and > 0 */
+#define FILE_FILE   -2		/* Must be even and < -1 */
 
 /* #define MS_BPS      512	/* Bytes per sector */
 #define MS_SPC	    2		/* Sectors per cluster */
@@ -31,6 +30,7 @@
 #define FAT_EOF     0xFFFF	/* end of file FAT entry */
 #define FAT_UNUSED  0		/* unused block */
 #define SEC_EOF     -1		/* end of FAT chain */
+#define ROOT_SEC    -1		/* where the root directory 'is' */
 
 #define DIR_DELETED	    0xE5
 #define DIR_DELETED_MASK    0x80
@@ -285,6 +285,11 @@ extern long	MSWrite();
 extern long	MSDeleteFile();
 extern long	MSSetDate();
 extern struct MSFileLock *MSCreateDir();
+
+/*
+ * HANCMD.C
+ */
+extern void	HandleCommand();
 
 /*
  * DATE.C

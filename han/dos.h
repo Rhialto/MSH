@@ -1,15 +1,41 @@
 
 /*
- *  $Id: dos.h,v 1.1 89/12/17 20:06:01 Rhialto Exp Locker: Rhialto $
+ *  $Id: dos.h,v 1.2 90/01/27 20:29:53 Rhialto Rel $
  */
 
-#ifdef NOTDEF
+#ifndef EXEC_TYPES_H
 #include "exec/types.h"
+#endif
+#ifndef EXEC_MEMORY_H
 #include "exec/memory.h"
+#endif
+#ifndef EXEC_INTERRUPTS_H
+#include "exec/interrupts.h"
+#endif
+#ifndef EXEC_NODES_H
+#include "exec/nodes.h"
+#endif
+#ifndef EXEC_PORTS_H
+#include "exec/ports.h"
+#endif
+#ifndef EXEC_IO_H
+#include "exec/io.h"
+#endif
+#ifndef LIBRARIES_DOS_H
 #include "libraries/dos.h"
+#endif
+#ifndef LIBRARIES_DOSEXTENS_H
 #include "libraries/dosextens.h"
+#endif
+#ifndef LIBRARIES_FILEHANDLER_H
 #include "libraries/filehandler.h"
-#endif NOTDEF
+#endif
+#ifndef DEVICES_TRACKDISK_H
+#include "devices/trackdisk.h"
+#endif
+#ifndef DEVICES_TIMER_H
+#include "devices/timer.h"
+#endif
 
 /*
  *  ACTIONS which do not exist in dosextens.h but which indeed exist on

@@ -1,12 +1,8 @@
 /*-
- * $Id: hanmain.c,v 1.3 89/12/17 21:29:51 Rhialto Exp Locker: Rhialto $
+ * $Id: hanmain.c,v 1.4 90/01/27 20:13:00 Rhialto Rel $
  * $Log:	hanmain.c,v $
- * Revision 1.3  89/12/17  21:29:51  Rhialto
- * *** empty log message ***
- *
+ * Revision 1.4  90/01/27  20:13:00  Rhialto
  * Revision 1.1  89/12/17  20:02:31  Rhialto
- * Initial revision
- *
  *
  *  HANMAIN.C
  *
@@ -19,10 +15,10 @@
  *  not be used or copied without a licence.
 -*/
 
-#include "han.h"
 #include "dos.h"
+#include "han.h"
 
-#ifdef DEBUG
+#ifdef HDEBUG
 #   define	debug(x)  dbprintf x
 #else
 #   define	debug(x)
@@ -30,7 +26,7 @@
 
 extern char	DotDot[1 + 8 + 3];
 struct Library *IntuitionBase;
-static char RCSId[] = "Messydos filing system $Revision: 1.3 $ $Date: 89/12/17 21:29:51 $, by Olaf Seibert";
+static char RCSId[] = "Messydos filing system $Revision: 1.4 $ $Date: 90/01/27 20:13:00 $, by Olaf Seibert";
 
 byte
 ToUpper(ch)
@@ -222,7 +218,7 @@ register struct LockList **locks;
 	debug(("MSDiskRemoved with no RootLock\n"));
 	return 1;
     }
-#ifdef DEBUG
+#ifdef HDEBUG
     if (RootLock != GetTail(&LockList->ll_List)) {
 	debug(("RootLock not at end of LockList!\n"));
 	/* Get the lock on the root dir at the tail of the List */
@@ -252,7 +248,7 @@ register struct LockList **locks;
 void
 HanCloseDown()
 {
-#ifdef DEBUG
+#ifdef HDEBUG
     register struct MSFileLock *fl;
 
     while (LockList && (fl = (struct MSFileLock *) GetHead(&LockList->ll_List))) {
@@ -301,7 +297,7 @@ HanOpenUp()
 
     TimeIOReq = NULL;
 
-#ifdef DEBUG
+#ifdef HDEBUG
     if (!(DiskReplyPort = CreatePort("MSH:disk.replyport", -1L)))
 	goto abort;
 #else
@@ -441,7 +437,7 @@ byte	       *newname;
 #endif
 }
 
-#ifdef DEBUG
+#ifdef HDEBUG
 
 _abort()
 {
@@ -449,4 +445,4 @@ _abort()
     RemTask(NULL);
 }
 
-#endif				/* DEBUG */
+#endif				/* HDEBUG */

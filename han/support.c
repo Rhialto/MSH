@@ -1,6 +1,9 @@
 /*-
- * $Id: support.c,v 1.1 89/12/17 19:57:50 Rhialto Exp Locker: Rhialto $
+ * $Id: support.c,v 1.2 90/02/03 17:01:19 Rhialto Rel $
  * $Log:	support.c,v $
+ * Revision 1.2  90/02/03  17:01:19  Rhialto
+ * Add error checking in dosalloc()
+ *
  * Revision 1.1  89/12/17  19:57:50  Rhialto
  * Initial revision
  *
@@ -124,7 +127,7 @@ register LIST		*list;
     return (NULL);
 }
 
-#ifdef DEBUG
+#ifdef HDEBUG
 char	       *
 typetostr(ty)
 long ty;
@@ -193,4 +196,4 @@ long ty;
     }
 }
 
-#endif				/* DEBUG */
+#endif				/* HDEBUG */
