@@ -1,6 +1,9 @@
 /*-
- * $Id: hanlock.c,v 1.53 92/10/25 02:28:50 Rhialto Rel $
- * $Log:	hanlock.c,v $
+ * $Id: hanlock.c,v 1.54 1993/06/24 05:12:49 Rhialto Exp $
+ * $Log: hanlock.c,v $
+ * Revision 1.54  1993/06/24  05:12:49	Rhialto
+ * DICE 2.07.54R.
+ *
  * Revision 1.53  92/10/25  02:28:50  Rhialto
  * No real change.
  *
@@ -52,9 +55,9 @@
  * May not be used or copied without a licence.
 -*/
 
-#include <string.h>
 #include "han.h"
 #include "dos.h"
+#include <string.h>
 
 #ifdef HDEBUG
 #   include "syslog.h"
@@ -85,7 +88,7 @@ Prototype struct LockList *LockList;
 Prototype struct MSFileLock *RootLock;
 Prototype struct MSFileLock *EmptyFileLock;
 Prototype const struct DirEntry FakeRootDirEntry;
-Prototype const byte DotDot[1 + 8 + 3];
+Prototype const byte DotDot[1 + L_8 + L_3];
 
 struct LockList *LockList;	/* List of all locked files we have. Note
 				 * this is not the same as all locks we
@@ -93,6 +96,20 @@ struct LockList *LockList;	/* List of all locked files we have. Note
 struct MSFileLock *RootLock;	/* Lock on root directory */
 struct MSFileLock *EmptyFileLock;	/* 2nd result of MSLock() */
 
+#if LONGNAMES
+const struct DirEntry FakeRootDirEntry = {
+    {				/* de_Msd */
+	0,			/* msd_Time */
+	DATE_MIN,		/* msd_Date, 1/1/80 */
+	0,			/* msd_Cluster */
+	0			/* msd_Filesize */
+	ATTR_VOLUMELABEL,	/* msd_Attributes */
+	"Unnamed              ",/* msd_Name */
+    },
+    ROOT_SEC,			/* de_Sector */
+    -2				/* de_Offset */
+};
+#else
 const struct DirEntry FakeRootDirEntry = {
     {				/* de_Msd */
 	"Unnamed ",             /* msd_Name */
@@ -109,7 +126,8 @@ const struct DirEntry FakeRootDirEntry = {
     ROOT_SEC,			/* de_Sector */
     -2				/* de_Offset */
 };
-const byte DotDot[1 + 8 + 3] = "..          ";
+#endif
+const byte DotDot[1 + L_8 + L_3] = "..          ";
 
 /*
  * This routine compares a name in a directory entry with a given name
@@ -129,7 +147,7 @@ register byte  *name;
     if (dir->msd_Attributes & ATTR_VOLUMELABEL)
 	return CMP_NOT_EQUAL;
 
-    if (strncmp(dir->msd_Name, name, 8 + 3))
+    if (strncmp(dir->msd_Name, name, L_8 + L_3))
 	return CMP_NOT_EQUAL;
 
     if (dir->msd_Attributes & ATTR_DIRECTORY)
@@ -224,6 +242,16 @@ PrintDirEntry(de)
 struct DirEntry *de;
 {
     debug(("%ld,%ld ", (long)de->de_Sector, (long)de->de_Offset));
+#if LONGNAMES
+    debug(("%.21s attr:%lx time:%lx date:%lx start:%lx size:%lx\n",
+	   de->de_Msd.msd_Name,
+	   (long)de->de_Msd.msd_Attributes,
+	   (long)de->de_Msd.msd_Time,
+	   (long)de->de_Msd.msd_Date,
+	   (long)de->de_Msd.msd_Cluster,
+	   (long)de->de_Msd.msd_Filesize
+	   ));
+#else
     debug(("%.8s.%.3s attr:%lx time:%lx date:%lx start:%lx size:%lx\n",
 	   de->de_Msd.msd_Name,
 	   de->de_Msd.msd_Ext,
@@ -233,6 +261,7 @@ struct DirEntry *de;
 	   (long)de->de_Msd.msd_Cluster,
 	   (long)de->de_Msd.msd_Filesize
 	   ));
+#endif
 }
 
 #endif
@@ -329,7 +358,7 @@ ulong		mode;
     register struct DirEntry *de;
     struct DirEntry sde;
     byte	   *nextpart;
-    byte	    component[8 + 3];	/* Note: not null-terminated */
+    byte	    component[L_8 + L_3];	/* Note: not null-terminated */
     int 	    createit = 0;
     word	    freesec;
     word	    freeoffset;
@@ -498,7 +527,7 @@ exit:
 		    sde.de_Sector = freesec;
 		    sde.de_Offset = freeoffset;
 		    /* ToMSName(sde.de_Msd.msd_Name, name); */
-		    strncpy(sde.de_Msd.msd_Name, component, 8 + 3);
+		    strncpy(sde.de_Msd.msd_Name, component, L_8 + L_3);
 		    EmptyFileLock = MakeLock(parentdir, &sde, mode);
 		    WriteFileLock(EmptyFileLock);
 		} else
@@ -621,15 +650,19 @@ register struct FileInfoBlock *fib;
      * Special treatment when we examine the root directory
      */
     if (msd->msd_Attributes & ATTR_VOLUMELABEL) {
-	strncpy(&fib->fib_FileName[1], msd->msd_Name, 8 + 3);
-	(void) ZapSpaces(&fib->fib_FileName[2], &fib->fib_FileName[1 + 8 + 3]);
+	strncpy(&fib->fib_FileName[1], msd->msd_Name, L_8 + L_3);
+	(void) ZapSpaces(&fib->fib_FileName[2], &fib->fib_FileName[1 + L_8 + L_3]);
     } else {
+#if LONGNAMES
+	strncpy(&fib->fib_FileName[1], msd->msd_Name, L_8);
+	fib->fib_FileName[1 + L_8] = 0;
+#else
 	register byte  *end,
 		       *dot;
 
-	strncpy(&fib->fib_FileName[1], msd->msd_Name, 8);
+	strncpy(&fib->fib_FileName[1], msd->msd_Name, L_8);
 	/* Keep at least one character, even a space, before the dot */
-	dot = ZapSpaces(&fib->fib_FileName[2], &fib->fib_FileName[1 + 8]);
+	dot = ZapSpaces(&fib->fib_FileName[2], &fib->fib_FileName[1 + L_8]);
 	if (strncmp(msd->msd_Ext, "INF", 3) == 0) {
 	    strcpy(dot, ".info");
 	} else {
@@ -640,6 +673,7 @@ register struct FileInfoBlock *fib;
 	    if (end > dot)
 		dot[0] = '.';
 	}
+#endif
     }
     fib->fib_FileName[0] = strlen(&fib->fib_FileName[1]);
 
