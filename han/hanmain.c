@@ -1,9 +1,13 @@
 /*-
- * $Id: hanmain.c,v 1.45 91/10/03 23:36:47 Rhialto Exp $
+ * $Id: hanmain.c,v 1.46 91/10/06 18:27:36 Rhialto Rel $
  * $Log:	hanmain.c,v $
+ * Revision 1.46  91/10/06  18:27:36  Rhialto
+ *
+ * Freeze for MAXON
+ *
  * Revision 1.45  91/10/03  23:36:47  Rhialto
  * Implement conversions during Read()/Write()
- * 
+ *
  * Revision 1.43  91/09/28  01:40:24  Rhialto
  * Changed to newer syslog stuff.
  *
@@ -48,12 +52,21 @@
 #   define	debug(x)
 #endif
 
-#define CONV_SEP    ';'
+Prototype byte ToUpper(byte ch);
+Prototype long lmin(long a, long b);
+Prototype byte *ZapSpaces(byte *begin, byte *end);
+Prototype byte *ToMSName(byte *dest, byte *source);
+Prototype long MSDiskInfo(struct InfoData *infodata);
+Prototype void MSDiskInserted(struct LockList **locks, void *cookie);
+Prototype int MSDiskRemoved(struct LockList **locks);
+Prototype void HanCloseDown(void);
+Prototype int HanOpenUp(void);
+Prototype long MSRelabel(byte *newname);
 
-extern int	CheckBootBlock;
-extern char	DotDot[1 + 8 + 3];
 struct Library *IntuitionBase;
-static char RCSId[] = "Messydos filing system $Revision: 1.45 $ $Date: 91/10/03 23:36:47 $, by Olaf Seibert";
+Local const char RCSId[] = "Messydos filing system $Revision: 1.46 $ $Date: 91/10/06 18:27:36 $, by Olaf Seibert";
+
+#define CONV_SEP    ';'
 
 byte
 ToUpper(ch)
@@ -183,8 +196,6 @@ long
 MSDiskInfo(infodata)
 struct InfoData *infodata;
 {
-    extern DEVLIST *VolNode;
-
     setmem(infodata, sizeof (*infodata), 0);
 
     infodata->id_DiskState = IDDiskState;
@@ -199,6 +210,7 @@ struct InfoData *infodata;
 	infodata->id_NumBlocksUsed = Disk.nsects - Disk.nsectsfree;
 	infodata->id_BytesPerBlock = Disk.bps;
     }
+
     return DOSTRUE;
 }
 
@@ -229,8 +241,6 @@ void	       *cookie;
     } else {
 	RootLock = MSDupLock(GetTail(&LockList->ll_List));
     }
-
-    InitCacheList();
 }
 
 /*
