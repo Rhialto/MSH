@@ -1,6 +1,9 @@
 /*-
- *  $Id: device.h,v 1.54 1993/06/24 04:56:00 Rhialto Exp $
+ *  $Id: device.h,v 1.56 1996/12/21 23:34:35 Rhialto Rel $
  *  $Log: device.h,v $
+ * Revision 1.56  1996/12/21  23:34:35  Rhialto
+ * No changes.
+ *
  * Revision 1.55  1993/12/30  22:45:10  Rhialto
  * Variable DMA buffer size for DD/DH disks.
  *
@@ -80,7 +83,7 @@ extern struct ExecBase *SysBase;
 #endif
 #define TRACKS(cyls)    ((cyls) * NUMHEADS)
 #define TRK2CYL(track)  ((track) >> 1)
-#define REVISION	15
+#define TRK2SIDE(track) ((track) & 1)
 
 #define VERSION 	SYS2_04
 #define REVISION	16
