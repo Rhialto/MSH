@@ -1,6 +1,10 @@
 /*-
- * $Id: hanfile.c,v 1.53 92/10/25 02:29:23 Rhialto Rel $
- * $Log:	hanfile.c,v $
+ * $Id: hanfile.c,v 1.54 1993/06/24 05:12:49 Rhialto Exp $
+ * $Log: hanfile.c,v $
+ * Revision 1.54  1993/06/24  05:12:49	Rhialto
+ * MSCreateDir gave you an exclusive lock contrary to our liberal policy.
+ * DICE 2.07.54R.
+ *
  * Revision 1.53  92/10/25  02:29:23  Rhialto
  * Default conversion settable.
  * OFFSET_END seeks were done in the wrong direction ARGH!
@@ -45,9 +49,10 @@
  * May not be used or copied without a licence.
 -*/
 
-#include <string.h>
 #include "han.h"
 #include "dos.h"
+#include <string.h>
+
 #ifdef CONVERSIONS
 #   include "hanconv.h"
 #endif
@@ -192,6 +197,7 @@ word		value;
     }
 
     FatDirty = TRUE;
+    StartTimer(4);
 }
 
 /*
@@ -357,7 +363,9 @@ makefh:
 	EmptyFileLock = NULL;
 	fl->msfl_Msd.msd_Attributes = ATTR_ARCHIVED;
 	UpdateFileLock(fl);
+#ifndef CREATIONDATE_ONLY
 	UpdateFileLock(fl->msfl_Parent);
+#endif
 
 	goto makefh;
     }
@@ -539,6 +547,19 @@ register long	size;
     AdjustSeekPos(fh);
 #endif
     oldsize = size;
+    /* Check if this will fit on the disk */
+    {
+	long		new;
+	long		old;
+
+	new = (fh->msfh_SeekPos + size + Disk.bpc - 1) / Disk.bpc;
+	old = (fl->msfl_Msd.msd_Filesize + Disk.bpc - 1) / Disk.bpc;
+
+	if (new - old > (long)Disk.freeclusts) {
+	    error = ERROR_DISK_FULL;
+	    goto some_error;
+	}
+    }
 
     while (size > 0) {
 	/*
@@ -557,6 +578,7 @@ register long	size;
 		fh->msfh_Cluster = newclust;
 		prevclust = newclust;
 	    } else {
+		/* "Can't happen" */
 		error = ERROR_DISK_FULL;
 		goto some_error;
 	    }
@@ -572,7 +594,6 @@ register long	size;
 	    offset %= Disk.bps;
 	    tocopy = lmin(size, Disk.bps - offset);
 
-	    /*if (tocopy == Disk.bps)*/
 	    if (offset == 0 && fh->msfh_SeekPos >= fl->msfl_Msd.msd_Filesize)
 		diskbuffer = EmptySec(sector);
 	    else
@@ -597,8 +618,10 @@ register long	size;
 		update = 1;
 	    } else {		/* Write error. */
 	some_error:
+#ifndef CREATIONDATE_ONLY
 		if (update)
 		    UpdateFileLock(fl);
+#endif
 #if 1
 		return -1;	/* We lose the information about how much
 				 * data we wrote, but the standard file system
@@ -613,8 +636,10 @@ register long	size;
 	}
     }
 
+#ifndef CREATIONDATE_ONLY
     if (update)
 	UpdateFileLock(fl);
+#endif
 
     return oldsize;
 #endif
@@ -668,7 +693,9 @@ byte	       *name;
 	    FreeClusterChain(fl->msfl_Msd.msd_Cluster);
 	fl->msfl_Msd.msd_Name[0] = DIR_DELETED;
 	WriteFileLock(fl);
+#ifndef CREATIONDATE_ONLY
 	UpdateFileLock(fl->msfl_Parent);
+#endif
 	MSUnLock(fl);
 
 	return DOSTRUE;
@@ -752,7 +779,7 @@ byte	       *name;
 	     * Create the "." entry.
 	     */
 	    direntry = fl->msfl_Msd;
-	    strncpy(direntry.msd_Name, DotDot + 1, 8 + 3);
+	    strncpy(direntry.msd_Name, DotDot + 1, L_8 + L_3);
 	    OtherEndianMsd(&direntry);
 	    ((struct MsDirEntry *) sec)[0] = direntry;
 
@@ -764,13 +791,15 @@ byte	       *name;
 	    parentdir = MSParentDir(fl);
 	    if (parentdir == NULL)      /* Cannot happen */
 		parentdir = MSDupLock(RootLock);
+#ifndef CREATIONDATE_ONLY
 	    UpdateFileLock(parentdir);
+#endif
 
 	    /*
 	     * Create the ".." entry.
 	     */
 	    direntry = parentdir->msfl_Msd;
-	    strncpy(direntry.msd_Name, DotDot, 8 + 3);
+	    strncpy(direntry.msd_Name, DotDot, L_8 + L_3);
 	    direntry.msd_Attributes = ATTR_DIRECTORY | ATTR_ARCHIVED;
 	    OtherEndianMsd(&direntry);
 	    ((struct MsDirEntry *) sec)[1] = direntry;
@@ -944,7 +973,7 @@ undelete:
      * file/directory. Also move the other administration.
      */
 
-    strncpy(sfl->msfl_Msd.msd_Name, dfl->msfl_Msd.msd_Name, 8 + 3);
+    strncpy(sfl->msfl_Msd.msd_Name, dfl->msfl_Msd.msd_Name, L_8 + L_3);
     sfl->msfl_DirSector = dfl->msfl_DirSector;
     sfl->msfl_DirOffset = dfl->msfl_DirOffset;
     /*
@@ -957,8 +986,10 @@ undelete:
     sfl->msfl_Msd.msd_Attributes |= ATTR_ARCHIVED;
     WriteFileLock(sfl);         /* Write the new name; the old name
 				 * already has been deleted. */
+#ifndef CREATIONDATE_ONLY
     UpdateFileLock(sfl->msfl_Parent);
     UpdateFileLock(dfl->msfl_Parent);
+#endif
     success = DOSTRUE;
 
 some_error:
