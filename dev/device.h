@@ -1,5 +1,5 @@
 /*-
- *  $Id$
+ *  $Id: device.h,v 1.1 89/12/17 20:08:06 Rhialto Exp Locker: Rhialto $
  *
  *  This code is (C) Copyright 1989 by Olaf Seibert. All rights reserved. May
  *  not be used or copied without a licence.
@@ -8,7 +8,7 @@
 
 #define TRACKS(cyls)    ((cyls) * NUMHEADS)
 #define VERSION 	34L
-#define REVISION	4
+#define REVISION	5
 
 #asm
 VERSION     equ 	34
@@ -20,8 +20,8 @@ RTPRI	    equ 	0
 
 struct MessyDevice {
     struct MessyUnit *md_Unit[MD_NUMUNITS];
-    byte	   *Rawbuffer;
-    byte	    MfmDecode[128];
+    long	    md_System_2_04;
+    struct SignalSemaphore md_HardwareUse;
     long	    md_RawbufferSize;
     byte	   *md_Rawbuffer;
     byte	    md_MfmDecode[128];
@@ -42,19 +42,21 @@ struct MessyUnit {
     short	    mu_UnitNr;
     char	    mu_DiskState;
     ulong	    mu_ChangeNum;
-    short	    CurrentTrack;      /* Position of the head, and */
-    short	    CurrentSide;       /* what's in the track buffer */
-    short	    TrackChanged;
-    struct DiskResourceUnit DRUnit;
-    struct MsgPort  DiskReplyPort;
-    struct IOExtTD *DiskIOReq;
-    struct IOStdReq *DiskChangeReq;
-    struct Interrupt DiskChangeInt;
-    struct MinList  ChangeIntList;
-    short	    NumCyls;
-    byte	    TrackBuffer[MS_SPT_MAX * MS_BPS];	/* Must be word aligned */
-    word	    CrcBuffer[MS_SPT_MAX];
-    char	    SectorStatus[MS_SPT_MAX];
+    ulong	    mu_OpenFlags;
+    byte	    mu_DiskState;
+    short	    mu_CurrentTrack;	/* Position of the head, and */
+    short	    mu_CurrentSide;	/* what's in the track buffer */
+    short	    mu_CurrentSectors;	/* The current #sectors on this track */
+    short	    mu_TrackChanged;
+    short	    mu_ReadLen; 	/* 1 track + ~1 sector */
+    short	    mu_WriteLen;	/* ~1 track */
+    struct DiskResourceUnit mu_DRUnit;
+    struct MsgPort  mu_DiskReplyPort;
+    struct IOExtTD *mu_DiskIOReq;
+    short	    mu_NumCyls;
+    byte	    mu_TrackBuffer[MS_SPT_MAX * MS_BPS];   /* Must be word aligned */
+    word	    mu_CrcBuffer[MS_SPT_MAX];
+    char	    mu_SectorStatus[MS_SPT_MAX];
     byte	   *mu_TrackBuffer;
     char	    mu_SectorStatus[MS_SPT_MAX];
     word	    mu_CrcBuffer[MS_SPT_MAX];
@@ -69,13 +71,13 @@ struct MessyUnit {
 #define UNITF_WAKETASK	(1<<3)
 
 #define STATEF_PRESENT	(1<<1)
-/* Some constants related to #defines and structure offsets */
+/* Some constants related to #defines */
 #asm
-MSBPS		    equ 512
-MSBPScode	    equ 2		    ; 2log(MSBPS/128)
-LOG2_MSBPS	    equ 9
+MS_BPS		    equ 512
+MS_BPScode	    equ 2		    ; 2log(MSBPS/128)
+LOG2_MS_BPS	    equ 9
 MS_SPT		    equ 9
-MS_SPT_MAX	    equ 9
+MS_SPT_MAX	    equ 10
 #endasm
 
 #define SYS2_0		36	/* System version 2.0 */
@@ -188,7 +190,6 @@ extern int	CheckRequest();
 #ifndef READONLY
 extern int	InitWrite();
 extern void	FreeBuffer();
-extern int	TrackChanged;
 extern void	EncodeTrack();
 #endif
  */

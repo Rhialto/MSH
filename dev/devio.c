@@ -1,19 +1,23 @@
 /*-
- * $Id$
- * $Log$
+ * $Id: devio.c,v 1.2 90/01/23 00:41:39 Rhialto Exp Locker: Rhialto $
+ * $Log:	devio.c,v $
+ * Revision 1.2  90/01/23  00:41:39  Rhialto
+ * Remove C version of DecodeTrack.
  *
- *  DEVIO.C
+ * Revision 1.1  89/12/17  20:04:11  Rhialto
  *
- *  The messydisk.device code that does the real work.
+ * DEVIO.C
  *
- *  This code is (C) Copyright 1989 by Olaf Seibert. All rights reserved. May
- *  not be used or copied without a licence.
+ * The messydisk.device code that does the real work.
+ *
+ * This code is (C) Copyright 1989 by Olaf Seibert. All rights reserved. May
+ * not be used or copied without a licence.
 -*/
 
 #include "dev.h"
 #include "device.h"
 
-#undef DEBUG			/**/
+/*#undef DEBUG			/**/
 #ifdef DEBUG
 #   define	debug(x)  dbprintf x
 #else
@@ -25,6 +29,7 @@ void *CiaBResource;		/* And yet another! */
 
 void		Internal_Update();
 word		DataCRC();
+word		CalculateGapLength();
 
 /*-
  *  The high clock bit in this table is still 0, but it could become
@@ -49,13 +54,59 @@ byte		MfmEncode[16] = {
     0x4a, 0x49, 0x44, 0x45, 0x52, 0x51, 0x54, 0x55
 };
 
+#define SYNC	0x4489
+#define TLEN	12500	    /* In BYTES */
+#define RLEN	(TLEN+1324) /* 1 sector extra */
+#define WLEN	(TLEN+20)   /* 20 bytes more than the theoretical track size */
+
+#define INDEXGAP	60  /* All these values are in WORDS */
+
+#define IDGAP2		12  /* Sector header: 22 words */
+#define IDSYNC		 3
+#define IDMARK		 1
+#define IDDATA		 4
+#define IDCRC		 2
+#define IDLEN		(IDGAP2+IDSYNC+IDMARK+IDDATA+IDCRC)
+
+#define DATAGAP1	22  /* Sector itself: 552 words */
+#define DATAGAP2	12
+#define DATASYNC	 3
+#define DATAMARK	 1
+#define DATACRC 	 2
+#define DATAGAP3_9	80  /* for 9 or less sectors/track */
+#define DATAGAP3_10	40  /* for 10 sectors/track */
+#define DATALEN 	(DATAGAP1+DATAGAP2+DATASYNC+DATAMARK+MS_BPS+DATACRC)
+
+#define BLOCKLEN	(IDLEN+DATALEN)     /* Total: 574 words */
+
+#define TAILGAP 	50
+
 /* INDENT OFF */
 #asm
 
-; Some hardware locations:
+; Some hardware data:
 
 SYNC		equ $4489
-WLEN		equ 12500+20	; 2 miscrosecs/bit, 200 ms/track -> 100000 bits
+TLEN		equ 12500	; 2 miscrosecs/bit, 200 ms/track -> 100000 bits
+WLEN		equ TLEN+20
+
+;;;;
+;
+;   The following lengths are all in unencoded bytes (or encoded words)
+
+INDEXGAP	equ 60
+
+IDGAP2		equ 12
+IDSYNC		equ  3
+IDMARK		equ  1
+IDDATA		equ  4
+IDCRC		equ  2
+
+DATAGAP1	equ 22
+DATAGAP2	equ 12
+DATASYNC	equ  3
+DATAMARK	equ  1
+DATACRC 	equ  2
 
 custom		equ $DFF000
 
@@ -125,13 +176,8 @@ _DskBlkIntCode:
 
 #endasm
 
-#define SYNC		0x4489
-
 #define DSKDMAEN	(1<<15)
 #define DSKWRITE	(1<<14)
-
-#define RLEN	0x3600	/* 1 sector extra */
-#define WLEN	12520	/* 20 bytes more than the theoretical track size */
 
 void IndexIntCode(), DskBlkIntCode();
 
@@ -139,34 +185,34 @@ void IndexIntCode(), DskBlkIntCode();
 
 int
 HardwareIO(dev, unit, dskwrite)
-DEV *dev;
-register UNIT *unit;
-int dskwrite;
+DEV	       *dev;
+register UNIT  *unit;
+int		dskwrite;
 {
     struct {
 	struct Task *task;
 	ulong signal;
     } tasksig;
 
-    debug(("Disk buffer is at %lx\n", dev->Rawbuffer));
+    debug(("Disk buffer is at %lx\n", dev->md_Rawbuffer));
 
     tasksig.task = FindTask(NULL);
     tasksig.signal = 1L << unit->mu_DmaSignal;
 
-    unit->DRUnit.dru_Index.is_Data = (APTR) ((WLEN >> 1)|DSKDMAEN| dskwrite);
-    unit->DRUnit.dru_DiscBlock.is_Data = (APTR) &tasksig;
+    unit->mu_DRUnit.dru_Index.is_Data = (APTR) ((WLEN >> 1)|DSKDMAEN| dskwrite);
+    unit->mu_DRUnit.dru_DiscBlock.is_Data = (APTR) &tasksig;
 
     /* Clear signal bit */
     SetSignal(0L, tasksig.signal);
 
     /* Allocate drive and install index and block interrupts */
-    GetDrive(&unit->DRUnit);
+    GetDrive(&unit->mu_DRUnit);
 
     /* Select correct drive and side */
     ciab.ciaprb = 0xff & ~CIAF_DSKMOTOR;    /* See hardware manual p229 */
     ciab.ciaprb = 0xff & ~CIAF_DSKMOTOR
 		       & ~(CIAF_DSKSEL0 << unit->mu_UnitNr)
-		       & ~(unit->CurrentSide << CIAB_DSKSIDE);
+		       & ~(unit->mu_CurrentSide << CIAB_DSKSIDE);
 
     /* Set up disk parameters */
 
@@ -183,14 +229,14 @@ int dskwrite;
 	adk = ADKF_SETCLR|ADKF_MFMPREC|ADKF_FAST|ADKF_WORDSYNC;
 
 	/* Are we on the inner half ? */
-	if (unit->CurrentTrack > unit->NumCyls >> 1) {
+	if (unit->mu_CurrentTrack > unit->mu_NumCyls >> 1) {
 	    adk |= ADKF_PRECOMP0;
 	}
 	custom.adkcon = adk;
     }
 
     /* Set up disk buffer address */
-    custom.dskpt = (APTR) dev->Rawbuffer;
+    custom.dskpt = (APTR) dev->md_Rawbuffer;
 
     /* Enable disk DMA */
     custom.dmacon = DMAF_SETCLR | DMAF_MASTER | DMAF_DISK;
@@ -215,7 +261,7 @@ int dskwrite;
     FreeDrive();
 }
 
-#if 0
+#if 1
 #define ID_ADDRESS_MARK     0xFE
 #define MFM_ID		    0x5554
 #define DATA_ADDRESS_MARK   0xFB
@@ -255,20 +301,22 @@ byte DecodeByte();
 
 int
 DecodeTrack(dev, unit)
-DEV *dev;
-UNIT *unit;
+DEV	       *dev;
+UNIT	       *unit;
 {
-    register word *rawbuf = (word *)dev->Rawbuffer;
-    byte *rawend = (byte *)rawbuf + RLEN;
-    byte *trackbuf = unit->TrackBuffer;
-    byte *decode = dev->MfmDecode;
-    word *oldcrc = unit->CrcBuffer;
-    register byte *secptr;
-    word sector;
-    word numsecs;
-    register word numbytes;
+    register word  *rawbuf = (word *)dev->md_Rawbuffer; /*  a2 */
+    byte	   *rawend = (byte *)rawbuf + RLEN - (MS_BPS+2)*sizeof(word);
+    byte	   *trackbuf = unit->mu_TrackBuffer;
+    register byte  *decode = dev->md_MfmDecode; 	/*  a3 */
+    word	   *oldcrc = unit->mu_CrcBuffer;
+    register byte  *secptr;				/*  a4 */
+    long	    sector;
+    word	    numsecs;
+    register long   numbytes;				/*  d3 */
+    word	    maxsec;
 
-#define Len	((byte *)rawbuf - dev->Rawbuffer)
+#define Len	((byte *)rawbuf - dev->md_Rawbuffer)
+    maxsec = 0;
 
     for (numsecs = 0; numsecs < MS_SPT_MAX; numsecs++) {
 	/*
@@ -290,13 +338,13 @@ find_id:
 	}
 
 	sector = DecodeByte(decode, *rawbuf++);
-	if (sector != unit->CurrentTrack) {
-	    debug(("Track error?? %d\n", sector));
+	if (sector != unit->mu_CurrentTrack) {
+	    debug(("Track error?? %d\n", (int)sector));
 	    goto find_id;
 	}
 	sector = DecodeByte(decode, *rawbuf++);
-	if (sector != unit->CurrentSide) {
-	    debug(("Side error?? %d\n", sector));
+	if (sector != unit->mu_CurrentSide) {
+	    debug(("Side error?? %d\n", (int)sector));
 	    goto find_id;
 	}
 	if (rawbuf >= rawend) {
@@ -304,11 +352,13 @@ find_id:
 	    goto end;
 	}
 	sector = DecodeByte(decode, *rawbuf++);
-	debug(("#%d %4x, ", sector, Len-0xC));
+	debug(("#%2d %4x, ", (int)sector, Len-0xC));
 	if (sector > MS_SPT_MAX) {
 	    debug(("Bogus sector number) "));
 	    goto find_id;
 	}
+	if (sector > maxsec)
+	    maxsec = sector;
 	sector--;		/* Normalize sector number */
 
 	/*
@@ -330,23 +380,37 @@ find_data:
 	}
 	debug(("%4x, ", Len-8));
 
+	if (rawbuf >= rawend) {
+	    debug(("short data, EOT %4x\n", Len));
+	    goto end;
+	}
 	secptr = trackbuf + MS_BPS * sector;
 	for (numbytes = 0; numbytes < MS_BPS; numbytes++) {
 	    *secptr++ = DecodeByte(decode, *rawbuf++);
 	}
-	if (rawbuf >= rawend) {
-		debug(("data end, EOT %4x\n", Len));
-	    goto end;
-	}
 	debug(("%4x\n", Len));
 	oldcrc[sector]	= DecodeByte(decode, *rawbuf++) << 8;
 	oldcrc[sector] |= DecodeByte(decode, *rawbuf++);
-	unit->SectorStatus[sector] = unit->mu_InitSectorStatus;
+	unit->mu_SectorStatus[sector] = unit->mu_InitSectorStatus;
     }
 
 end:
     if (numsecs == 0)
 	return TDERR_TooFewSecs;
+
+#ifndef READONLY
+    /*
+     * If we read the very first track, we adjust our notion about the
+     * number of sectors on each track. This is the only track we can
+     * accurately find if this number is unknown. Let's hope that the first
+     * user of this disk starts reading it here.
+     */
+    if (unit->mu_CurrentTrack == 0 && unit->mu_CurrentSide == 0) {
+	unit->mu_SectorsPerTrack = maxsec;
+    }
+    unit->mu_CurrentSectors = maxsec;
+    debug(("%d sectors\n", unit->mu_SectorsPerTrack));
+#endif
 
     return 0;
 
@@ -356,18 +420,19 @@ end:
 
 int
 DecodeTrack(dev, unit)
-DEV *dev;
-UNIT *unit;
+DEV	       *dev;
+UNIT	       *unit;
 {
-    register word *rawbuf = (word *)dev->Rawbuffer;     /*  a2 */
-    byte *rawend = (byte *)rawbuf + RLEN;
-    byte *trackbuf = unit->TrackBuffer;
-    register byte *decode = dev->MfmDecode;		/*  a3 */
-    word *oldcrc = unit->CrcBuffer;
-    register byte *secptr;				/*  a4 */
-    long sector;
-    word numsecs;
-    register long numbytes;				/*  d3 */
+    register word  *rawbuf = (word *)dev->md_Rawbuffer; /*  a2 */
+    byte	   *rawend = (byte *)rawbuf + RLEN - (MS_BPS+2)*sizeof(word);
+    byte	   *trackbuf = unit->mu_TrackBuffer;
+    register byte  *decode = dev->md_MfmDecode; 	/*  a3 */
+    word	   *oldcrc = unit->mu_CrcBuffer;
+    register byte  *secptr;				/*  a4 */
+    long	    sector;
+    word	    numsecs;
+    register long   numbytes;				/*  d3 */
+    word	    maxsec;
 
 #asm
 
@@ -384,8 +449,10 @@ trackbuf    set     -8
 oldcrc	    set     -12
 sector	    set     -16
 numsecs     set     -18
+maxsec	    set     -20
 
-	move.w	#0,numsecs(a5)
+	move.w	#0,numsecs(a5)      ; no sectors found yet
+	move.w	#0,maxsec(a5)       ; and no highest sector number
 
 ;;;;	First we will try to find a sector id.
 find_id:
@@ -411,6 +478,10 @@ fid_endsync:
 	bsr	DecodeByte	    ; sector #
 	cmp.w	#MS_SPT_MAX,d0	    ; sector number too large?
 	bgt	find_id
+	cmp.w	maxsec(a5),d0       ; what is the highest sector number?
+	ble	nomax
+	move.w	d0,maxsec(a5)       ; record the highest sector number
+nomax:
 	subq.w	#1,d0		    ; normalize sector number
 	move.l	d0,sector(a5)
 
@@ -431,13 +502,16 @@ fda_endsync:
 	cmp.w	#MFM_DATA,(rawbuf)+ ; do we really have a data block?
 	bne	find_id
 
+	cmpa.l	rawend(a5),rawbuf   ; will we still be inside the mfm data?
+	bge	return
+
 	move.l	sector(a5),d0       ; calculate the location to
-	moveq.l #LOG2_MSBPS,d1	    ;  store this sector.
+	moveq.l #LOG2_MS_BPS,d1     ;  store this sector.
 	asl.l	d1,d0
 	move.l	trackbuf(a5),secptr
 	add.l	d0,secptr
 
-	move.w	#MSBPS-1,numbytes
+	move.w	#MS_BPS-1,numbytes
 data_copy:
 	bsr	DecodeByte
 	move.b	d0,(secptr)+
@@ -453,11 +527,8 @@ data_copy:
 	bsr	DecodeByte	    ; and low byte of crc
 	move.b	d0,(a0)+
 
-	cmpa.l	rawend(a5),rawbuf   ; are we still inside the mfm data?
-	bge	return
-
 #endasm
-	unit->SectorStatus[sector] = unit->mu_InitSectorStatus;
+	unit->mu_SectorStatus[sector] = unit->mu_InitSectorStatus;
 #asm
 	addq.w	#1,numsecs(a5)
 	cmp.w	#MS_SPT_MAX,numsecs(a5)
@@ -467,6 +538,20 @@ return:
 
     if (numsecs == 0)
 	return TDERR_TooFewSecs;
+
+#ifndef READONLY
+    /*
+     * If we read the very first track, we adjust our notion about the
+     * number of sectors on each track. This is the only track we can
+     * accurately find if this number is unknown. Let's hope that the first
+     * user of this disk starts reading it here.
+     */
+    if (unit->mu_CurrentTrack == 0 && unit->mu_CurrentSide == 0) {
+	unit->mu_SectorsPerTrack = maxsec;
+    }
+    unit->mu_CurrentSectors = maxsec;
+    debug(("%d sectors\n", unit->mu_SectorsPerTrack));
+#endif
 
     return 0;
 
@@ -491,7 +576,7 @@ DecodeByte:
 	rts
 
 #endasm
-#endif
+#endif	/* using assembly */
 
 /*
  * Initialize the ibm mfm decoding table
@@ -514,6 +599,7 @@ register byte  *decode;
     } while (++i < 0x10);
 }
 
+#ifdef notdef
 long
 MyDoIO(req)
 register struct IORequest *req;
@@ -522,6 +608,7 @@ register struct IORequest *req;
     BeginIO(req);
     return WaitIO(req);
 }
+#endif
 
 /*
  * Switch the drive motor on. Return previous state. Don't use this when
@@ -566,13 +653,13 @@ UNIT	       *unit;
 struct IOStdReq *ioreq;
 int		cylinder;
 {
-    register struct IOExtTD *tdreq = unit->DiskIOReq;
+    register struct IOExtTD *tdreq = unit->mu_DiskIOReq;
 
     debug(("TDSeek %d\n", cylinder));
 
     tdreq->iotd_Req.io_Command = TD_SEEK;
     tdreq->iotd_Req.io_Offset = cylinder * (TD_SECTOR * NUMSECS * NUMHEADS);
-    if ((ioreq->io_Flags & IOMDF_40TRACKS) && (unit->NumCyls == 80))
+    if ((ioreq->io_Flags & IOMDF_40TRACKS) && (unit->mu_NumCyls == 80))
 	tdreq->iotd_Req.io_Offset *= 2;
     DoIO(tdreq);
 
@@ -622,21 +709,21 @@ int		track;
     dev = (DEV *) ioreq->io_Device;
     unit = (UNIT *) ioreq->io_Unit;
 
-    if (track != unit->CurrentTrack || side != unit->CurrentSide) {
+    if (track != unit->mu_CurrentTrack || side != unit->mu_CurrentSide) {
 #ifndef READONLY
 	Internal_Update(ioreq, unit);
 #endif
 	for (i = MS_SPT_MAX-1; i >= 0; i--) {
-	    unit->SectorStatus[i] = TDERR_NoSecHdr;
+	    unit->mu_SectorStatus[i] = TDERR_NoSecHdr;
 	}
 
-	TDMotorOn(unit->DiskIOReq);
+	TDMotorOn(unit->mu_DiskIOReq);
 	if (TDSeek(unit, ioreq, track)) {
 	    debug(("Seek error\n"));
 	    return ioreq->io_Error = IOERR_BADLENGTH;
 	}
-	unit->CurrentTrack = track;
-	unit->CurrentSide = side;
+	unit->mu_CurrentTrack = track;
+	unit->mu_CurrentSide = side;
 	ObtainSemaphore(&dev->md_HardwareUse);
 	HardwareIO(dev, unit, 0);
 	i = DecodeTrack(dev, unit);
@@ -644,7 +731,7 @@ int		track;
 	debug(("DecodeTrack returns %d\n", i));
 
 	if (i != 0) {
-	    unit->CurrentTrack = -1;
+	    unit->mu_CurrentTrack = -1;
 	    return i;
 	}
     }
@@ -697,7 +784,7 @@ error:
      * ioreq->iotd_Req.io_Error = IOERR_BADLENGTH; goto error; }
      */
 
-    tdreq = unit->DiskIOReq;
+    tdreq = unit->mu_DiskIOReq;
 
     if (unit->mu_DiskState == STATEF_UNKNOWN) {
 	tdreq->iotd_Req.io_Command = TD_PROTSTATUS;
@@ -734,7 +821,7 @@ error:
 void
 CMD_Read(ioreq, unit)
 register struct IOExtTD *ioreq;
-UNIT	       *unit;
+register UNIT  *unit;
 {
     int 	    side;
     int 	    cylinder;
@@ -749,12 +836,13 @@ UNIT	       *unit;
     userbuf = (byte *) ioreq->iotd_Req.io_Data;
     length = ioreq->iotd_Req.io_Length / MS_BPS;	/* Sector count */
     offset = ioreq->iotd_Req.io_Offset / MS_BPS;	/* Sector number */
-    debug(("userbuf %08lx off %ld len %ld\n", userbuf, offset, length));
+    debug(("userbuf %08lx off %ld len %ld ", userbuf, offset, length));
 
-    cylinder = offset / MS_SPT;
+    cylinder = offset / unit->mu_SectorsPerTrack;
     side = cylinder % MS_NSIDES;
     cylinder /= MS_NSIDES;
-    sector = offset % MS_SPT;	    /* 0...8 */
+    sector = offset % unit->mu_SectorsPerTrack;       /* 0..8 or 9 */
+    debug(("Tr=%d Si=%d Se=%d\n", cylinder, side, sector));
 
     ioreq->iotd_Req.io_Actual = 0;
 
@@ -762,7 +850,7 @@ UNIT	       *unit;
 	goto end;
 
     retrycount = 0;
-    diskbuf = unit->TrackBuffer + MS_BPS * sector;
+    diskbuf = unit->mu_TrackBuffer + MS_BPS * sector;
 gettrack:
     GetTrack(ioreq, side, cylinder);
 
@@ -770,21 +858,22 @@ gettrack:
 	/*
 	 * Have we ever checked this CRC?
 	 */
-	if (unit->SectorStatus[sector] == CRC_UNCHECKED) {
+	if (unit->mu_SectorStatus[sector] == CRC_UNCHECKED) {
 	    /*
 	     * Do it now. If it mismatches, remember that for later.
 	     */
-	    if (unit->CrcBuffer[sector] != DataCRC(diskbuf)) {
-		debug(("%d: %04x, now %04x\n", sector, unit->CrcBuffer[sector], DataCRC(diskbuf)));
-		unit->SectorStatus[sector] = TDERR_BadSecSum;
+	    if (unit->mu_CrcBuffer[sector] != DataCRC(diskbuf)) {
+		debug(("%d: %04x, now %04x\n", sector, unit->mu_CrcBuffer[sector], DataCRC(diskbuf)));
+		unit->mu_SectorStatus[sector] = TDERR_BadSecSum;
 	    } else
-		unit->SectorStatus[sector] = TDERR_NoError;
+		unit->mu_SectorStatus[sector] = TDERR_NoError;
 	}
-	if (unit->SectorStatus[sector] > TDERR_NoError) {
+	if (unit->mu_SectorStatus[sector] > TDERR_NoError) {
 	    if (++retrycount < 3) {
+		unit->mu_CurrentTrack = -1;
 		goto gettrack;
 	    }
-	    ioreq->iotd_Req.io_Error = unit->SectorStatus[sector];
+	    ioreq->iotd_Req.io_Error = unit->mu_SectorStatus[sector];
 	    goto end;	    /* Don't use this sector anymore... */
 	}
 	retrycount = 0;
@@ -794,12 +883,12 @@ gettrack:
 	    break;
 	userbuf += MS_BPS;
 	diskbuf += MS_BPS;
-	if (++sector >= MS_SPT) {
+	if (++sector >= unit->mu_SectorsPerTrack) {
 	    sector = 0;
-	    diskbuf = unit->TrackBuffer;
+	    diskbuf = unit->mu_TrackBuffer;
 	    if (++side >= MS_NSIDES) {
 		side = 0;
-		if (++cylinder >= unit->NumCyls) {
+		if (++cylinder >= unit->mu_NumCyls) {
 		    /* ioreq->iotd_Req.io_Error = IOERR_BADLENGTH; */
 		    goto end;
 		}
@@ -839,8 +928,8 @@ CMD_Reset(ioreq, unit)
 struct IOExtTD *ioreq;
 UNIT	       *unit;
 {
-    unit->CurrentSide = -1;
-    unit->TrackCha =edRe 0;
+    unit->mu_CurrentSide = -1;
+    unit->mu_TrackChanged = 0;
     TermIO(ioreq);
 }
 
@@ -850,7 +939,7 @@ struct IOExtTD *ioreq;
 register UNIT  *unit;
 {
 #ifndef READONLY
-    if (unit->TrackChanged && !CheckRequest(ioreq, unit))
+    if (unit->mu_TrackChanged && !CheckRequest(ioreq, unit))
 	Internal_Update(ioreq, unit);
 #endif
     TermIO(ioreq);
@@ -862,8 +951,8 @@ struct IOExtTD *ioreq;
 UNIT	       *unit;
 {
     if (!CheckChanged(ioreq, unit)) {
-	unit->CurrentSide = -1;
-	unit->TrackChanged = 0;
+	unit->mu_CurrentSide = -1;
+	unit->mu_TrackChanged = 0;
     }
     TermIO(ioreq);
 }
@@ -876,7 +965,8 @@ UNIT	       *unit;
     if (!CheckChanged(ioreq, unit)) {
 	word		cylinder;
 
-	cylinder = ioreq->iotd_Req.io_Offset / (MS_BPS * MS_SPT * MS_NSIDES);
+	cylinder = (ioreq->iotd_Req.io_Offset / unit->mu_SectorsPerTrack) /
+		    (MS_BPS * MS_NSIDES);
 	TDSeek(unit, ioreq, cylinder);
     }
     TermIO(ioreq);
@@ -893,7 +983,7 @@ UNIT	       *unit;
 {
     register struct IOStdReq *req;
 
-    req = &unit->DiskIOReq->iotd_Req;
+    req = &unit->mu_DiskIOReq->iotd_Req;
     req->io_Command = TD_CHANGENUM;
     DoIO(req);
 
@@ -917,7 +1007,7 @@ register DEV   *dev;
 	goto abort;
 #endif
 
-    InitDecoding(dev->MfmDecode);
+    InitDecoding(dev->md_MfmDecode);
     InitSemaphore(&dev->md_HardwareUse);
     return 1;			/* Initializing succeeded */
 
@@ -935,6 +1025,22 @@ DEV	       *dev;
     return 0;			/* Now unitialized */
 }
 
+#ifndef READONLY
+/*
+ * Calculate the length between the sectors, given the length of the track
+ * and the number of sectors that must fit on it.
+ * The proper formula would be
+ * (((TLEN/2) - INDEXGAP - TAILGAP) / unit->mu_SectorsPerTrack) - BLOCKLEN;
+ */
+
+word
+CalculateGapLength(sectors)
+int		sectors;
+{
+    return (sectors == 10) ? DATAGAP3_10 : DATAGAP3_9;
+}
+#endif
+
 UNIT	       *
 UnitInit(dev, UnitNr)
 DEV	       *dev;
@@ -949,40 +1055,41 @@ ulong		UnitNr;
     if (unit == NULL)
 	return NULL;
 
-    if (!(tdreq = CreateExtIO(&unit->DiskReplyPort, (long) sizeof (*tdreq)))) {
+    if (!(tdreq = CreateExtIO(&unit->mu_DiskReplyPort, (long) sizeof (*tdreq)))) {
 	goto abort;
     }
-    unit->DiskIOReq = tdreq;
+    unit->mu_DiskIOReq = tdreq;
     if (OpenDevice(TD_NAME, UnitNr, tdreq, TDF_ALLOW_NON_3_5)) {
 	tdreq->iotd_Req.io_Device = NULL;
 	goto abort;
     }
-    dcr = (void *) CreateExtIO(&unit->DiskReplyPort, (long) sizeof (*dcr));
+    dcr = (void *) CreateExtIO(&unit->mu_DiskReplyPort, (long) sizeof (*dcr));
     if (dcr) {
-	unit->DiskChangeReq = dcr;
-	unit->DiskChangeInt.is_Node.ln_Pri = 32;
-	unit->DiskChangeInt.is_Data = (APTR) unit;
-	unit->DiskChangeInt.is_Code = DiskChangeHandler;
+	unit->mu_DiskChangeReq = dcr;
+	unit->mu_DiskChangeInt.is_Node.ln_Pri = 32;
+	unit->mu_DiskChangeInt.is_Data = (APTR) unit;
+	unit->mu_DiskChangeInt.is_Code = DiskChangeHandler;
 	/* Clone IO request part */
 	dcr->io_Device = tdreq->iotd_Req.io_Device;
 	dcr->io_Unit = tdreq->iotd_Req.io_Unit;
 	dcr->io_Command = TD_ADDCHANGEINT;
-	dcr->io_Data = (void *) &unit->DiskChangeInt;
+	dcr->io_Data = (void *) &unit->mu_DiskChangeInt;
 	SendIO(dcr);
     }
-    NewList(&unit->ChangeIntList);
+    NewList(&unit->mu_ChangeIntList);
 
-    unit->NumCyls = TDGetNumCyls(tdreq);
+    unit->mu_NumCyls = TDGetNumCyls(tdreq);
     unit->mu_UnitNr = UnitNr;
     unit->mu_DiskState = STATEF_UNKNOWN;
-    unit->TrackChanged = 0;
-    unit->CurrentSide = -1;
+    unit->mu_TrackChanged = 0;
+    unit->mu_CurrentSide = -1;
     unit->mu_InitSectorStatus = CRC_UNCHECKED;
+    unit->mu_SectorsPerTrack = MS_SPT;
 
-    unit->DRUnit.dru_Message.mn_ReplyPort = &unit->DiskReplyPort;
-    unit->DRUnit.dru_Index.is_Node.ln_Pri = 32; /* high pri for index int */
-    unit->DRUnit.dru_Index.is_Code = IndexIntCode;
-    unit->DRUnit.dru_DiscBlock.is_Code = DskBlkIntCode;
+    unit->mu_DRUnit.dru_Message.mn_ReplyPort = &unit->mu_DiskReplyPort;
+    unit->mu_DRUnit.dru_Index.is_Node.ln_Pri = 32; /* high pri for index int */
+    unit->mu_DRUnit.dru_Index.is_Code = IndexIntCode;
+    unit->mu_DRUnit.dru_DiscBlock.is_Code = DskBlkIntCode;
 
     /*
      * Now create the Unit task. Remember that it won't start running
@@ -996,9 +1103,9 @@ ulong		UnitNr;
     unit->mu_Port.mp_SigTask = task;
     NewList(&unit->mu_Port.mp_MsgList);
 
-    unit->DiskReplyPort.mp_Flags = PA_IGNORE;
-    unit->DiskReplyPort.mp_SigTask = task;
-    NewList(&unit->DiskReplyPort.mp_MsgList);
+    unit->mu_DiskReplyPort.mp_Flags = PA_IGNORE;
+    unit->mu_DiskReplyPort.mp_SigTask = task;
+    NewList(&unit->mu_DiskReplyPort.mp_MsgList);
     Permit();
 
     return unit;
@@ -1015,7 +1122,7 @@ DEV	       *dev;
 register UNIT  *unit;
 {
 #ifndef READONLY
-    if (ioreq && unit->TrackChanged)
+    if (ioreq && unit->mu_TrackChanged)
 	Internal_Update(ioreq, unit);
 #endif
 
@@ -1039,28 +1146,28 @@ register UNIT  *unit;
 	ReleaseSemaphore(&PortUse);
 #endif
     }
-    if (unit->DiskChRegekRq) {
+    if (unit->mu_DiskChangeReq) {
 #if 0				/* V1.2 and V1.3 have a broken
 				 * TD_REMCHANGEINT */
-	register struct IOExtTD *req = unit->DiskIOReq;
+	register struct IOExtTD *req = unit->mu_DiskIOReq;
 
 	req->iotd_Req.io_Command = TD_REMCHANGEINT;
-	req->iotd_Req.io_Data = (void *) unit->DiskChangeReq;
+	req->iotd_Req.io_Data = (void *) unit->mu_DiskChangeReq;
 	DoIO(req);
-	WaitIO(unit->DiskChangeReq);
+	WaitIO(unit->mu_DiskChangeReq);
 #else
-	Forbid();
-	Remove(unit->DiskChangeReq);
-	Permit();
+	Disable();
+	Remove(unit->mu_DiskChangeReq);
+	Enable();
 #endif
-	DeleteExtIO(unit->DiskChangeReq);
-	unit->DiskChangeReq = NULL;
+	DeleteExtIO(unit->mu_DiskChangeReq);
+	unit->mu_DiskChangeReq = NULL;
     }
-    if (unit->DiskIOReq) {
-	if (unit->DiskIOReq->iotd_Req.io_Device)
-	    CloseDevice(unit->DiskIOReq);
-	DeleteExtIO(unit->DiskIOReq);
-	unit->DiskIOReq = NULL;
+    if (unit->mu_DiskIOReq) {
+	if (unit->mu_DiskIOReq->iotd_Req.io_Device)
+	    CloseDevice(unit->mu_DiskIOReq);
+	DeleteExtIO(unit->mu_DiskIOReq);
+	unit->mu_DiskIOReq = NULL;
     }
     FreeMem(unit, (long) sizeof (UNIT));
 
@@ -1084,21 +1191,21 @@ _RVOGiveUnit	equ	lib_base-(3*lib_vectsize)
 _RVOGetUnitID	equ	lib_base-(4*lib_vectsize)
 
 ;_AllocUnit:
-;		 move.l  _DRResource,a6
-;		 move.l  4(sp),d0
-;		 jmp	 _RVOAllocUnit(a6)
+;		move.l	_DRResource,a6
+;		move.l	4(sp),d0
+;		jmp	_RVOAllocUnit(a6)
 ;_FreeUnit:
-;		 move.l  _DRResource,a6
-;		 move.l  4(sp),d0
-;		 jmp	 _RVOFreeUnit(a6)
+;		move.l	_DRResource,a6
+;		move.l	4(sp),d0
+;		jmp	_RVOFreeUnit(a6)
 _GetUnit:
 		move.l	_DRResource,a6
 		move.l	4(sp),a1
 		jmp	_RVOGetUnit(a6)
 ;_GetUnitID:
-;		 move.l  _DRResource,a6
-;		 move.l  4(sp),d0
-;		 jmp	 _RVOGetUnitID(a6)
+;		move.l	_DRResource,a6
+;		move.l	4(sp),d0
+;		jmp	_RVOGetUnitID(a6)
 _GiveUnit:
 		move.l	_DRResource,a6
 		jmp	_RVOGiveUnit(a6)
@@ -1125,7 +1232,7 @@ register struct IOStdReq *ioreq;
 
     unit = (UNIT *) ioreq->io_Unit;
     Disable();
-    AddTail(&unit->ChangeIntList, ioreq);
+    AddTail(&unit->mu_ChangeIntList, ioreq);
     Enable();
     ioreq->io_Flags &= ~IOF_QUICK;	/* So we call ReplyMsg instead of
 					 * TermIO */
@@ -1161,7 +1268,8 @@ DiskChangeHandler()
     /* INDENT ON */
     unit->mu_DiskState = STATEF_UNKNOWN;
     unit->mu_ChangeNum++;
-    for (ioreq = (struct IOStdReq *) unit->ChangeIntList.mlh_Head;
+    unit->mu_SectorsPerTrack = MS_SPT;
+    for (ioreq = (struct IOStdReq *) unit->mu_ChangeIntList.mlh_Head;
 	 next = (struct IOStdReq *) ioreq->io_Message.mn_Node.ln_Succ;
 	 ioreq = next) {
 	Cause((struct Interrupt *) ioreq->io_Data);
@@ -1180,7 +1288,7 @@ DiskChangeHandler()
  * Used with permission.
  */
 
-/* TrackChanged is a flag. When a sector has changed it changes to 1 */
+/* mu_TrackChanged is a flag. When a sector has changed it changes to 1 */
 
 /*
  * InitWrite() has to be called once at startup. It allocates the space
@@ -1192,7 +1300,8 @@ int
 InitWrite(dev)
 DEV	       *dev;
 {
-    if ((dev->Rawbuffer = AllocMem((long)RLEN+2, MEMF_CHIP | MEMF_PUBLIC)) == 0)
+    if ((dev->md_Rawbuffer =
+	    AllocMem((long)RLEN+2, MEMF_CHIP | MEMF_PUBLIC)) == 0)
 	return 0;
 
     return 1;
@@ -1207,8 +1316,8 @@ void
 FreeBuffer(dev)
 DEV	       *dev;
 {
-    if (dev->Rawbuffer) {       /* OIS */
-	FreeMem(dev->Rawbuffer, (long) RLEN + 2);
+    if (dev->md_Rawbuffer) {    /* OIS */
+	FreeMem(dev->md_Rawbuffer, (long) RLEN + 2);
     }
 }
 
@@ -1219,7 +1328,7 @@ DEV	       *dev;
  * changes we don't have to bother about actually writing any data to the
  * disk. GetSTS has to be changed in the following way:
  *
- * if (track != CurrentTrack || side != CurrentSide) { Internal_Update(); for
+ * if (track != mu_CurrentTrack || side != mu_CurrentSide) { Internal_Update(); for
  * (i = 0; i < MS_SPT; i++) ..... etc.
  */
 
@@ -1234,17 +1343,20 @@ UNIT	       *unit;
     byte	   *userbuf;
     long	    length;
     long	    offset;
+    word	    spt;
 
     debug(("CMD_Write "));
     userbuf = (byte *) ioreq->iotd_Req.io_Data;
     length = ioreq->iotd_Req.io_Length / MS_BPS;	/* Sector count */
     offset = ioreq->iotd_Req.io_Offset / MS_BPS;	/* Sector number */
-    debug(("userbuf %08lx off %ld len %ld\n", userbuf, offset, length));
+    debug(("userbuf %08lx off %ld len %ld ", userbuf, offset, length));
 
-    cylinder = offset / MS_SPT;
+    spt = unit->mu_SectorsPerTrack;
+    cylinder = offset / spt;
     side = cylinder % MS_NSIDES;
     cylinder /= MS_NSIDES;
-    sector = offset % MS_SPT;
+    sector = offset % spt;
+    debug(("T=%d Si=%d Se=%d\n", cylinder, side, sector));
 
     ioreq->iotd_Req.io_Actual = 0;
 
@@ -1253,9 +1365,9 @@ UNIT	       *unit;
 
     GetTrack(ioreq, side, cylinder);
     for (;;) {
-	CopyMem(userbuf, unit->TrackBuffer + MS_BPS * sector, (long) MS_BPS);
-	unit->TrackChanged = 1;
-	unit->SectorStatus[sector] = CRC_CHANGED;
+	CopyMem(userbuf, unit->mu_TrackBuffer + MS_BPS * sector, (long) MS_BPS);
+	unit->mu_TrackChanged = 1;
+	unit->mu_SectorStatus[sector] = CRC_CHANGED;
 	ioreq->iotd_Req.io_Actual += MS_BPS;
 	if (--length <= 0)
 	    break;
@@ -1263,11 +1375,11 @@ UNIT	       *unit;
 	/*
 	 * Get next sequential sector/side/track
 	 */
-	if (++sector >= MS_SPT) {
+	if (++sector >= spt) {
 	    sector = 0;
 	    if (++side >= MS_NSIDES) {
 		side = 0;
-		if (++cylinder >= unit->NumCyls)
+		if (++cylinder >= unit->mu_NumCyls)
 		    goto end;
 	    }
 	    GetTrack(ioreq, side, cylinder);
@@ -1294,7 +1406,7 @@ register UNIT  *unit;
 {
     debug(("Internal_Update "));
     /* did we have a changed sector at all	 */
-    if (unit->TrackChanged != 0) {
+    if (unit->mu_TrackChanged != 0) {
 	debug(("needs to write "));
 
 	/*
@@ -1304,49 +1416,37 @@ register UNIT  *unit;
 	{
 	    register int i;
 
-	    for (i = MS_SPT_MAX - 1; i >= 0; i--) {
-		if (unit->SectorStatus[i] == CRC_CHANGED) {
-		    unit->CrcBuffer[i] = DataCRC(unit->TrackBuffer + i * MS_BPS);
-		    debug(("%d: %04x\n", i, unit->CrcBuffer[i]));
+	    for (i = unit->mu_CurrentSectors - 1; i >= 0; i--) {
+		if (unit->mu_SectorStatus[i] == CRC_CHANGED) {
+		    unit->mu_CrcBuffer[i] = DataCRC(unit->mu_TrackBuffer + i * MS_BPS);
+		    debug(("%d: %04x\n", i, unit->mu_CrcBuffer[i]));
 		}
 	    }
 	}
 	{
 	    DEV 	   *dev;
 	    register struct IOExtTD *tdreq;
+	    word	    SectorGap;
 
 	    dev = (DEV *) ioreq->iotd_Req.io_Device;
-	    tdreq = unit->DiskIOReq;
+	    tdreq = unit->mu_DiskIOReq;
+	    SectorGap = CalculateGapLength(unit->mu_CurrentSectors);
 
 	    ObtainSemaphore(&dev->md_HardwareUse);
-	    EncodeTrack(unit->TrackBuffer, dev->Rawbuffer, unit->CrcBuffer,
-			unit->CurrentTrack, unit->CurrentSide);
-	    /*
-	     * For now I use RAWWRITE, should be replaced by hardware disk DMA
-	     * stuff
-	     */
+	    EncodeTrack(unit->mu_TrackBuffer, dev->md_Rawbuffer, unit->mu_CrcBuffer,
+			unit->mu_CurrentTrack, unit->mu_CurrentSide,
+			SectorGap, unit->mu_CurrentSectors);
 
-	    /* tdreq->iotd_Req.io_Command = TD_RAWWRITE;
-	    tdreq->iotd_Req.io_Offset = unit->CurrentTrack * NUMHEADS +
-		unit->CurrentSide;
-	    if ((ioreq->iotd_Req.io_Flags & IOMDF_40TRACKS) && unit->NumCyls == 80)
-		tdreq->iotd_Req.io_Offset *= 2;
-	    tdreq->iotd_Req.io_Data = (void *) dev->Rawbuffer;
-	    tdreq->iotd_Req.io_Length = WLEN;
-	    tdreq->iotd_Req.io_Flags = IOTDF_INDEXSYNC;
-	    MyDoIO(tdreq);
-	    debug(("RAWWRITE: %d ", (int) tdreq->iotd_Req.io_Error));
-	    if (tdreq->iotd_Req.io_Error == IOERR_BADLENGTH) */ {
-		TDMotorOn(tdreq);
-		if (TDSeek(unit, ioreq, unit->CurrentTrack)) {
-		    debug(("Seek error\n"));
-		    ioreq->iotd_Req.io_Error = TDERR_SeekError;
-		    goto end;
-		}
-		HardwareIO(dev, unit, DSKWRITE);
+	    TDMotorOn(tdreq);
+	    if (TDSeek(unit, ioreq, unit->mu_CurrentTrack)) {
+		debug(("Seek error\n"));
+		ioreq->iotd_Req.io_Error = TDERR_SeekError;
+		goto end;
 	    }
+	    HardwareIO(dev, unit, DSKWRITE);
+
 	    ReleaseSemaphore(&dev->md_HardwareUse);
-	    unit->TrackChanged = 0;
+	    unit->mu_TrackChanged = 0;
 	}
     }
 end:
@@ -1362,31 +1462,65 @@ TD_Format(ioreq, unit)
 register struct IOExtTD *ioreq;
 UNIT	       *unit;
 {
-    register struct IOExtTD *tdreq = unit->DiskIOReq;
+    register struct IOExtTD *tdreq = unit->mu_DiskIOReq;
     DEV 	   *dev;
     short	    side;
     int 	    cylinder;
     byte	   *userbuf;
     int 	    length;
+    word	    spt;
+    word	    gaplen;
 
     debug(("CMD_Format "));
+
+    if (CheckRequest(ioreq, unit))
+	goto end;
+
     userbuf = (byte *) ioreq->iotd_Req.io_Data;
-    length = ioreq->iotd_Req.io_Length / (MS_BPS * MS_SPT);     /* Track count */
-    cylinder = ioreq->iotd_Req.io_Offset / (MS_BPS * MS_SPT);   /* Track number */
+    length = ioreq->iotd_Req.io_Length / MS_BPS;	    /* Sector count */
+    cylinder = ioreq->iotd_Req.io_Offset / MS_BPS;	    /* Sector number */
+    /*
+     * Now try to guess the number of sectors the user wants per track.
+     * 40 sectors is the first ambuiguous length.
+     */
+    if (length < 40) {
+	if (length > 0) {
+	    for (spt = 8; spt <= MS_SPT_MAX; spt++) {
+		if ((length % spt) == 0)
+		    goto found_spt;
+	    }
+	}
+	/*
+	 * Not 8, 16, 24, 32, 9, 18, 27, 36, 10, 20, or 30? That is an error.
+	 */
+	ioreq->iotd_Req.io_Error = IOERR_BADLENGTH;
+	goto end;
+    } else  /* assume previous number */
+	spt = unit->mu_SectorsPerTrack;
+
+found_spt:
+    gaplen = CalculateGapLength(spt);
+
+    /*
+     * Assume the whole disk will have this layout.
+     */
+    unit->mu_SectorsPerTrack = spt;
+
+    length /= spt;
+    cylinder /= spt;
+
     side = cylinder % MS_NSIDES;
     cylinder /= MS_NSIDES;
     debug(("userbuf %08lx cylinder %d len %d\n", userbuf, cylinder, length));
 
     ioreq->iotd_Req.io_Actual = 0;
 
-    if (CheckRequest(ioreq, unit))
-	goto end;
-
     /*
      * Write out the current track if we are not going to overwrite it.
      * After the format operation, the buffer is invalidated.
      */
-    if (cylinder <= unit->CurrentTrack && unit->CurrentTrack < cylinder + length)
+    if (cylinder <= unit->mu_CurrentTrack &&
+	unit->mu_CurrentTrack < cylinder + length)
 	Internal_Update(ioreq, unit);
 
     dev = (DEV *) ioreq->iotd_Req.io_Device;
@@ -1395,80 +1529,44 @@ UNIT	       *unit;
 	{
 	    register int i;
 
-	    for (i = MS_SPT_MAX - 1; i >= 0; i--) {
-		unit->CrcBuffer[i] = DataCRC(userbuf + i * MS_BPS);
-		debug(("%d: %04x\n", i, unit->CrcBuffer[i]));
+	    for (i = spt - 1; i >= 0; i--) {
+		unit->mu_CrcBuffer[i] = DataCRC(userbuf + i * MS_BPS);
+		debug(("%d: %04x\n", i, unit->mu_CrcBuffer[i]));
 	    }
 	}
 	ObtainSemaphore(&dev->md_HardwareUse);
-	EncodeTrack(userbuf, dev->Rawbuffer, unit->CrcBuffer, cylinder, side);
+	EncodeTrack(userbuf, dev->md_Rawbuffer, unit->mu_CrcBuffer,
+		    cylinder, side,
+		    gaplen, spt);
 
-	/*
-	 * For now I use RAWWRITE, should be replaced by hardware disk DMA
-	 * stuff
-	 */
-
-	/* tdreq->iotd_Req.io_Command = TD_RAWWRITE;
-	tdreq->iotd_Req.io_Offset = cylinder * NUMHEADS + side;
-	if ((ioreq->iotd_Req.io_Flags & IOMDF_40TRACKS) && unit->NumCyls == 80)
-	    tdreq->iotd_Req.io_Offset *= 2;
-	tdreq->iotd_Req.io_Data = (void *) dev->Rawbuffer;
-	tdreq->iotd_Req.io_Length = WLEN;
-	tdreq->iotd_Req.io_Flags = IOTDF_INDEXSYNC;
-	MyDoIO(tdreq);
-	debug(("RAWWRITE: %d ", (int) tdreq->iotd_Req.io_Error));
-	if (tdreq->iotd_Req.io_Error == IOERR_BADLENGTH) */ {
-	    TDMotorOn(tdreq);
-	    if (TDSeek(unit, ioreq, cylinder)) {
-		debug(("Seek error\n"));
-		ioreq->iotd_Req.io_Error = IOERR_BADLENGTH;
-		break;
-	    }
-	    unit->CurrentSide = side;
-	    HardwareIO(dev, unit, DSKWRITE);
+	TDMotorOn(tdreq);
+	if (TDSeek(unit, ioreq, cylinder)) {
+	    debug(("Seek error\n"));
+	    ioreq->iotd_Req.io_Error = IOERR_BADLENGTH;
+	    break;
 	}
+	unit->mu_CurrentSide = side;
+	HardwareIO(dev, unit, DSKWRITE);
+
 	ReleaseSemaphore(&dev->md_HardwareUse);
 
 	length--;
-	userbuf += MS_BPS * MS_SPT;
-	ioreq->iotd_Req.io_Actual += MS_BPS * MS_SPT;
+	userbuf += MS_BPS * spt;
+	ioreq->iotd_Req.io_Actual += MS_BPS * spt;
 
 	if (++side >= MS_NSIDES) {
 	    side = 0;
-	    if (++cylinder >= unit->NumCyls)
+	    if (++cylinder >= unit->mu_NumCyls)
 		goto end;
 	}
     }
 end:
-    unit->CurrentSide = -1;
+    unit->mu_CurrentSide = -1;
     TermIO(ioreq);
 }
 /* INDENT OFF */
 
 #asm
-;;;;
-;
-;   The following lengths are all in unencoded bytes (or encoded words)
-
-indexgap	equ 60
-
-idgap2		equ 12
-idsync		equ  3
-idmark		equ  1
-iddata		equ  4
-idcrc		equ  2
-idlen		equ idgap2+idsync+idmark+iddata+idcrc	; 22
-
-datagap1	equ 22
-datagap2	equ 12
-datasync	equ  3
-datamark	equ  1
-datacrc 	equ  2
-datagap3	equ 80	; was 40
-datalen 	equ datagap1+datagap2+datasync+datamark+MSBPS+datacrc+datagap3
-							; 632
-
-blocklen	equ idlen+datalen			; 654
 
 ; we need a buffer for the Sector-ID field to calculate its checksum
 ;SectorHeader:
@@ -1480,8 +1578,8 @@ blocklen	equ idlen+datalen			; 654
 
 	public _EncodeTrack
 
-;   EncodeTrack(TrackBuffer, Rawbuffer, Crcs, Track, Side)
-;		4	     4		4     2      2
+;   EncodeTrack(TrackBuffer, Rawbuffer, Crcs, Track, Side, GapLen, NumSecs)
+;		4	     4		4     2      2	   2	   2
 
 _EncodeTrack:
 	movem.l d2-d7/a2-a6,-(sp)  ; save registers
@@ -1492,8 +1590,8 @@ rawbf	set	4
 crcs	set	8
 track	set	12
 side	set	14
-
-secidb	set	-fp
+gaplen	set	16
+numsecs set	18
 
 ; a0	ptr in encoded data (also putmfmbyte)
 ; a2	ptr to mfm encoding table (putmfmbyte)
@@ -1508,24 +1606,26 @@ secidb	set	-fp
 ; d6	general counter of byte spans
 ; d7	sector countdown
 
+	sub.w	#2,fp+gaplen(sp)   ; gap length between sectors
 	move.l	fp+rawbf(sp),a0    ; pointer to mfmencoded buffer
 	move.l	fp+crcs(sp),a4     ; pointer to precalculated CRCs
 	move.l	fp+trackbf(sp),a5  ; pointer to unencoded data
 	lea	_MfmEncode,a2	   ; pointer to MFM lookup table
 
 	move.w	#$9254,d0	   ; a track starts with a gap
-	moveq	#indexgap-1,d6	   ; (60 * $4e)
+	moveq	#INDEXGAP-1,d6	   ; (60 * $4e)
 ingl	move.w	d0,(a0)+           ; mfmencoded = $9254
 	dbf	d6,ingl
 
 	lea	-6(sp),sp          ; Reserve room for SectorHeader
 fp	set	fp+6
-	moveq	#8,d7		   ; we have to encode 9 sectors
+	move.w	fp+numsecs(sp),d7  ; number of sectors to encode
+	subq.w	#1,d7		   ; minus 1 for dbra
 	moveq	#0,d5		   ; start with first sector
 
 secloop:
 	move.w	#$aaaa,d0	   ; a sector starts with a gap containing
-	moveq	#idgap2-1,d6	   ; 12 * 0 (mfm = $aaaa)
+	moveq	#IDGAP2-1,d6	   ; 12 * 0 (mfm = $aaaa)
 id2gl	move.w	d0,(a0)+
 	dbf	d6,id2gl
 
@@ -1543,11 +1643,11 @@ id2gl	move.w	d0,(a0)+
 	move.b	fp+side+1(sp),1(a3)   ; side number
 	addq.w	#1,d5		   ; sectors start with 1 instead of 0
 	move.b	d5,2(a3)           ; sector number
-	move.b	#MSBPScode,3(a3)   ; sector length 512 bytes
+	move.b	#MS_BPScode,3(a3)  ; sector length 512 bytes
 	bsr	HeaderCRC	   ; calculate checksum
-	move.w	d0,iddata(a3)      ; put it past the data
+	move.w	d0,IDDATA(a3)      ; put it past the data
 
-	moveq	#iddata+idcrc-1,d6 ; 6 bytes Sector-ID
+	moveq	#IDDATA+IDCRC-1,d6 ; 6 bytes Sector-ID
 sidl	move.b	(a3)+,d0           ; get one byte
 	bsr	putmfmbyte	   ; encode it
 	dbf	d6,sidl 	   ; end of buffer ?
@@ -1555,12 +1655,12 @@ sidl	move.b	(a3)+,d0           ; get one byte
 	moveq	#$4e,d0 	   ; recalculate the MFM value of the
 	bsr	putmfmbyte	   ; first gap byte
 
-	moveq	#datagap1-1-1  6 ng; GAP consisting of
+	moveq	#DATAGAP1-1-1,d6   ; GAP consisting of
 	move.w	#$9254,d0	   ; 22 * $4e
 dg1l	move.w	d0,(a0)+
 	dbf	d6,dg1l
 
-	moveq	#datagap2-1,d6	   ; GAP consisting of
+	moveq	#DATAGAP2-1,d6	   ; GAP consisting of
 	move.w	#$aaaa,d0	   ; 12 * 0 (mfm = $aaaa)
 dg2l	move.w	d0,(a0)+
 	dbf	d6,dg2l
@@ -1573,7 +1673,7 @@ dg2l	move.w	d0,(a0)+
 	move.w	#$5545,(a0)+       ; Data Address Mark ($fb)
 
 	moveq	#$5545&1,d3	   ; preload d3
-	move	#MSBPS-1,d6	   ; a sector has 512 bytes
+	move	#MS_BPS-1,d6	   ; a sector has 512 bytes
 dblockl move.b	(a5)+,d0           ; get one byte from the buffer
 	bsr	putmfmbyte	   ; encode it
 	dbf	d6,dblockl	   ; end of sector ?
@@ -1584,9 +1684,10 @@ dblockl move.b	(a5)+,d0           ; get one byte from the buffer
 	bsr	putmfmbyte	   ; encode it
 
 	moveq	#$4e,d0 	   ; recalculate the MFM value of the
-	bsr	putmfmbyte	   ; first gap byte
+	bsr	putmfmbyte	   ; first gap byte -> -1 in following loop
 
-	moveq	#datagap3-1-1,d6   ; sector ends with a gap
+;	moveq	#DATAGAP3-1-1,d6   ; sector ends with a gap
+	move.w	fp+gaplen(sp),d6   ; sector ends with a gap, -1 for dbf
 	move.w	#$9254,d0	   ; 80 * $4e
 dg3l	move.w	d0,(a0)+
 	dbf	d6,dg3l
@@ -1719,7 +1820,7 @@ data	set	0
 DataCRC1:
 	move.w	 #$e2,d0	   ; preload the CRC registers
 	move.w	 #$95,d1	   ; (CRC for $a1,$a1,$a1,$fe)
-	move.w	 #MSBPS-1,d3	   ; a sector 512 bytes
+	move.w	 #MS_BPS-1,d3	   ; a sector 512 bytes
 
 getCRC	lea	 CRCTable1,a4
 	lea	 CRCTable2,a5
