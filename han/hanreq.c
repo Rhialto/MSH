@@ -1,6 +1,9 @@
 /*-
- * $Id: hanreq.c,v 1.42 91/06/13 23:47:15 Rhialto Exp $
+ * $Id: hanreq.c,v 1.43 91/09/28 01:37:13 Rhialto Exp $
  * $Log:	hanreq.c,v $
+ * Revision 1.43  91/09/28  01:37:13  Rhialto
+ * Changed to newer syslog stuff.
+ *
  * Revision 1.42  91/06/13  23:47:15  Rhialto
  * DICE conversion
  *
@@ -36,6 +39,9 @@
 #else
 #   define	debug(x)
 #endif
+
+extern struct DeviceNode *DevNode;
+static struct Window *Getpr_WindowPtr(void);
 
 short		Cancel = 0;	/* Cancel all R/W errors */
 
@@ -95,32 +101,38 @@ struct IntuiText MustReplace[] = {
     },
 };
 
-long
-RetryRwError(req)
-struct IOExtTD *req;
+static struct Window *
+Getpr_WindowPtr()
 {
-    register struct Window *window;
-    struct IntuiText *text;
-    long	    result;
-
-    if (Cancel)
-	goto fail;
-
     if (DosPacket != NULL) { /* A user-requested action */
 	struct MsgPort *port;
 	struct Process *proc;
 
 	port = DosPacket->dp_Port;
 	if ((port->mp_Flags & PF_ACTION) != PA_SIGNAL)
-	    goto fail;
+	    return (struct Window *)-1;
 	proc = (struct Process *)port->mp_SigTask;
 	if (proc->pr_Task.tc_Node.ln_Type != NT_PROCESS)
-	    goto fail;
-	window = (struct Window *)proc->pr_WindowPtr;
-	if (window == (struct Window *)-1)
-	    goto fail;
+	    return (struct Window *)-1;
+	return (struct Window *)proc->pr_WindowPtr;
     } else
-	window = NULL;
+	return NULL;
+}
+
+long
+RetryRwError(req)
+struct IOExtTD *req;
+{
+    struct Window  *window;
+    struct IntuiText *text;
+    long	    result;
+
+    if (Cancel)
+	goto fail;
+
+    window = Getpr_WindowPtr();
+    if (window == (struct Window *)-1)
+	goto fail;
 
     if (req->iotd_Req.io_Error == TDERR_DiskChanged) {
 	text = MustReplace;
@@ -146,4 +158,43 @@ again:
 
 fail:
     return FALSE;
+}
+
+static struct IntuiText Ok = {
+    AUTOFRONTPEN, AUTOBACKPEN, AUTODRAWMODE,
+    AUTOLEFTEDGE, AUTOTOPEDGE, AUTOITEXTFONT,
+    (UBYTE *)"Ok",
+    AUTONEXTTEXT
+};
+
+static struct IntuiText AnyMessage[] = {
+    {
+	AUTOFRONTPEN, AUTOBACKPEN, AUTODRAWMODE,
+	16,	      10,	   AUTOITEXTFONT,
+	(UBYTE *)NULL,
+	&AnyMessage[1]
+    },
+    {
+	AUTOFRONTPEN, AUTOBACKPEN, AUTODRAWMODE,
+	16,	      25,	   AUTOITEXTFONT,
+	(UBYTE *)NULL,
+	NULL
+    }
+};
+
+void
+DisplayMessage(msg)
+char	    *msg;
+{
+    struct Window  *window;
+
+    window = Getpr_WindowPtr();
+    if (window == (struct Window *)-1)
+	window = NULL;
+
+    AnyMessage[0].IText = (UBYTE *)BTOC(DevNode->dn_Name) + 1;
+    AnyMessage[1].IText = msg;
+    (void) AutoRequest(window, AnyMessage, NULL, &Ok,
+		       0L, 0L, 320L, 72L);
+
 }
