@@ -1,6 +1,9 @@
 /*-
- * $Id: setmain.c,v 1.53 92/10/25 02:47:12 Rhialto Rel $
- * $Log:	setmain.c,v $
+ * $Id: setmain.c,v 1.54 1993/06/24 05:35:45 Rhialto Exp $
+ * $Log: setmain.c,v $
+ * Revision 1.54  1993/06/24  05:35:45	Rhialto
+ * DICE 2.07.54R.
+ *
  * Revision 1.53  92/10/25  02:47:12  Rhialto
  * Initial revision.
  *
@@ -53,11 +56,11 @@
 
 #include "setwindow.h"
 
-const char	idString[] = "$VER: MSH-Set $Revision$ $Date$\r\n";
+const char	idString[] = "$VER: MSH-Set $Revision: 1.54 $ $Date: 1993/06/24 05:35:45 $\r\n";
 
 struct Library *AslBase;
 struct Library *GadToolsBase;
-struct Library *IntuitionBase;
+struct IntuituinBase *IntuitionBase;
 struct Library *CxBase;
 struct Library *IconBase;
 
@@ -75,7 +78,7 @@ struct FileRequester *FileRequest;
 
 const char	OkString[] = "Ok";
 const char	PanicString[] = "Panic!";
-const char	RCSId[] = "\0$VER: MSH-Set $Revision: 1.53 $ $Date: 92/10/25 02:47:12 $, by Olaf Seibert";
+const char	RCSId[] = "\0$VER: MSH-Set $Revision: 1.54 $ $Date: 1993/06/24 05:35:45 $, by Olaf Seibert";
 
 void		Show(void);
 void		Hide(void);
@@ -345,11 +348,6 @@ Show(void)
     if (OpenMSHSettingsWindow())
 	Die();
 
-    /* Compensate for a bug in GadToolsBox 1.3: */
-    ModifyIDCMP(MSHSettingsWnd,
-		MSHSettingsWnd->IDCMPFlags |
-		BUTTONIDCMP | CHECKBOXIDCMP | LISTVIEWIDCMP | CYCLEIDCMP);
-
     if (BrokerPort) {
 	OnMenu(MSHSettingsWnd, FULLMENUNUM(0, 0, NOSUB));   /* "Hide A-H" */
     }
@@ -364,25 +362,9 @@ Hide(void)
 {
     if (MSHSettingsWnd) {
 	struct Message *msg;
-	int		height;
 
-	height = MSHSettingsWnd->Height -
-		 MSHSettingsWnd->BorderTop -
-		 MSHSettingsWnd->BorderBottom;
-
-	/*
-	 * Use a random treshold to make sure we'll open full size
-	 * next time, instead of shrunk...
-	 */
-	if (height > 10) {
-	    MSHSettingsLeft = MSHSettingsWnd->LeftEdge;
-	    MSHSettingsTop = MSHSettingsWnd->TopEdge;
-	    MSHSettingsWidth = MSHSettingsWnd->Width -
-			       MSHSettingsWnd->BorderLeft -
-			       MSHSettingsWnd->BorderRight;
-	    MSHSettingsHeight = height;
-	}
-
+	MSHSettingsLeft = MSHSettingsWnd->LeftEdge;
+	MSHSettingsTop = MSHSettingsWnd->TopEdge;
 
 	while (msg = GetMsg(MSHSettingsWnd->UserPort)) {
 	    ReplyMsg(msg);

@@ -1,6 +1,10 @@
 /*-
- * $Id: fmtmain.c,v 1.53 92/10/25 02:48:07 Rhialto Rel $
- * $Log:	fmtmain.c,v $
+ * $Id: fmtmain.c,v 1.54 1993/06/24 05:35:45 Rhialto Exp $
+ * $Log: fmtmain.c,v $
+ * Revision 1.54  1993/06/24  05:35:45  Rhialto
+ * changing SPT,NSIDES,NCYLS didn't update SPF.
+ * DICE 2.07.54R.
+ *
  * Revision 1.53  92/10/25  02:48:07  Rhialto
  * Initial revision.
  *
@@ -49,7 +53,7 @@
 #include "fmtwindow.h"
 
 struct Library *GadToolsBase;
-struct Library *IntuitionBase;
+struct IntuituinBase *IntuitionBase;
 
 struct MinList	MSHList;
 struct MSHNode {
@@ -67,7 +71,7 @@ unsigned long	DevFlags;
 const char	OkString[] = "Ok";
 const char	AbortString[] = "Abort";
 const char	PanicString[] = "Panic!";
-const char	RCSId[] = "\0$VER: MSH-Format $Revision: 1.53 $ $Date: 92/10/25 02:48:07 $, by Olaf Seibert";
+const char	RCSId[] = "\0$VER: MSH-Format $Revision: 1.54 $ $Date: 1993/06/24 05:35:45 $, by Olaf Seibert";
 
 void		Show(void);
 void		Hide(void);
@@ -359,11 +363,6 @@ Show(void)
 
     if (OpenMainWindow())
 	Die();
-
-    /* Compensate for a bug in GadToolsBox 1.3: */
-    ModifyIDCMP(MainWnd,
-		MainWnd->IDCMPFlags |
-		MXIDCMP | STRINGIDCMP | LISTVIEWIDCMP | BUTTONIDCMP);
 
     FindAllDevices();
     SetGadgetAttrM(GDX_HANDLERS, GTLV_Labels, (ULONG) &MSHList);
