@@ -1,6 +1,9 @@
 /*-
- *  $Id: device.h,v 1.46 91/10/06 18:25:45 Rhialto Rel $
+ *  $Id: device.h,v 1.51 92/04/17 15:43:10 Rhialto Rel $
  *  $Log:	device.h,v $
+ * Rearrange #inclusions and Device structure.
+ * Add TD_Getgeometry, TD_Eject.
+ *
  * Revision 1.51  92/04/17  15:43:10  Rhialto
  * Freeze for MAXON3. Change cyl+side units to track units.
  *
@@ -42,6 +45,16 @@
 #ifndef HARDWARE_DMABITS_H
 #include "hardware/dmabits.h"
 #endif
+#ifndef HARDWARE_INTBITS_H
+#include "hardware/intbits.h"
+#endif
+#ifndef EXEC_DEVICES_H
+#include <exec/devices.h>
+#endif
+#ifndef CLIB_ALIB_PROTOS_H
+#include <clib/alib_protos.h>
+#endif
+
 #ifndef MESSYDISK_DEV_H
 
 extern struct ExecBase *SysBase;
@@ -51,8 +64,8 @@ extern struct ExecBase *SysBase;
 #define NUMHEADS	2   /* Used to be in devices/trackdisk.h */
 #endif
 #define TRACKS(cyls)    ((cyls) * NUMHEADS)
-#define VERSION 	34L
-#define REVISION	12
+#define TRK2CYL(track)  ((track) >> 1)
+#define REVISION	13
 
 #define VERSION 	SYS2_04
 #define REVISION	16
@@ -93,9 +106,9 @@ struct MessyUnit {
     struct DiskResourceUnit mu_DRUnit;
     struct MsgPort  mu_DiskReplyPort;
     struct IOExtTD *mu_DiskIOReq;
+    struct Interrupt mu_DiskChangeInt;
+    struct MinList  mu_ChangeIntList;
     byte	    mu_TrackBuffer[MS_SPT_MAX * MS_BPS];   /* Must be word aligned */
-    word	    mu_CrcBuffer[MS_SPT_MAX];
-    char	    mu_SectorStatus[MS_SPT_MAX];
     byte	   *mu_TrackBuffer;
     char	    mu_SectorStatus[MS_SPT_MAX];
     word	    mu_CrcBuffer[MS_SPT_MAX];
@@ -113,6 +126,7 @@ struct MessyUnit {
 #define STATEF_WRITABLE (1<<2)
 #define STATEF_HIGHDENSITY (1<<3)
 
+#define SYS1_2		33	/* System version 1.2 */
 #define SYS1_3		34	/* System version 1.3 */
 #define SYS2_0		36	/* System version 2.0 */
 #define SYS2_04 	37	/* System version 2.04 */
@@ -148,6 +162,8 @@ typedef struct MessyUnit   UNIT;
     #define TD_Rawread	    TrackdiskGateway
 /*  #define TD_Addchangeint /**/
 /*  #define TD_Remchangeint /**/
+/*  #define TD_Getgeometry  /**/
+/*  #define TD_Addchangeint */
 /*  #define TD_Remchangeint */
 /*  #define TD_Getgeometry  */
     #define TD_Eject	    TrackdiskGateway
