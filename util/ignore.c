@@ -1,18 +1,23 @@
 /*
- * $Id: ignore.c,v 1.51 92/04/17 15:39:31 Rhialto Rel $
+ * $Id: ignore.c,v 1.54 1993/06/24 05:02:26 Rhialto Exp $
  *
  *  IGNORE.C
  *
  *  Makes it possible to ignore CRC errors.
  *
- *  This code is (C) Copyright 1989-1991 by Olaf Seibert. All rights reserved.
+ *  This code is (C) Copyright 1989-1993 by Olaf Seibert. All rights reserved.
  *  May not be used or copied without a licence.
  */
 
+#include "device.h"
 #include <string.h>
 #include <stdlib.h>
-#include "device.h"
-#include <functions.h>
+
+#ifndef CLIB_DOS_PROTOS_H
+#include <clib/dos_protos.h>
+#endif
+
+const char	idString[] = "$VER: Ignore $Revision: 1.54 $ $Date: 1993/06/24 05:02:26 $\r\n";
 
 Puts(char *string)
 {
@@ -27,11 +32,12 @@ main(int argc, char **argv)
     UNIT *unit;
     long unitnr;
     int yesno;
+    int rc = 10;
 
     if (argc < 2) {
 	Puts("Usage: ignore <unitnr> <YES/NO>\n");
 	Puts("       If Yes, CRC errors will be ignored.\n");
-	exit(1);
+	return rc;
     }
 
     unitnr = atoi(argv[1]);
@@ -50,12 +56,16 @@ main(int argc, char **argv)
 		       0L);
 	    if (tdreq->iotd_Req.io_Device) {
 		unit = (UNIT *)tdreq->iotd_Req.io_Unit;
-		if (yesno != -42)
+		if (yesno != -42) {
 		    unit->mu_InitSectorStatus = yesno;
-		else if (unit->mu_InitSectorStatus == CRC_UNCHECKED)
+		    rc = 0;
+		} else if (unit->mu_InitSectorStatus == CRC_UNCHECKED) {
 		    Puts("No\n");
-		else
+		    rc = 0;
+		} else {
 		    Puts("Yes\n");
+		    rc = 5;
+		}
 		CloseDevice((struct IORequest *)tdreq);
 	    } else
 		Puts("Cannot OpenDevice messydisk\n");
@@ -66,5 +76,5 @@ main(int argc, char **argv)
     } else
 	Puts("No memory for replyport\n");
 
-    return 0;
+    return rc;
 }
