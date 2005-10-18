@@ -1,0 +1,137 @@
+/* Messy file system on messy blocks: */
+TST:	FileSystem = User:msh/MessyFileSystem
+	Device = mfm.device
+	Unit = 0
+	Flags = 0
+	LowCyl = 0 ; HighCyl = 79
+	Reserved = 0
+	Surfaces = 2
+	BlocksPerTrack = 9
+	Buffers = 25
+	BufMemType = 1	/* messydisk needs no chip mem */
+	BootPri = 0
+	Stacksize = 8192
+	Priority = 9
+	GlobVec  = -1
+	DosType = 0x4D534400
+	Interleave = 0x00030000
+	Mount = 0
+#
+/* Messy file system on messy blocks: */
+MSH:	FileSystem = User:msh/MessyFileSystem
+	Device = User:msh/messydisk.device
+	Unit = 0
+	Flags = 0
+	LowCyl = 0 ; HighCyl = 79
+	Reserved = 0
+	Surfaces = 2
+	BlocksPerTrack = 9
+	Buffers = 25
+	BufMemType = 1	/* messydisk needs no chip mem */
+	BootPri = 0
+	Stacksize = 8192
+	Priority = 9
+	GlobVec  = -1
+	DosType = 0x4D534400
+	Interleave = 0x00030000
+	Mount = 0
+#
+MS2:	FileSystem = User:msh/MessyFileSystem
+	Device = User:msh/messydisk.device
+	Unit = 2
+	Flags = 0
+	LowCyl = 0 ; HighCyl = 79
+	Reserved = 0
+	Surfaces = 2
+	BlocksPerTrack = 9
+	Buffers = 25
+	BufMemType = 1	/* messydisk needs no chip mem */
+	BootPri = 0
+	Stacksize = 8192
+	Priority = 9
+	GlobVec  = -1
+	/* DosType = 0x4D534400 */
+	DosType = 0x444F5302	/* WRONG!!! */
+	Interleave = 0x00030000
+	Mount = 0
+#
+/* Messy file system on fms file: */
+FMSH:	FileSystem = User:msh/MessyFileSystem
+	Device = fmsdisk.device
+	Unit = 7
+	Flags = 0
+	LowCyl = 0 ; HighCyl = 255
+	Reserved = 0
+	Surfaces = 7
+	BlocksPerTrack = 17
+	Buffers = 50
+	BufMemType = 1	/* fmsdisk needs no chip mem */
+	BootPri = 0
+	Stacksize = 8192
+	Priority = 9
+	GlobVec  = -1
+	DosType = 0x4D534400
+	Interleave = 0
+	Mount = 0
+#
+/* Messy blocks mapped to a flat file: */
+/*RDF0:   FileSystem = User:MSH/junk/RDF-Handler*/
+RDF0:	Handler = User:MSH/junk/RDF-Handler
+	Device = trackdisk.device
+	Unit = 0
+	Flags = 0
+	Stacksize = 8192
+	Priority = 4
+	GlobVec  = -1
+#
+/* Amiga Old filing system on messy blocks: */
+MF0:	Device = User:msh/messydisk.device
+	Unit = 0
+	Flags = 0
+	Priority = 4
+	LowCyl = 0 ; HighCyl = 79
+	Reserved = 2
+	Surfaces = 2
+	BlocksPerTrack = 9
+	Buffers = 5
+	BufMemType = 1
+	BootPri = 0
+#
+/* Messy file system on Amiga blocks: */
+DS1:	FileSystem = User:msh/MessyFileSystem
+	Device = trackdisk.device
+	Unit = 1
+	Flags = 0
+	LowCyl = 0 ; HighCyl = 79
+	Reserved = 0
+	Surfaces = 2
+	BlocksPerTrack = 11
+	Buffers = 5
+	BufMemType = 3	/* trackdisk needs CHIP mem */
+	BootPri = 0
+	Stacksize = 8192
+	Priority = 9
+	GlobVec  = -1
+	DosType = 0x4D534400
+	Interleave = 0x00030000
+	Mount = 0
+#
+/* Long Name Messy file system on Amiga blocks: */
+LMFS:	FileSystem = User:msh/LMFileSystem
+	Device = trackdisk.device
+	Unit = 0
+	Flags = 0
+	LowCyl = 0 ; HighCyl = 79
+	Reserved = 0
+	Surfaces = 2
+	BlocksPerTrack = 11
+	Buffers = 25
+	BufMemType = 3	/* trackdisk needs CHIP mem */
+	BootPri = 0
+	Stacksize = 8192
+	Priority = 9
+	GlobVec  = -1
+	DosType = 0x4D534400
+	Interleave = 0x00030000
+	Mount = 0
+#

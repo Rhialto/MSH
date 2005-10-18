@@ -1,6 +1,12 @@
 /*-
- * $Id: hancmd.c,v 1.55 1993/12/30 23:28:00 Rhialto Rel $
+ * $Id: hancmd.c,v 1.58 2005/10/19 16:53:52 Rhialto Exp $
  * $Log: hancmd.c,v $
+ * Revision 1.58  2005/10/19  16:53:52  Rhialto
+ * Finally a new version!
+ *
+ * Revision 1.56  1996/12/22  00:22:33  Rhialto
+ * Cosmetics only.
+ *
  * Revision 1.55  1993/12/30  23:28:00	Rhialto
  * Freeze for MAXON5.
  *
@@ -41,11 +47,12 @@
  *
  * Special commands through MSH::something file names.
  *
- * This code is (C) Copyright 1990-1993 by Olaf Seibert. All rights reserved.
+ * This code is (C) Copyright 1990-1997 by Olaf Seibert. All rights reserved.
  * May not be used or copied without a licence.
 -*/
 
 #include <stdlib.h>
+#include <string.h>
 #include "han.h"
 #if CONVERSIONS
 #include "hanconv.h"
@@ -126,5 +133,26 @@ char	       *cmd;
 	}
     } else if (cmd[1] == 'M') {
 	DoMessages = (cmd[2] == '+')? 1 : atoi(&cmd[2]);
+    } else if (cmd[1] == 'O') {
+	int option;
+	cmd++;
+
+	while (cmd) {
+	    cmd++;
+	    option = atoi(&cmd[1]) + 16;
+
+	    if (cmd[0] == '+') {
+		Interleave |= 1 << option;
+	    } else {
+		Interleave &= ~(1 << option);
+	    }
+	    cmd = strchr(cmd, ',');
+	}
+	if (DoMessages) {
+	    static char msg[] = "Options: 000";
+
+	    ltoa(Interleave >> 16, msg + 9);
+	    DisplayMessage(msg);
+	}
     }
 }

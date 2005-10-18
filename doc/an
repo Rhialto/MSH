@@ -1,0 +1,141 @@
+.*
+.*	Macro package for NRO in KosmoSoft version
+.*
+.nr h 5 	 @" header indent
+.nr i 10	 @" normal text indent
+.nr s @ni-@nh	 @" section heading indent (to the LEFT)
+.*
+.de TH
+.in @nh;.rm 80-@nh;.he |$0($1)|$2|$0($1)|
+.fo |$3|-#-|$4|
+.in @ni;.rm 80-@ni
+.ta +0 +5
+.en
+.*  Paragraph
+.de PP
+.sp 1;.ne 2;.ti +5
+.en
+.*  Bulleted Paragraph. Needs .RE after last para.
+.*  Must be last on line. Relies on first tab stop.
+.de BP
+.br;.in @ni+5;.ti -3;o@t@@
+.en
+.*  Section Heading
+.de SH
+.sp 1;.ne 3;.ti -@@ns;.bo "$0 $1 $2 $3 $4 $6 $6 $7 $8 $9
+.br
+.en
+.*  SubSection
+.de SS
+.br;.ne 2;.ti -@@ns+1/2;$0 $1 $2 $3 $4 $5 $6 $7 $8 $9
+.br
+.en
+.*  Relative indent Start
+.de RS
+.in +0$0
+.en
+.*  Relative indent End
+.de RE
+.in @ni
+.en
+.*  Italics
+.de I
+.it 1
+$0 $1 $2 $3 $4 $5 $6 $7 $8 $9
+.en
+.*  Bold
+.de B
+.bo 1
+$0 $1 $2 $3 $4 $5 $6 $7 $8 $9
+.en
+.*  Underline
+.de U
+.ul 1
+$0 $1 $2 $3 $4 $5 $6 $7 $8 $9
+.en
+.*  UC
+.de UC
+.*  Empty
+.en
+.*  Italics and Roman
+.de IR
+.if !''$0' .it "$0
+.if !''$1' $1
+.if !''$2' .it "$2
+.if !''$3' $3
+.if !''$4' .it "$4
+.if !''$5' $5
+.if !''$6' .it "$6
+.if !''$7' $7
+.if !''$8' .it "$8
+.if !''$9' $9
+.en
+.*  Roman and Italic
+.de RI
+.if !''$0' $0
+.if !''$1' .it "$1
+.if !''$2' $2
+.if !''$3' .it "$3
+.if !''$4' $4
+.if !''$5' .it "$5
+.if !''$6' $6
+.if !''$7' .it "$7
+.if !''$8' $8
+.if !''$9' .it "$9
+.en
+.*  Bold and Roman
+.de BR
+.if !''$0' .bo "$0
+.if !''$1' $1
+.if !''$2' .bo "$2
+.if !''$3' $3
+.if !''$4' .bo "$4
+.if !''$5' $5
+.if !''$6' .bo "$6
+.if !''$7' $7
+.if !''$8' .bo "$8
+.if !''$9' $9
+.en
+.*  Bold and Italic
+.de BI
+.if !''$0' .bo "$0
+.if !''$1' .it "$1
+.if !''$2' .bo "$2
+.if !''$3' .it "$3
+.if !''$4' .bo "$4
+.if !''$5' .it "$5
+.if !''$6' .bo "$6
+.if !''$7' .it "$7
+.if !''$8' .bo "$8
+.if !''$9' .it "$9
+.en
+.*  Italic and Bold
+.de IB
+.if !''$0' .it "$0
+.if !''$1' .bo "$1
+.if !''$2' .it "$2
+.if !''$3' .bo "$3
+.if !''$4' .it "$4
+.if !''$5' .bo "$5
+.if !''$6' .it "$6
+.if !''$7' .bo "$7
+.if !''$8' .it "$8
+.if !''$9' .bo "$9
+.en
+.*  Italic and Roman
+.de IR
+.if !''$0' .it "$0
+.if !''$1' $1
+.if !''$2' .it "$2
+.if !''$3' $3
+.if !''$4' .it "$4
+.if !''$5' $5
+.if !''$6' .it "$6
+.if !''$7' $7
+.if !''$8' .it "$8
+.if !''$9' $9
+.en
+.*  SMall, do nothing
+.de SM
+$0 $1 $2 $3 $4 $5 $6 $7 $8 $9
+.en

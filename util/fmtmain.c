@@ -1,6 +1,12 @@
 /*-
- * $Id: fmtmain.c,v 1.55 1993/12/30 23:28:00 Rhialto Rel $
+ * $Id: fmtmain.c,v 1.58 2005/10/19 16:53:52 Rhialto Exp $
  * $Log: fmtmain.c,v $
+ * Revision 1.58  2005/10/19  16:53:52  Rhialto
+ * Finally a new version!
+ *
+ * Revision 1.56  1996/12/22  00:22:33  Rhialto
+ * Cosmetics.
+ *
  * Revision 1.55  1993/12/30  23:28:00	Rhialto
  * Freeze for MAXON5.
  * New GadToolBox (2.0c), and use font-sensitive option.
@@ -75,7 +81,7 @@ unsigned long	DevFlags;
 const char	OkString[] = "Ok";
 const char	AbortString[] = "Abort";
 const char	PanicString[] = "Panic!";
-const char	RCSId[] = "\0$\VER: MSH-Format $Revision: 1.55 $ $Date: 1993/12/30 23:28:00 $, by Olaf Seibert";
+const char	RCSId[] = "\0$\VER: MSH-Format $Revision: 1.58 $ $Date: 2005/10/19 16:53:52 $, by Olaf Seibert";
 
 void		Show(void);
 void		Hide(void);

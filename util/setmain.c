@@ -1,7 +1,13 @@
 /*-
- * $Id: setmain.c,v 1.56 1996/12/22 00:22:33 Rhialto Rel $
+ * $Id: setmain.c,v 1.58 2005/10/19 16:53:52 Rhialto Exp $
  * $Log: setmain.c,v $
- * Revision 1.56  1996/12/22  00:22:33  Rhialto
+ * Revision 1.58  2005/10/19  16:53:52  Rhialto
+ * Finally a new version!
+ *
+ * Revision 1.56  1996/12/22  21:12:51	Rhialto
+ * Cosmetics.
+ *
+ * Revision 1.56  1996/12/22  00:22:33	Rhialto
  * Cosmetics.
  *
  * Revision 1.55  1993/12/30  23:28:00	Rhialto
@@ -25,6 +31,8 @@
 #define INTUI_V36_NAMES_ONLY
 
 #include "han.h"
+#undef CONVERSIONS
+#define CONVERSIONS 1
 #include "hanconv.h"
 
 #ifndef LIBRARIES_GADTOOLS_H
@@ -63,7 +71,7 @@
 
 #include "setwindow.h"
 
-const char	idString[] = "$""VER: MSH-Set $Revision: 1.56 $ $Date: 1996/12/22 00:22:33 $\r\n";
+const char	idString[] = "$""VER: MSH-Set $Revision: 1.58 $ $Date: 2005/10/19 16:53:52 $\r\n";
 
 struct Library *AslBase;
 struct Library *GadToolsBase;

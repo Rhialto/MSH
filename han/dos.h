@@ -1,7 +1,13 @@
 
 /*
- *  $Id: dos.h,v 1.55 1993/12/30 23:28:00 Rhialto Rel $
+ *  $Id: dos.h,v 1.58 2005/10/19 16:53:52 Rhialto Exp $
  *  $Log: dos.h,v $
+ * Revision 1.58  2005/10/19  16:53:52  Rhialto
+ * Finally a new version!
+ *
+ * Revision 1.56  1996/12/22  00:22:33  Rhialto
+ * Remove old packet names and add some new (Guru Book) ones.
+ *
  * Revision 1.55  1993/12/30  23:28:00	Rhialto
  * Freeze for MAXON5.
  *
@@ -92,7 +98,7 @@ extern struct DosLibrary *DOSBase;
 #define ACTION_FREE_DISK_FSSM	4202L
 #endif
 
-#if !defined(FIBB_HIDDEN)
+#if H_BIT_MEANS_HIDDEN && !defined(FIBB_HIDDEN)
 #define FIBB_HIDDEN 7L
 #define FIBF_HIDDEN (1L<<FIBB_HIDDEN)
 #endif

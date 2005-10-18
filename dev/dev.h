@@ -1,6 +1,12 @@
 /*-
- *  $Id: dev.h,v 1.55 1993/12/30 22:45:10 Rhialto Rel $
+ *  $Id: dev.h,v 1.58 2005/10/19 16:51:06 Rhialto Exp $
  *  $Log: dev.h,v $
+ * Revision 1.58  2005/10/19  16:51:06  Rhialto
+ * Finally a new version!
+ *
+ * Revision 1.56  1996/12/21  23:34:35  Rhialto
+ * No changes.
+ *
  * Revision 1.55  1993/12/30  22:45:10  Rhialto
  * Revamp flags and track size constants.
  * Freeze for MAXON5.

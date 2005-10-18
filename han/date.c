@@ -1,6 +1,12 @@
 /*-
- * $Id: date.c,v 1.55 1993/12/30 23:28:00 Rhialto Rel $
+ * $Id: date.c,v 1.58 2005/10/19 16:53:52 Rhialto Exp $
  * $Log: date.c,v $
+ * Revision 1.58  2005/10/19  16:53:52  Rhialto
+ * Finally a new version!
+ *
+ * Revision 1.56  1996/12/22  00:22:33  Rhialto
+ * Cosmetics only.
+ *
  * Revision 1.55  1993/12/30  23:28:00	Rhialto
  * Freeze for MAXON5.
  *
@@ -387,10 +393,19 @@ struct DateStamp *datestamp;
     }
 #if 1
     {
-	long year, month, day;
+	static long prevDays = -1;
+	static int prevDate = DATE_MIN;
 
-	YrMoDa(datestamp->ds_Days, &year, &month, &day);
-	*date = ((year - 1980) << 9) | (month << 5) | day;
+	/* Cache a single date */
+	if (datestamp->ds_Days == prevDays) {
+	    *date = prevDate;
+	} else {
+	    long year, month, day;
+
+	    prevDays = datestamp->ds_Days;
+	    YrMoDa(prevDays, &year, &month, &day);
+	    *date = prevDate = ((year - 1980) << 9) | (month << 5) | day;
+	}
     }
 #else
     {

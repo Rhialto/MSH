@@ -1,6 +1,12 @@
 /*-
- * $Id: layout.h,v 1.55 1993/12/30 22:45:10 Rhialto Rel $
+ * $Id: layout.h,v 1.58 2005/10/19 16:51:06 Rhialto Exp $
  * $Log: layout.h,v $
+ * Revision 1.58  2005/10/19  16:51:06  Rhialto
+ * Finally a new version!
+ *
+ * Revision 1.56  1996/12/21  23:34:35  Rhialto
+ * No changes.
+ *
  * Revision 1.55  1993/12/30  22:45:10  Rhialto
  * Split off from devio2.c.
  *

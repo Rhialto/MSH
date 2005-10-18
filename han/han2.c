@@ -1,5 +1,5 @@
 /*-
- * $Id: han2.c,v 1.55 1993/12/30 23:28:00 Rhialto Rel $
+ * $Id: han2.c,v 1.58 2005/10/19 16:53:52 Rhialto Exp $
  *
  * The code for the messydos file system handler.
  *
@@ -9,6 +9,12 @@
  * May not be used or copied without a licence.
  *
  * $Log: han2.c,v $
+ * Revision 1.58  2005/10/19  16:53:52  Rhialto
+ * Finally a new version!
+ *
+ * Revision 1.56  1996/12/22  00:22:33  Rhialto
+ * Add MSSerializeDisk. Update file lock in MSSetFileSize.
+ *
  * Revision 1.55  1993/12/30  23:28:00	Rhialto
  * Freeze for MAXON5.
  * Add MSFormat().
@@ -190,7 +196,7 @@ long		mode;
 	msfl->msfl_Msd.msd_Cluster = 0;
     } else {
 	/* shorten the file. This may invalidate seek pointers...  */
-	word	    cluster;
+	cluster_t	    cluster;
 
 	cluster = msfl->msfl_Msd.msd_Cluster;
 	oldclusters = 1;
@@ -430,7 +436,7 @@ MSFormat(char *vol, long type)
 	sec = EmptySec(n++);
 	memset(sec, 0, DefaultDisk.bps);
 
-	sec[0] = 0xF9;
+	sec[0] = DefaultDisk.media;
 	sec[1] = 0xFF;
 	sec[2] = 0xFF;
 
@@ -464,7 +470,7 @@ MSFormat(char *vol, long type)
 	long		old_interleave = Interleave;
 
 	Inhibited = 0;
-	Interleave &= ~NICE_TO_DFx;
+	Interleave &= ~OPT_NICE_TO_DFx;
 	MSUpdate(1);	/* Normally implied by DiskChange(), but because we
 			 * may be Inhibit()ed, this may not happen. */
 	DiskChange();
@@ -488,7 +494,7 @@ MSSerializeDisk(void)
     ULONG	    success = DOSFALSE;
 
     Inhibited = 0;
-    Interleave &= ~NICE_TO_DFx;
+    Interleave &= ~OPT_NICE_TO_DFx;
     DiskChange();
     if (RootLock) {
 	char name[L_8 + L_3 + 1];

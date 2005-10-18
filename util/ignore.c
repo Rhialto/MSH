@@ -1,5 +1,5 @@
 /*
- * $Id: ignore.c,v 1.56 1996/12/21 23:34:35 Rhialto Rel $
+ * $Id: ignore.c,v 1.58 2005/10/19 16:51:06 Rhialto Exp $
  *
  *  IGNORE.C
  *
@@ -17,7 +17,7 @@
 #include <clib/dos_protos.h>
 #endif
 
-const char	idString[] = "$""VER: Ignore $Revision: 1.56 $ $Date: 1996/12/21 23:34:35 $\r\n";
+const char	idString[] = "$""VER: Ignore $Revision: 1.58 $ $Date: 2005/10/19 16:51:06 $\r\n";
 
 Puts(char *string)
 {

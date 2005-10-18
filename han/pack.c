@@ -1,6 +1,15 @@
 /*-
- * $Id: pack.c,v 1.55 1993/12/30 23:02:45 Rhialto Rel $
+ * $Id: pack.c,v 1.58 2005/10/19 16:53:52 Rhialto Exp $
  * $Log: pack.c,v $
+ * Revision 1.58  2005/10/19  16:53:52  Rhialto
+ * Finally a new version!
+ *
+ * Revision 1.56  1996/12/22  00:22:33  Rhialto
+ * Better (but not perfect) device list deadlock handling.
+ * Add some Guru Book packets.
+ * Pretend success on ACTION_SET_COMMENT.
+ * Support for proper taskwait hook.
+ *
  * Revision 1.55  1993/12/30  23:02:45	Rhialto
  * Add code to reflect changing disk capacity to Mount info.
  * Don't fail Info() if there is no disk in drive.
@@ -86,6 +95,7 @@ Prototype long	    Interleave;
 Prototype struct DosEnvec *Environ;
 Prototype struct DosPacket *DosPacket;
 Prototype short     Inhibited;
+Prototype byte     *StackBottom;
 
 Prototype struct DeviceList *NewVolNode(char *name, struct DateStamp *date);
 Prototype int	    MayFreeVolNode(struct DeviceList *volnode);
@@ -118,7 +128,7 @@ struct MsgPort	*DosPort;	/* Our DOS port... */
 struct DeviceNode *DevNode;	/* Our DOS node.. created by DOS for us */
 struct DeviceList *VolNode;	/* Device List structure for our volume
 				 * node */
-struct DeviceList *MustFreeVolNode; /* Deferred free. Just place for one. */
+struct DeviceList *MustFreeVolNode; /* Deferred free. Just room for one. */
 
 struct DosLibrary *DOSBase;	/* DOS library base */
 long		PortMask;	/* The signal mask for our DosPort */
@@ -134,6 +144,8 @@ struct DosPacket *DosPacket;	/* For the SystemRequest pr_WindowPtr */
 long		OpenCount;	/* How many open files/locks/other
 				 * references there are */
 short		WriteProtect;	/* Are we software-writeprotected? */
+byte	       *StackBottom;
+char		MessydiskDevice[] = "messydisk.device";
 
 struct Interrupt ChangeInt = {
     { 0 },			/* is_Node */
@@ -175,6 +187,7 @@ messydoshandler(void)
 
     myproc = (struct Process *)FindTask(NULL);
     DosPort = &myproc->pr_MsgPort;
+    StackBottom = myproc->pr_Task.tc_SPLower;
 
 #if TASKWAIT
     packet = taskwait(myproc);
@@ -188,11 +201,11 @@ messydoshandler(void)
     {
 	ulong Reserved;
 
-	DevName = "messydisk.device";
+	DevName = MessydiskDevice;
 	UnitNr = 0;
 	DevFlags = 0;
 
-	MaxCache = 5;
+	MaxCache = INITIAL_MAX_CACHE;
 	BufMemType = MEMF_PUBLIC;
 	DefaultDisk.nsides = MS_NSIDES;
 	DefaultDisk.spt = MS_SPT;
@@ -212,7 +225,8 @@ messydoshandler(void)
 		debug(("Environ size %ld\n", Environ->de_TableSize));
 
 		if (Environ->de_TableSize >= DE_NUMBUFFERS) {
-		    MaxCache = Environ->de_NumBuffers;
+		    if (Environ->de_NumBuffers > MaxCache)
+			MaxCache = Environ->de_NumBuffers;
 
 		    DefaultDisk.nsides = Environ->de_Surfaces;
 		    DefaultDisk.spt = Environ->de_BlocksPerTrack;
@@ -223,12 +237,20 @@ messydoshandler(void)
 		    Reserved = Environ->de_Reserved;
 
 		    /* Compatibility with old DosType = 1 */
-		    Interleave = Environ->de_DosType;
+		    /* Interleave = Environ->de_DosType;
 		    if (Interleave == 1) {
-			Interleave = NICE_TO_DFx;
-		    } else {
+			Interleave = OPT_NICE_TO_DFx;
+		    } else */ {
 			Interleave = Environ->de_Interleave;
 		    }
+		    if (Interleave & OPT_NO_WIN95)
+			Interleave |= OPT_SHORTNAME;
+#if 0
+		    /* Auto-detect when not to be nice to DFx: */
+		    if (strncmp(Device, MessydiskDevice,
+						sizeof(MessydiskDevice)) != 0)
+			Interleave &= ~OPT_NICE_TO_DFx;
+#endif
 #define get(xx,yy)  if (Environ->de_TableSize >= yy) xx = ((ULONG*)Environ)[yy];
 		    get(BufMemType, DE_MEMBUFTYPE);
 		} else
@@ -792,6 +814,7 @@ top:
     DevNode->dn_Task = NULL;
     TDRemChangeInt();
     DiskRemoved();
+    FreeVolNodeDeferred();	/* just in case */
     HanCloseDown();
     debug(("HanCloseDown returned. uninitsyslog in 2 seconds:\n"));
 
@@ -871,11 +894,26 @@ struct FileLock *fl;
 	debug(("volnode->dl_Task != DosPort %lx != %lx\n",
 	    volnode->dl_Task, DosPort));
     }
+    if (fl->fl_Task != DosPort) {
+	debug(("fl->fl_Task != DosPort %lx != %lx\n",
+	    fl->fl_Task, DosPort));
+    }
 #endif
 
     if (newlock = dosalloc((ulong)sizeof (*newlock))) {
 	newlock->fl_Key = (ulong) msfl;
+#if 1
 	newlock->fl_Task = DosPort;
+#else
+	/*
+	 * This may help the MultiFileSystem?
+	 * Using fl->fl_Task also sounds like a good idea but with MFS
+	 * that seems to be a bogus address (0xf80a66 is in ROM!)
+	 * But volnode->dl_Task quickly causes deadlocks too.
+	 * So don't do this.
+	 */
+	newlock->fl_Task = volnode->dl_Task;
+#endif
 	newlock->fl_Volume = (BPTR) CTOB(volnode);
 	Forbid();
 	newlock->fl_Link = volnode->dl_LockList;
@@ -996,7 +1034,7 @@ struct DateStamp *date;
 	    volnode->dl_VolumeDate = *date;
 	    volnode->dl_MSFileLockList = (ULONG)NULL;
 
-	    if (AddDosEntry((struct DosList *)volnode)== DOSFALSE)
+	    if (AddVolNode(volnode)== DOSFALSE)
 		goto error;
 	} else {
 	error:
@@ -1007,6 +1045,7 @@ struct DateStamp *date;
 	error = ERROR_NO_FREE_STORE;
     }
 
+    debug(("NewVolNode: returns %p\n", volnode));
     return volnode;
 }
 
@@ -1098,6 +1137,7 @@ void
 FreeVolNodeDeferred(void)
 {
     struct DeviceList *tmp = MustFreeVolNode;
+    debug(("FreeVolNodeDeferred\n"));
     MustFreeVolNode = NULL;
     FreeVolNode(tmp);
 }
@@ -1111,6 +1151,7 @@ int
 MayFreeVolNode(volnode)
 struct DeviceList *volnode;
 {
+    debug(("MayFreeVolNode volnode %p, dl_LockList %p\n", volnode, volnode->dl_LockList));
     if (volnode->dl_LockList == NULL) {
 	FreeVolNode(volnode);
 	return TRUE;

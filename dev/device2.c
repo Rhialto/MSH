@@ -1,6 +1,16 @@
 /*-
- * $Id: device2.c,v 1.55 1993/12/30 22:45:10 Rhialto Rel $
+ * $Id: device2.c,v 1.58 2005/10/19 16:51:06 Rhialto Exp $
  * $Log: device2.c,v $
+ * Revision 1.58  2005/10/19  16:51:06  Rhialto
+ * Finally a new version!
+ *
+ * Revision 1.58  2005/10/19  16:41:19  Rhialto
+ * Finally a new version!
+ *
+ * Revision 1.56  1996/12/21  23:34:35  Rhialto
+ * Remove "register" from declarations,
+ * correct const funcTable.
+ *
  * Revision 1.55  1993/12/30  22:45:10	Rhialto
  * Remove InitTable.
  * Do units 4..11.
@@ -73,7 +83,7 @@ Prototype const char DevName[];
 Prototype const char idString[];
 
 const char	DevName[] = "messydisk.device";
-const char	idString[] = "$\VER: messydisk.device $Revision: 1.55 $ $Date: 1993/12/30 22:45:10 $\r\n";
+const char	idString[] = "$\VER: messydisk.device $Revision: 1.58 $ $Date: 2005/10/19 16:51:06 $\r\n";
 
 /*
  * Device commands:
@@ -389,7 +399,7 @@ struct IOStdReq *ioreq;
 
 Immediate:
     /*
-     * If the quick bit is still set then wen don't need to reply the msg
+     * If the quick bit is still set then we don't need to reply the msg
      * -- just return to the user.
      */
 
@@ -453,7 +463,8 @@ UnitTask()
     }
 
     /*
-     * Now finish initializing the message ports and other signal things
+     * Now finish initializing the message ports and other signal
+     * things.
      */
 
     {
@@ -469,6 +480,13 @@ UnitTask()
 
 	unit->mu_DmaSignal = AllocSignal(-1L);
     }
+
+    /*
+     * Set the signal in case anybody sent us messages before the
+     * message port is initialised.
+     */
+
+    Signal(unit->mu_Port.mp_SigTask, waitmask);
 
     for (;;) {
 	debug(("Task: Waiting...\n"));

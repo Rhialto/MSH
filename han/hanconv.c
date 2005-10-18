@@ -1,6 +1,12 @@
 /*-
- * $Id: hanconv.c,v 1.55 1993/12/30 23:28:00 Rhialto Rel $
+ * $Id: hanconv.c,v 1.58 2005/10/19 16:53:52 Rhialto Exp $
  * $Log: hanconv.c,v $
+ * Revision 1.58  2005/10/19  16:53:52  Rhialto
+ * Finally a new version!
+ *
+ * Revision 1.56  1996/12/22  00:22:33  Rhialto
+ * Cosmetics only.
+ *
  * Revision 1.55  1993/12/30  23:28:00	Rhialto
  * Freeze for MAXON5.
  *
@@ -257,5 +263,9 @@ ConvCleanUp()
     }
     Permit();
 }
+
+#else
+
+short		  DefaultConversion;	/* dummy */
 
 #endif /* CONVERSIONS */

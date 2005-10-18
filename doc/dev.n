@@ -1,0 +1,260 @@
+.nr v 58
+.so /doc/an
+.if @nv<42 .TH messydisk.device "" "Amiga Programmer's Manual" "Rhialto, KosmoSoft" "Version 34.8/1.@nv"
+.if @nv=42 .TH messydisk.device "" "Amiga Programmer's Manual" "Rhialto, KosmoSoft" "Version 34.10/1.@nv"
+.if @nv=44 .TH messydisk.device "" "Amiga Programmer's Manual" "Rhialto, KosmoSoft" "Version 34.11/1.@nv"
+.if @nv=51 .TH messydisk.device "" "Amiga Programmer's Manual" "Rhialto, KosmoSoft" "Version 34.12/1.@nv"
+.if @nv=53 .TH messydisk.device "" "Amiga Programmer's Manual" "Rhialto, KosmoSoft" "Version 37.13/1.@nv"
+.if @nv=54 .TH messydisk.device "" "Amiga Programmer's Manual" "Rhialto, KosmoSoft" "Version 37.14/1.@nv"
+.if @nv=55 .TH messydisk.device "" "Amiga Programmer's Manual" "Rhialto, KosmoSoft" "Version 37.15/1.@nv"
+.if @nv=56 .TH messydisk.device "" "Amiga Programmer's Manual" "Rhialto, KosmoSoft" "Version 37.16/1.@nv"
+.if @nv=58 .TH messydisk.device "" "Amiga Programmer's Manual" "Rhialto, KosmoSoft" "Version 37.17/1.@nv"
+.SH SYNOPSYS
+.nf
+#include <exec/io.h>
+#include <devices/trackdisk.h>
+#include <dev.h>
+
+OpenDevice("messydisk.device", Unit, IOExtTD, Flags);
+BeginIO(IOExtTD);
+CloseDevice(IOExtTD);
+.fi
+.SH USAGE
+Messydisk.device can be used instead of trackdisk.device. All current
+trackdisk.device commands are supported. The only functional difference is
+the format of the disk, which is compatible with messydos systems.
+
+For version 37.15+: If your floppy drive is a half-speed high-density drive
+(as in the Amiga 4000 and some Amiga 3000s), messydisk.device will notice
+and write HD (high-density) floppies in HD mode and normal DD
+(double-density, which is half of high-density) in DD mode. It is not
+possible to write HD disks in DD mode without covering the extra hole in
+the floppy that indicates its HD-ness. This is a hardware limitation that
+also holds for AmigaDOS format disks.
+.SH PROBLEMS
+When messydisk.device can read disks properly, but hangs when attempting to
+write, the problem is usually that the disk index interrupt does not come
+through for some reason. Possible causes are: 1. Hardware defects. Normal
+use for AmigaDOS formatted disks is not necessaryly prevented by this. 2.
+Someone stealing the interrupt vector. This has been reported for at least
+one harddisk driver. Also (older versions of) AmigaOS 2.0 do(es) this.
+.SH COMMANDS
+Supported commands are:
+
+.nf
+= CMD_INVALID     = CMD_RESET       * CMD_READ
+* CMD_WRITE       * CMD_UPDATE      = CMD_CLEAR
+= CMD_STOP        = CMD_START       = CMD_FLUSH
+
+  TD_MOTOR        = TD_SEEK         * TD_FORMAT
+  TD_REMOVE         TD_CHANGENUM      TD_CHANGESTATE
+  TD_PROTSTATUS     TD_RAWREAD        TD_RAWWRITE
+  TD_GETDRIVETYPE   TD_GETNUMTRACKS = TD_ADDCHANGEINT
+.ie @nv<53 @{@
+= TD_REMCHANGEINT@}
+.el @{@
+= TD_REMCHANGEINT = TD_GETGEOMETRY    TD_EJECT@}
+
+* ETD_WRITE       * ETD_READ          ETD_MOTOR
+= ETD_SEEK        * ETD_FORMAT      * ETD_UPDATE
+= ETD_CLEAR         ETD_RAWREAD       ETD_RAWWRITE
+.fi
+
+The commands marked with * are handled in its own format by messydisk. The
+commands marked with = are handled by messydisk in the same way as
+trackdisk supposed is to do. The other commands are sent straight through
+to trackdisk and are subject to all its flaws and features.
+.br
+The extended commands support the disk change count only. The sector label
+pointer (iotd_SecLabel) is ignored, since messy formatted disks don't have
+any label areas.
+.SH UNIT NUMBERS
+The messydisk.device supports 4 physical units: 0 through 3. These are the
+same as units 0 .. 3 of trackdisk.device. However, higher unit numbers can
+be given, if you don't have control over the OpenDevice flags.
+
+Units 0..3 are default.
+
+Units 4..7 internally set the IOMDF_40TRACKS and IOMDF_FIXFLAGS flags,
+i.e. this always forces 40 track mode.
+
+Units 8..11 internally clears IOMDF_40TRACKS and sets IOMDF_FIXFLAGS, i.e.
+this does not allow 40 track mode.
+.SH OPENDEVICE FLAGS
+TDF_ALLOW_NON_3_5: Allows opening 40 track drives. Ignored, since it is the
+default behaviour which cannot be disabled.
+
+IOMDF_FIXFLAGS: Normally, the flags as set in IO requests override flags
+set at OpenDevice time. If you supply this flag however, any IOMD* flags in
+an IO request will be ignored. Note that bit cannot be set in IO requests
+since it is a bit number higher than 7.
+
+The IOMDF_40TRACKS flag may also be given in the flags argument of
+OpenDevice; you should include the above mentioned IOMDF_FIXFLAGS flag as
+well for it to be of any use.
+.SH IO REQUEST FLAGS
+The io_Flags field of an IOStdReq or IOExtTD structure may contain the
+following flags:
+
+IOF_QUICK: This flag is supported for only a few commands.
+
+IOTDF_INDEXSYNC: For ETD/CMD_RAWREAD and _WRITE.
+
+IOMDF_40TRACKS: This flag is for ETD/CMD_READ, _WRITE, _FORMAT, and _SEEK.
+If set, treat the disk as 40 cylinder media. If it happens to be in an 80
+cylinder drive, every other cylinder will be skipped to use the same
+cylinders a 40-cylinder drive would. Normally you set or clear this flag
+once at the time you read the bootblock and examine its layout information.
+It is guaranteed that messydisk won't change this flag. IOMDF_40TRACKS is
+not supported for ETD/TD_RAWREAD and _RAWWRITE, since these are considered
+to be "diagnostic" functions and therefore should be as raw as possible.
+.SH DISK FORMAT
+The disk format used is compatible with messydos systems. Both 40 and 80
+cylinder media are supported. There are normally 9 sectors (max 10) per
+track and two tracks per cylinder. For high-density drives 18 sectors (max
+21) per track are supported.
+
+(Outdated) single-sided disks can only be read if
+the driving software is prepared to treat them as normal double-sided
+disks, and skip the sides that are not actually present. On the other hand,
+the number of sectors per track may vary up to 10 or 21. If the number of
+sectors is different from the default value (9 or 18), then track 0 on side
+0 must be read first before this is properly recognised. It is then assumed
+that all tracks on the entire disk have the same number of sectors. So, all
+position calculations are based on the layout of the very first track.
+
+.nf
+.ne 8
+--- Index pulse  ------------------------------------.
+                                                     |
+    40 * $4e    GAP 1A  ($9254 encoded)              |
+    12 * $00            ($AAAA encoded)              |
+     3 * $c2    SYNC    ($5224 encoded)              |
+     1 * $fc    index mark           ($5552)         |
+                                                     |
+    40 * $4e    GAP 1B  ($9254 encoded)              |
+                                                     |
+.ne 12
+--- First Sector -----------------------------.      |
+                                              |      |
+    12 * $00    GAP 2   ($AAAA encoded)       |      |
+ |   3 * $a1    SYNC    ($4489 encoded)       |      |
+ |                                            |      |
+ |   1 * $fe    ID-Address Mark   -. ($5554)  |      |
+ |  track                          |          |      |
+ |  side                           |          |      |
+ |  sector                          > ID      |      |
+ |  length (0=128,1=256,2=512 etc.)|  Field   |  S   |
+ -> CRC 1                          |          |  e   |  T
+ -> CRC 2                         -'          |  c   |  r
+                                               > t    > a
+.ne 11
+    22 * $4e    GAP 3A  ($9254 encoded)       |  o   |  c
+    12 * $00    GAP 3B  ($AAAA encoded)       |  r   |  k
+ |   3 * $a1    SYNC    ($4489 encoded)       |      |
+ |                                            |      |
+ |   1 * $fb    DATA-Adress Mark  -. ($5545)  |      |
+ |  512 bytes data                  > DATA    |      |
+ -> CRC 1                          |  Field   |      |
+ -> CRC 2                         -'          |      |
+                                              |      |
+    78 * $4e    GAP 4   ($9254 encoded)       |      |
+ or 40 * $4e    GAP 4   ($9254 encoded)       |      |
+----------------------------------------------'      |
+                                                     |
+.ne 4
+ ...... at most 20 more sectors .......              |
+                                                     |
+    rest  $4e up to 6250 or 12500 bytes ($9254)      |
+-----------------------------------------------------'
+.fi
+.SH DEVIATIONS
+The TD_REMCHANGEINT command works. (It doesn't with the 1.2 or 1.3
+trackdisk.device).
+
+.ne 2
+The messydisk Unit structure does not look like TDU_PublicUnit at all.
+
+.ne 2
+In some situations, error returns may be different or less specific.
+
+Data buffers to be read or written currently don't need to be in Chip
+memory.
+
+When you format the first track(s) of the disk, the number of sectors per
+track is guessed best as possible. Since you must always format entire
+tracks at a time, this almost uniquely determines the number of sectors you
+want on each track; This is not perfect, however.
+
+All other tracks are formatted the same as the first one.
+
+When formatting track 0, messydisk.device attempts to guess the desired
+number of tracks as follows.
+
+* If the length will fit on one track (i.e. is <= 10 or 21 sectors), then
+this will be chosen.
+
+* If the length is at most 80 sectors, track lengths from 8-10 or 15-21
+sectors will be tried; the one that results in a whole number of tracks is
+chosen. Example: formatting 30 HD sectors will be 3 tracks of 10, and 18 DD
+sectors will be 2 tracks of 9. The result of formatting 40 DD sectors is
+undefined.
+
+* If no track length has been chosen yet, the one most recently chosen is
+used.
+
+Note that releases prior to 37.15 were more restrictive in this regard,
+allowing no more than 39 sectors to be formatted in any case.
+
+When a disk with more or less than 9 (or 18) sectors per track is read, you
+must first issue a CMD_READ command for the first sector(s) of the disk.
+When track 0 is read, messydisk.device determines how many sectors there
+are on a track. This number is then used afterwards when calculating the
+tracks and sides of other sectors. So, this is very important. But for
+those (virtually impossible) cases where not all tracks have the same
+number of sectors, all sectors (up to the maximum supported) that were read
+on any track will be written back. Fortunately, all currently known file
+systems have a bootblock at track 0, side 0, so they all adapt
+transparently.
+.SH CAVEATS
+The (outdated) TD_REMOVE command is routed to trackdisk. As a result of
+this, only one disk remove interrupt (per unit) may be installed
+(with this command), whether through trackdisk or messydisk. (This seems
+to have been the original intention of TD_REMOVE.) Of course, current
+programs should use TD_ADDCHANGEINT.
+.if @nv>33 @{@
+.SH AMIGAOS 2.0+ COMPATIBILITY
+If messydisk.device detects that a 2.0+ version of trackdisk.device is
+available, it uses the TD_RAWWRITE command to write to the disk instead of
+banging on the hardware itself. The result is better future
+compatibility.@}
+.SH UTILITIES
+A separate program called Ignore is supplied, which may suppress the CRC
+check in any currently open unit. When the unit is definitively closed and
+later reopened, ignoring CRC mismatches again has its default value of No.
+.sp;.nf
+Usage: ignore <unitnr> <YES/NO>
+.sp;.fi
+If you only give the unit number, ignore will output either Yes or No,
+reflecting whether CRC mismatches currently are ignored. Additionally,
+if Yes is printed the exit status will be the AmigaDOS warn level (5).
+This is useful in scripts.
+
+This program can be useful when you wish to recover data from a damaged
+or marginal disk. Sometimes text files may be usable even if there are a
+few errors in them.
+.SH BUGS
+With AmigaOS 2.0, messydisk.device versions prior to 1.34 are unable to
+write to disks because the disk index interrupt does not come through for
+some reason. Another situation where this interrupt gets "stolen" have also
+been observed by someone.
+.SH AUTHORS
+Messydisk is written by
+.I Sourcerer
+Olaf
+.I Rhialto
+Seibert. The low-level writing part was originally done by Werner
+G@X(252)nther. Used with permission.
+
+
+

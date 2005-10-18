@@ -1,7 +1,10 @@
 /*-
- * $Id: syslogd.c,v 1.1 1994/10/24 20:36:30 Rhialto Exp $
+ * $Id: syslogd.c,v 1.2 2005/10/19 16:20:26 Rhialto Exp $
  *
  * $Log: syslogd.c,v $
+ * Revision 1.2  2005/10/19  16:20:26  Rhialto
+ * Add a cast to avoid a warning.
+ *
  * Revision 1.1  1994/10/24  20:36:30  Rhialto
  * Initial revision
  *
@@ -238,7 +241,7 @@ struct LogPort *logport;
 {
     struct LogMsg *msg;
 
-    while (msg = GetMsg(&LogPort->lp_MsgPort)) {
+    while (msg = (struct LogMsg *)GetMsg(&LogPort->lp_MsgPort)) {
 	struct Task    *sigtask;
 
 	sigtask = (struct Task *)msg->lm_Msg.mn_ReplyPort;

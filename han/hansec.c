@@ -1,6 +1,14 @@
 /*-
- * $Id: hansec.c,v 1.55 1993/12/30 23:28:00 Rhialto Rel $
+ * $Id: hansec.c,v 1.58 2005/10/19 16:53:52 Rhialto Exp $
  * $Log: hansec.c,v $
+ * Revision 1.58  2005/10/19  16:53:52  Rhialto
+ * Finally a new version!
+ *
+ * Revision 1.56  1996/12/22  00:22:33  Rhialto
+ * Fiddle with caching strategy on sector and file handle level.
+ * Add some protection against BPB data being 0 (but it still
+ * seems not enough).
+ *
  * Revision 1.55  1993/12/30  23:28:00	Rhialto
  * Freeze for MAXON5.
  * Keep two sets of disk geometries: for DD and HD floppies.
@@ -53,7 +61,7 @@
  * Sector-level stuff: read, write, cache, unit conversion.
  * Other interactions (via MyDoIO) with messydisk.device.
  *
- * This code is (C) Copyright 1989-1994 by Olaf Seibert. All rights reserved.
+ * This code is (C) Copyright 1989-1997 by Olaf Seibert. All rights reserved.
  * May not be used or copied without a licence.
 -*/
 
@@ -85,19 +93,20 @@ Prototype char	CacheDirty;
 Prototype char	DelayCount;
 Prototype short CheckBootBlock;
 Prototype word	Get8086Word(byte *Word8086);
+Prototype ulong	Get8086Long(byte *Long8086);
 Prototype word	OtherEndianWord(long oew);     /* long should become word */
 Prototype ulong OtherEndianLong(ulong oel);
 #if !defined(OtherEndianMsd)
 /*Prototype void  OtherEndianMsd (struct MsDirEntry *msd);*/
 #endif
-Prototype word	ClusterToSector(word cluster);
-Prototype word	ClusterOffsetToSector(word cluster, word offset);
-Prototype word	DirClusterToSector(word cluster);
-Prototype word	SectorToCluster(word sector);
-Prototype word	NextCluster(word cluster);
-Prototype word	NextClusteredSector(word sector);
-Prototype word	FindFreeSector(word prev);
-Prototype struct CacheSec *FindSecByNumber(int number);
+Prototype sector_t	ClusterToSector(cluster_t cluster);
+Prototype sector_t	ClusterOffsetToSector(cluster_t cluster, int offset);
+Prototype sector_t	DirClusterToSector(cluster_t cluster);
+Prototype cluster_t	SectorToCluster(sector_t sector);
+Prototype cluster_t	NextCluster(cluster_t cluster);
+Prototype sector_t	NextClusteredSector(sector_t sector);
+Prototype sector_t	FindFreeSector(sector_t prev);
+Prototype struct CacheSec *FindSecByNumber(sector_t number);
 Prototype struct CacheSec *FindSecByBuffer(byte *buffer);
 Prototype struct CacheSec *NewCacheSector(struct MinNode *pred);
 Prototype void	FreeCacheSector(struct CacheSec *sec);
@@ -105,9 +114,9 @@ Prototype void	InitCacheList(void);
 Prototype void	FreeCacheList(void);
 Prototype void	MSUpdate(int immediate);
 Prototype void	StartTimer(int);
-Prototype byte *ReadSec(int sector);
-Prototype byte *EmptySec(int sector);
-Prototype void	WriteSec(int sector, byte *data);
+Prototype byte *ReadSec(sector_t sector);
+Prototype byte *EmptySec(sector_t sector);
+Prototype void	WriteSec(sector_t sector, byte *data);
 Prototype void	MayWriteTrack(struct CacheSec *cache);
 Prototype void	FreeSec(byte *buffer);
 Prototype void	MarkSecDirty(byte *buffer);
@@ -122,12 +131,14 @@ Prototype int	TDProtStatus(void);
 Prototype int	TDMotorOff(void);
 Prototype int	TDClear(void);
 Prototype int	TDUpdate(void);
+Prototype int   CheckETDCommands(void);
 Prototype int	MyDoIO(struct IOStdReq *ioreq);
 
 struct MsgPort *DiskReplyPort;
 struct IOExtTD *DiskIOReq;
 struct IOStdReq *DiskChangeReq;
 int		HeadOnTrack;
+unsigned long   ExtendedTrackdisk;
 
 struct DiskParam DefaultDisk = {
     MS_BPS,
@@ -141,6 +152,7 @@ struct DiskParam DefaultDisk = {
     MS_SPT,
     MS_NSIDES,
     0,	    /* NHID */
+    12,     /* bits per fat entry */
 };
 
 struct DiskParam Disk;
@@ -200,41 +212,41 @@ void
 OtherEndianMsd(msd)
 struct MsDirEntry *msd;
 {
-    msd->msd_Date = OtherEndianWord(msd->msd_Date);
-    msd->msd_Time = OtherEndianWord(msd->msd_Time);
+    msd->msd_ModDate = OtherEndianWord(msd->msd_ModDate);
+    msd->msd_ModTime = OtherEndianWord(msd->msd_ModTime);
     msd->msd_Cluster = OtherEndianWord(msd->msd_Cluster);
     msd->msd_Filesize = OtherEndianLong(msd->msd_Filesize);
 }
 #endif
 
-word
+sector_t
 ClusterToSector(cluster)
-word	cluster;
+cluster_t	cluster;
 {
     return cluster ? Disk.start + cluster * Disk.spc
 	: 0;
 }
 
-word
+sector_t
 ClusterOffsetToSector(cluster, offset)
-word	cluster;
-word	offset;
+cluster_t	cluster;
+int	offset;
 {
     return cluster ? Disk.start + cluster * Disk.spc + offset / Disk.bps
 	: 0;
 }
 
-word
+sector_t
 DirClusterToSector(cluster)
-word	cluster;
+cluster_t	cluster;
 {
     return cluster ? Disk.start + cluster * Disk.spc
 	: Disk.rootdir;
 }
 
-word
+cluster_t
 SectorToCluster(sector)
-word	sector;
+sector_t	sector;
 {
     return sector ? (sector - Disk.start) / Disk.spc
 	: 0;
@@ -245,24 +257,28 @@ word	sector;
  * Claims that the file ends if something strange happens.
  */
 
-word
+cluster_t
 NextCluster(cluster)
-word cluster;
+cluster_t cluster;
 {
-    word entry;
+    cluster_t entry;
 
     entry = GetFatEntry(cluster);
-    if (entry >= 0xFFF7 || entry == 0 || entry > Disk.maxclst)
+    /*
+     * Remove the check for entry >= 0xFFF7, since that subsumes
+     * under entry > Disk.maxclst.
+     */
+    if (entry == 0 || entry > Disk.maxclst)
 	return FAT_EOF;
     else
 	return entry;
 }
 
-word
+sector_t
 NextClusteredSector(sector)
-word		sector;
+sector_t		sector;
 {
-    word	    next = (sector + 1 - Disk.start) % Disk.spc;
+    sector_t	    next = (sector + 1 - Disk.start) % Disk.spc;
 
     if (next == 0) {
 	next = NextCluster(SectorToCluster(sector));
@@ -271,6 +287,70 @@ word		sector;
     } else
 	return sector + 1;
 }
+
+#if VFATSUPPORT
+
+#if 0
+/*
+ * This function attempts to find the cluster that
+ * points to the argument.
+ *
+ * This is quite time-consuming, linear in the size
+ * of the partition.
+ */
+Prototype cluster_t PrevCluster(cluster_t cluster);
+
+cluster_t
+PrevCluster(cluster_t cluster)
+{
+    cluster_t prev = cluster - 1;
+
+    for (;;) {
+	if (prev == cluster) {
+	    /* Not found */
+	    return FAT_EOF;
+	}
+	if (prev < MS_FIRSTCLUST) {
+	    prev = Disk.maxclst;
+	}
+	if (GetFatEntry(prev) == cluster)
+	    return prev;
+	prev--;
+    }
+}
+
+#endif
+
+Prototype sector_t PrevDirSector(sector_t sector);
+
+sector_t
+PrevDirSector(sector_t sector)
+{
+    if (sector >= Disk.datablock) {
+	/* Must be subdirectory */
+	if ((sector - Disk.start) % Disk.spc == 0) {
+#if 0	    /* the hard way */
+	    cluster_t cluster = PrevCluster(SectorToCluster(sector));
+	    if (cluster == FAT_EOF)
+		sector = SEC_EOF;
+	    else
+		sector = ClusterToSector(cluster);
+#else
+	    sector = SEC_EOF;
+#endif
+	} else {
+	    sector--;
+	}
+	debug(("NextClusteredSector: %ld\n", (long)sector));
+    } else {
+	if (--sector < Disk.rootdir) {
+	    sector = SEC_EOF;
+	}
+    }
+    return sector;
+}
+
+#endif
 
 #if ! READONLY
 
@@ -283,11 +363,11 @@ word		sector;
  * sector is always the first sector of a cluster.
  */
 
-word
+sector_t
 FindFreeSector(prev)
-word		prev;
+sector_t		prev;
 {
-    word freecluster = FindFreeCluster(SectorToCluster(prev));
+    cluster_t freecluster = FindFreeCluster(SectorToCluster(prev));
 
     return freecluster == FAT_EOF ? SEC_EOF : ClusterToSector(freecluster);
 }
@@ -307,12 +387,12 @@ struct MinNode *PredNumberNode;
 
 struct CacheSec *
 FindSecByNumber(number)
-int	number;
+sector_t	number;
 {
     struct CacheSec *sec;
     struct MinNode  *nextsec;
 
-    debug(("FindSecByNumber %ld ", (long)number));
+    /* debug(("FindSecByNumber %ld ", (long)number)); */
 
     /*
      * IF the most recently used sector has a number not higher than
@@ -334,13 +414,13 @@ int	number;
 
     while (nextsec = sec->sec_NumberNode.mln_Succ) {
 	if (sec->sec_Number == number) {
-	    debug((" (%lx) %lx\n", (long)sec->sec_Refcount, sec));
+	    /* debug((" (%lx) %lx\n", (long)sec->sec_Refcount, sec)); */
 	    Remove((struct Node *)&sec->sec_LRUNode);
 	    AddHead((struct List *)&CacheList.LRUList,
 		    (struct Node *)&sec->sec_LRUNode);
 	    return sec;
 	}
-	debug(("cache %ld %lx; ", (long)sec->sec_Number, sec));
+	/* debug(("cache %ld %lx; ", (long)sec->sec_Number, sec)); */
 	if (sec->sec_Number > number) {
 	    /* We need to insert before this one */
 	    debug(("insert b4 %ld ", (long)sec->sec_Number));
@@ -371,7 +451,7 @@ int	number;
      */
 
     PredNumberNode = sec->sec_NumberNode.mln_Pred;
-    debug(("sec = %lx, pred = %lx; ", sec, PredNumberNode));
+    /* debug(("sec = %lx, pred = %lx; ", sec, PredNumberNode)); */
     return NULL;
 }
 
@@ -447,6 +527,7 @@ move:
 	error = ERROR_NO_FREE_STORE;
 
     debug(("NewCacheSector: %lx\n", sec));
+
     return sec;
 }
 
@@ -630,7 +711,7 @@ int		times;
 
 byte	       *
 ReadSec(sector)
-int		sector;
+sector_t		sector;
 {
     struct CacheSec *sec;
 
@@ -655,7 +736,7 @@ int		sector;
 
 	req = DiskIOReq;
 	do {
-	    req->iotd_Req.io_Command = ETD_READ;
+	    req->iotd_Req.io_Command = CMD_READ | ExtendedTrackdisk;
 	    req->iotd_Req.io_Data = (APTR)sec->sec_Data;
 	    req->iotd_Req.io_Offset = Partition.offset + (long) sector * Disk.bps;
 	    req->iotd_Req.io_Length = Disk.bps;
@@ -682,7 +763,7 @@ int		sector;
 
 byte	       *
 EmptySec(sector)
-int		sector;
+sector_t		sector;
 {
     struct CacheSec *sec;
 
@@ -708,7 +789,7 @@ int		sector;
 
 void
 WriteSec(sector, data)
-int		sector;
+sector_t		sector;
 byte	       *data;
 {
     struct IOExtTD *req;
@@ -717,7 +798,7 @@ byte	       *data;
 
     req = DiskIOReq;
     do {
-	req->iotd_Req.io_Command = ETD_WRITE;
+	req->iotd_Req.io_Command = CMD_WRITE | ExtendedTrackdisk;
 	req->iotd_Req.io_Data = (APTR) data;
 	req->iotd_Req.io_Offset = Partition.offset + (long) sector * Disk.bps;
 	req->iotd_Req.io_Length = Disk.bps;
@@ -905,7 +986,7 @@ int
 AwaitDFx()
 {
     debug(("AwaitDFx\n"));
-    if (Interleave & NICE_TO_DFx) {
+    if (Interleave & OPT_NICE_TO_DFx) {
 	static char	dfx[] = "DFx:";
 	void	       *dfxProc;
 	char		xinfodata[sizeof(struct InfoData) + 3];
@@ -947,9 +1028,30 @@ AwaitDFx()
 }
 
 int
+log2(ulong v)
+{
+    int r;
+
+    /* The most common value: sector size 512 / direntry size 32 */
+    if (v == 16)
+	return 4;
+    
+    r = 0;
+    while (v >= 16) {
+	v >>= 4;
+	r += 4;
+    }
+    while (v > 1) {
+	v >>= 1;
+	r++;
+    }
+    return r;
+}
+
+int
 ReadBootBlock()
 {
-    int protstatus;
+    int         protstatus;
     short	oldCancel = Cancel;
 
     debug(("ReadBootBlock\n"));
@@ -976,8 +1078,9 @@ ReadBootBlock()
 	    if ((CheckBootBlock & CHECK_BOOTJMP) &&
 				/* Atari: empty or 68000 JMP */
 		bootblock[0] != 0x00 && bootblock[0] != 0x4E &&
-				/* 8086 ml for a jump */
-		bootblock[0] != 0xE9 && bootblock[0] != 0xEB) {
+				/* 8086 ml for a jump: E9xxxx or EBxx90 */
+		bootblock[0] != 0xE9 &&
+		    (bootblock[0] != 0xEB || bootblock[2] != 0x90)) {
 
 		FreeSec(bootblock);
 		/* IDDiskType = ID_NOT_REALLY_DOS; */
@@ -1000,6 +1103,25 @@ ReadBootBlock()
 		Disk.spt = Get8086Word(bootblock + 0x18);
 		Disk.nsides = Get8086Word(bootblock + 0x1a);
 		Disk.nhid = Get8086Word(bootblock + 0x1c);
+		Disk.fatbits = 0;
+
+		/*
+		 * Check if a DOS 5.0 BPB is present, and if so
+		 * use the extended values
+		 */
+		if (bootblock[0x26] == 0x29) {
+		    Disk.dos5 = 1;
+		    Disk.nhid = Get8086Long(bootblock + 0x1c);
+		    if (Disk.nsects == 0)
+			Disk.nsects = Get8086Long(bootblock + 0x20);
+		    if (memcmp(bootblock + 54, "FAT12   ", 8) == 0)
+			Disk.fatbits = 12;
+		    else if (memcmp(bootblock + 54, "FAT16   ", 8) == 0)
+			Disk.fatbits = 16;
+		} else {
+		    Disk.dos5 = 0;
+		}
+
 	    }
 	    FreeSec(bootblock);
 
@@ -1030,7 +1152,11 @@ ReadBootBlock()
 	    Disk.bpc = Disk.bps * Disk.spc;
 	    Disk.vollabel = FakeRootDirEntry;
 /*	    Disk.fat16bits = Disk.nsects > 20740;  / * DOS3.2 magic value */
-	    Disk.fat16bits = Disk.maxclst >= 0xFF7; /* DOS3.0 magic value */
+	    if (Disk.fatbits == 0) {
+		Disk.fatbits =
+		    Disk.maxclst >= 0xFEE ? 16 : 12; /* DOS3.0 magic value */
+	    }
+	    Disk.examinesecshift = 1 + log2(Disk.bps / MS_DIRENTSIZE);
 
 	    /*
 	     * We set this for the benefit of ouside programs; this value
@@ -1058,7 +1184,9 @@ ReadBootBlock()
 	    debug(("%lx\tfirst data block\n", (long)Disk.datablock));
 	    debug(("%lx\tclusters total\n", (long)Disk.maxclst));
 	    debug(("%lx\tbytes per cluster\n", (long)Disk.bpc));
-	    debug(("%lx\t16-bits FAT?\n", (long)Disk.fat16bits));
+	    debug(("%ld\t-bits FAT\n", (long)Disk.fatbits));
+	    debug(("%ld\tdos 5.0 BPB present\n", (long)Disk.dos5));
+	    debug(("%ld\texaminesecshift\n", (long)Disk.examinesecshift));
 
 	    /*
 	     * Sanity check.
@@ -1071,7 +1199,9 @@ ReadBootBlock()
 		    Disk.spf < 1 ||
 		    Disk.spt < 1 ||
 		    Disk.nsides < 1 ||
-		    Disk.ndirsects < 1) {
+		    Disk.ndirsects < 1 ||
+		    /* Check sectors per cluster is a power of 2 */
+		    ((Disk.spc - 1) & Disk.spc) != 0) {
 		insane_disk:
 		    if (CheckBootBlock & CHECK_SAN_DEFAULT) {
 			debug(("Bad bootblock; using default values.\n"));
@@ -1142,7 +1272,8 @@ struct DateStamp *date;
 	    dirent = (struct MsDirEntry *) dirblock;
 
 	    while ((byte *) dirent < &dirblock[Disk.bps]) {
-		if (dirent->msd_Attributes & ATTR_VOLUMELABEL) {
+		if ((dirent->msd_Attributes &~ ATTR_ARCHIVE) ==
+			ATTR_VOLUMELABEL) {
 		    Disk.vollabel.de_Msd = *dirent;
 		    Disk.vollabel.de_Sector = Disk.rootdir;
 		    Disk.vollabel.de_Offset = (byte *) dirent - dirblock;
@@ -1301,11 +1432,54 @@ TDUpdate()
 {
     struct IOExtTD *req = DiskIOReq;
 
-    req->iotd_Req.io_Command = ETD_UPDATE;
+    req->iotd_Req.io_Command = CMD_UPDATE | ExtendedTrackdisk;
 
     return MyDoIO(&req->iotd_Req);
 }
 #endif
+
+/*
+ * Apparently, not all disk devices support ETD_ commands.
+ * This function tests if it does, by attempting to turn off the
+ * motor with a disk change count of 0. Hopefully this is
+ * innocuous: the change count may be 0 or 1 for the first disk
+ * being inserted.
+ */
+int
+CheckETDCommands()
+{
+    struct IOExtTD *req = DiskIOReq;
+    long result;
+
+    req->iotd_Req.io_Command = ETD_MOTOR;
+    req->iotd_Req.io_Length = 0;	/* turn motor off */
+    req->iotd_Req.io_Offset = 0;
+    req->iotd_Req.io_Data = NULL;
+    req->iotd_Count = 0;
+
+#if 0
+    debug(("mn_ReplyPort = %08lx, DiskReplyPort = %08lx,\n\tmp_SigBit = %d, mp_SigTask = %08lx\n",
+	req->iotd_Req.io_Message.mn_ReplyPort,
+	DiskReplyPort,
+	DiskReplyPort->mp_SigBit,
+	DiskReplyPort->mp_SigTask));
+#endif
+    result = MyDoIO(&req->iotd_Req);
+    debug(("Checking ETD commands: error = %ld\n", result));
+
+    switch (result) {
+    case 0:
+    case TDERR_DiskChanged:
+	ExtendedTrackdisk = TDF_EXTCOM;
+	break;
+    case IOERR_NOCMD:
+    case TDERR_NotSpecified:
+    default:
+	ExtendedTrackdisk = 0;
+	break;
+    }
+    debug(("ExtendedTrackdisk = %lx\n", ExtendedTrackdisk));
+}
 
 int
 MyDoIO(ioreq)

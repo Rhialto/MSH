@@ -1,0 +1,1369 @@
+@database MSH.guide
+
+@Master /doc/msh.texi
+
+@Width 72
+
+
+This is the AmigaGuide® file MSH.guide, produced by Makeinfo-1.55 from 
+the input file /doc/msh.texi.
+
+
+@Node Main "MSH.guide"
+
+MSH
+***
+
+This file documents MSH: 1.58.
+
+Copyright (C) 1989-2005 by Olaf 'Rhialto' Seibert.  All Rights
+Reserved. May not be used or copied without a license.
+
+If you like the program, feel free to send me some Euros, or even
+ManyEuros if you feel like it. Please don't send any cheques: they
+don't exist anymore in the Netherlands and they cost a lot of money to
+cash, if that is possible at all.
+
+All shareware resellers (and especially those in Germany) are reminded
+that they are NOT allowed to make any profit off my work.  Resellers are
+considered to make an illegal profit if they charge more for a disk than
+Fred Fish does. Those resellers do NOT have a licence to use or copy
+MSH. Also, if you distribute MSH:, you must distribute it in its
+entirety: you are not allowed to leave parts out. This also includes the
+source!
+
+
+ @{" Overview " Link "Overview"}             What is MSH, and what is in the package?
+ @{" Requirements " Link "Requirements"}         What else do you need?
+ @{" Installation " Link "Installation"}         How do you install it?
+ @{" Compatibility " Link "Compatibility"}        How compatible is it?
+ @{" Utilities " Link "Utilities"} 
+ @{" Suggestions " Link "Suggestions"} 
+ @{" Bugs " Link "Bugs"}                 Known bugs. Don't look: there are none :)
+ @{" Credits " Link "Credits"}              Whose software I ripped off to make this.
+ @{" Glossary " Link "Glossary"}             What all the words mean.
+ @{" Index " Link "Index"}                Where to find what in this manual.
+
+Amiga, AmigaDOS, Workbench are trademarks of Amiga, Inc.  Messydos is
+presumably a trademark of MessySoft, Inc.  This product includes
+software developed by TooLs GmbH.
+
+The messy file system handler is written by @{i}Sourcerer @{ui}Olaf @{i}Rhialto
+@{ui}Seibert.
+
+
+@EndNode
+
+@Node "Overview" "MSH.guide/Overview"
+@Next "Requirements"
+@Prev "Main"
+@Toc "Main"
+
+Overview
+********
+
+     Mount MSH:
+     
+     MSH:<any valid file specification>, or just
+     
+     <any valid file specification>
+   if your current directory is somewhere on @{b}MSH:@{ub}.
+
+   @{b}MSH:@{ub} is a real Amiga-style File System handler that handles messydos
+formatted diskettes. You can use files on such messydos disks in almost
+exactly the same way as you use files on normal Amiga disks.
+
+   Now Lose'95-style long file names are also supported, although this
+can be turned off.
+
+   Supported are 40 or 80 tracks, double-sided 8, 9 or 10 sector
+double-density (DD) floppy disks, double-sided 15-21 sector high-density
+(HD) floppy disks, and harddisks with a 12 or 16-bit FAT of any
+dimension the FAT allows. I have not really tested MSH: on hard disks;
+proceed with extreme caution. I did test it in a large pseudo-partition
+though so I think that it should work.
+
+   See also the @{"revision history" Link "Versions/MAIN"}, and
+@{"why pclones can't read Amiga disks" Link "Haynie/MAIN"}.
+
+
+@EndNode
+
+@Node "Requirements" "MSH.guide/Requirements"
+@Next "Installation"
+@Prev "Overview"
+@Toc "Main"
+
+Requirements
+************
+
+   Besides what is included in this archive, you need AmigaDOS 1.2 or
+better.  I run it on my own system with AmigaDOS 3.0.  You may also
+need some knowledge of installing @{b}Mountlist@{ub}s and @{b}.device@{ub}s.
+
+
+@EndNode
+
+@Node "Installation" "MSH.guide/Installation"
+@Next "Compatibility"
+@Prev "Requirements"
+@Toc "Main"
+
+Installation
+************
+
+   Below is given a Mountlist entry.
+
+   You can append this to your system's default Mountlist
+(DEVS:Mountlist), or to any other Mountlist you mention with the Mount
+command: Mount FROM SomeMountlist, as supported by AmigaDOS 1.3+ Mount
+commands.
+
+   You must put the messydisk.device in DEVS:, and the file
+MessyFileSystem in L:. You can put these files in other locations,
+provided you adapt the file names in the Mountlist accordingly.
+
+
+ @{" Mountlist " Link "Mountlist"}                What Mountlist to use
+ @{" Installation Problems " Link "Installation Problems"}    Problems? Naahh...
+
+
+@EndNode
+
+@Node "Mountlist" "MSH.guide/Mountlist"
+@Next "Installation Problems"
+@Toc "Installation"
+
+Mountlist
+=========
+
+   A sample Mountlist entry, that works with the AmigaDOS 3.0 Mount
+command:
+
+   It will also work with other versions of the Mount command, but may
+need minor changes. For 1.2, change FileSystem to Handler. For 2.1+,
+leave out the `MSH:' at the begin and `#' at the end, and put the
+remaining in a file called DEVS:DOSDrivers/MSH.)
+
+/*
+ *  Messy file system on messy blocks:
+ */
+MSH:    FileSystem = L:MessyFileSystem
+        Device = messydisk.device
+        Unit = 1
+        Flags = 0
+/*
+ *  HighCyl is ignored, LowCyl, Surfaces, BlocksPerTrack
+ *  and Reserved are used once to find the bootblock.
+ *  Further parameters are found there.
+ */
+        LowCyl = 0 ; HighCyl = 79
+        Reserved = 0
+        Surfaces = 2
+        BlocksPerTrack = 9
+/*
+ *  Initially the disk cache will be 25 sectors.
+ */
+        Buffers = 25
+/*
+ *  Our type of filesystem is 'MSD\0'.
+ */
+        DosType = 0x4D534400
+/*
+ *  If Interleave is set to 0x10000, MSH: will wait for DFx:
+ *  (where x depends on the Unit parameter above) to recognize
+ *  inserted disks (or not). See @{"Compatibility" Link "Compatibility"}.
+ *  Do @{i}not @{ui}use this option when using the MultiFileSystem,
+ *  or Zip/Jaz/etc drives, or anything else besides DF0 ... DF3!
+ *  There are some more options too (see @{"File names" Link "File names"}).
+ */
+        Interleave = 0x10000
+/*
+ *  Use BufMemType = 3 [for MEMF_CHIP | MEMF_PUBLIC] if you
+ *  use MSH: on (older versions of) the trackdisk.device.
+ */
+        BufMemType = 1
+        BootPri = 0
+        Stacksize = 8192	/* Note increase since previous releases! */
+        Priority = 9
+        GlobVec  = -1
+/*
+ *  Immediately load and start the MessyFileSystem
+ *  when mounted.
+ */
+        Mount = 1
+#
+
+   This Mountlist entry instructs MSH: to use floppy unit 1, i.e. DF1:
+and the messydisk.device. You may choose any name instead of MSH: that
+you like.  For this case, MS1: would also be a sensible choice. You can
+read the separate manual page about messydisk.device. It is supposed to
+be possible to use MSH: on a harddisk by supplying the proper device
+name and unit number. If you wish to use floppies truly compatible with
+those messy machines, you should use the messydisk.device. You cannot
+change this name into something else. It is also supposed to work on
+40-track drives, but this has not been tested by me.
+
+   The Mountlist entries LowCyl, Surfaces, BlocksPerTrack and Reserved
+are used once to determine the location of the messydos bootblock. Disk
+blocks of 512 bytes are assumed in this calculation. The block number
+of the bootblock is calculated as @{b}(LowCyl * Surfaces * BlocksPerTrack)
++ Reserved@{ub}.  Further information is then obtained from the bootblock
+(see below).
+
+   Additionally, these values, and HighCyl are used for default
+bootblocks, and for formatting.
+
+   MSH tries to be smart about HD floppies: if the specified number of
+sectors per track (spt) is greater than 10 (the maximum for DD disks),
+this spt is taken for HD floppies, and half the value for DD floppies.
+Otherwise, the spt is assumed to be for DD, and twice the value is set
+for HD floppies.
+
+   Every time you insert a disk, either the DD or HD spt value is made
+default (by messydisk.device) until the file system examines the boot
+block.
+
+   The DosType parameter indicates the type of file system that is
+implemented by this handler. As of AmigaOS 2.0, Commodore-Amiga defined
+a value for messy-type file systems: 0x4D534400 ('M' 'S' 'D' 0).
+
+   The Interleave parameter indicates whether MSH: should be nice to
+another file system which happens to use the same floppy drive. More
+about this below.  Using floppies, you'll want to set Interleave to
+0x10000, for use with anything else (such as harddisks and removables
+like Zip, Jaz, or Syquest) 0 is needed.  Also, if you use the
+MultiFileSystem (MFS) to automatically select between different file
+systems, you MUST NOT set this option.
+
+   The lower 16 bits of Interleave are reserved to specify interleaving
+of sectors, but are currently ignored.
+
+   Older versions used DosType = 1, but this does really not work
+anymore.
+
+
+@EndNode
+
+@Node "Installation Problems" "MSH.guide/Installation Problems"
+@Prev "Mountlist"
+@Toc "Installation"
+
+Installation Problems
+=====================
+
+   In the past, several problems have arised when installing MSH:. Most
+of them are:
+
+   @{b}*@{ub} Not all Mount commands are the same. Not all keywords are always
+     accepted, and some don't recognize keywords if they are preceeded
+     by a TAB instead of spaces. Troublesome keywords are "Mount" and
+     "FileSystem".
+
+   @{b}*@{ub} Incorrect Mountlist entries can also be a problem. For example, it
+     is easily forgotten to adjust the Unit value. This is especially
+     difficult to detect if the Unit value refers to a drive that is
+     not connected.
+
+   @{b}*@{ub} Some Mount commands do funny things if the DosType parameter is
+     missing.  Not only does it default the value for DosType, but also
+     for Stack, even if you do specify it. However this default of 3072
+     bytes is too small for some handlers, which causes mysterious
+     dysfunctions.
+
+   @{b}*@{ub} The required stack size has increased. If you upgraded from a
+     previous version of MSH and did not change your Mountlist entry,
+     MSH might not completely clean up directories when you remove
+     files from long directories (either with many files, or very long
+     names). Increase the Stacksize field if you somehow notice that
+     this happens, and try again.
+
+
+@EndNode
+
+@Node "Compatibility" "MSH.guide/Compatibility"
+@Next "Utilities"
+@Prev "Installation"
+@Toc "Main"
+
+Compatibility
+*************
+
+
+ @{" 2.0+ Functions " Link "2.0+ Functions"}           Which 2.04+ functions are supported
+ @{" Extensions " Link "Extensions"}               What useful extra things did I make?
+ @{" Limitations " Link "Limitations"}              What does it not do?
+
+   General observations:
+
+   @{b}*@{ub} Even though MSH: uses one of your floppy drives, you may still use
+     that drive for normal Amiga disks. You will notice that when you
+     insert a disk in the drive used by MSH:, both MSH: and the regular
+     Amiga file system handler may attempt to identify the disk. The
+     result will be that one of the two will be unable to read it, and
+     then leave it alone so that the other may use it.
+
+     The @{b}Interleave@{ub} parameter indicates whether MSH: should be nice to
+     another file system which happens to use the same floppy drive.
+     Because this can only be DF0:, DF1:, DF2: or DF3:, MSH: can derive
+     the name from the Unit parameter. If Interleave is set to 0x10000,
+     MSH: will wait for DFx: (where x depends on the Unit parameter) to
+     recognize inserted disks. If it recognizes an inserted disk as an
+     AmigaDOS disk, MSH: will conclude that it should not even attempt
+     to access the disk. If DFx: only notices that some disk has been
+     inserted but does not think it is an AmigaDOS disk, MSH: goes
+     ahead and tries to identify it. If DFx: has not reached some
+     conclusion after approximately 7.5 seconds, MSH: does not wait any
+     longer, and attempts identification anyway.
+
+     If Interleave is not set, both MSH: and DFx: will try to access
+     the disk at the same time. Only one of the two can succeed, but in
+     the mean time they may have a violent fight about the control of
+     the disk drive.
+
+     For harddisk(partition)s, and Zip/Jaz/Syquest/etc drives, there is
+     no other file system that MSH: must wait for, so Interleave should
+     be set to 0.
+
+   @{b}*@{ub} It is recommended that you don't attempt to refer to MSH: while
+     other filesystems are trying to read the disk.
+
+   @{b}*@{ub} In some situations where there are multiple errors at the same
+     time (such as trying to delete a non-existent file from a
+     write-protected disk), the error reported may be different than
+     the regular file system.
+
+
+@EndNode
+
+@Node "2.0+ Functions" "MSH.guide/2.0+ Functions"
+@Next "Extensions"
+@Toc "Compatibility"
+
+2.0+ Functions
+==============
+
+   The following functions from AmigaDOS 2.0 and higher are supported:
+
+   SameLock(), SetFileSize(), ACTION_WRITE_PROTECT (the C:Lock command)
+OpenFromLock(), IsFilesystem(), ChangeMode(), DupLockFromFH(),
+ParentOfFH(), ExamineFH(), Format(), ACTION_SERIALIZE_DISK,
+ACTION_GET_DISK_FFSM, ACTION_FREE_DISK_FFSM.
+
+   Supported by emulation in dos.library:
+
+   ExAll(), ExAllEnd().
+
+   Not supported are:
+
+   LockRecord(), UnLockRecord(), StartNotify(), EndNotify(),
+MakeLink(), ReadLink().
+
+
+@EndNode
+
+@Node "Extensions" "MSH.guide/Extensions"
+@Next "Limitations"
+@Prev "2.0+ Functions"
+@Toc "Compatibility"
+
+Extensions
+==========
+
+
+ @{" Character Conversions " Link "Character Conversions"}    Converting umlauts and double-s.
+ @{" Extended Packets " Link "Extended Packets"}         Packets with extra functionality
+ @{" Special Files " Link "Special Files"}            Files with a side effect (depecated)
+
+
+@EndNode
+
+@Node "Character Conversions" "MSH.guide/Character Conversions"
+@Next "Extended Packets"
+@Toc "Extensions"
+
+Character Conversions
+---------------------
+
+   @{i}Note: @{ui}The file character conversions have been disabled in favour of
+the long file name support. The form of a filename with conversion is
+now a valid file name.
+
+   If you really want the conversions back, recompile MSH: with @{b}#define
+VFATSUPPORT 0@{ub} in han/han.h. I don't think anybody used it anyway, but
+if there is a public outcry about this I may try to get them going
+again, possibly in some different form.
+
+Disabled Character Conversions
+------------------------------
+
+   MSH: has two character conversion tables installed, that can be used
+while reading or writing a file. These tables convert the character
+codes of the ü, ä, ö, Ü, Ä, Ö and ß characters between the Amiga
+codes and PC or ST codes.
+
+   To open a file with PC character conversion, add ";A" to the end of
+the filename.  To open a file with ST character conversion, add ";B" to
+the end of the filename.
+
+   @{i}Note: @{ui}To specify a filename with a ";" in it on a CLI or Shell
+command line, you must enclose the entire name in quotes. This is
+because normally a semicolon starts a comment.
+
+   Note that no conversion between Amiga and PC or ST end-of-line
+characters is performed. Such a conversion would change the length of a
+file, and non-sequental access to a file would not be reliable.
+Furthermore, even the option of such a conversion would also slow down
+access to files which are not converted, which is the more common case.
+
+   A default conversion type, that applies to all files opened from
+then on, can be specified by accessing the "file" MSH::Cx, where x is
+the same character that specifies the conversion on file names.
+
+   To open a file without conversion, or to revert to default
+behaviour, use "@" as the conversion type.
+
+   See also @{"Special Files" Link "Special Files"}, @{"Utilities" Link "Utilities"}.
+
+
+@EndNode
+
+@Node "Extended Packets" "MSH.guide/Extended Packets"
+@Next "Special Files"
+@Prev "Character Conversions"
+@Toc "Extensions"
+
+Extended Packets
+----------------
+
+   The following packets have some extended functionality:
+
+ACTION_DIE
+     The packet @{b}ACTION_DIE@{ub} is supported, and even has the result of
+     stopping MSH: and optionally unloading the file system code. This
+     is convenient when you don't need to use MSH: for a while and
+     helps you to conserve memory. A program called @{b}die@{ub} is supplied
+     that sends the ACTION_DIE packet to any handler you wish.  (See
+     @{"Utilities" Link "Utilities"}) If there is any program running that expects MSH: to
+     remain present even while there are no open or locked files on
+     MSH:, it may be dangerous to remove MSH:. Unfortunately, one such
+     program is the Workbench (in older AmigaOS versions), so you
+     should not kill MSH: if you also have the Workbench running.
+
+ACTION_MORECACHE
+     MSH: handles the packet @{b}ACTION_MORECACHE@{ub} (used by the AddBuffers
+     command) and cache buffers more intelligently. When you add
+     buffers, the required memory is not allocated immediately, but
+     gradually as there becomes a use for it. When you remove a disk its
+     buffers are no longer of use and therefore are all freed and
+     returned to the free memory pool. And, what is more important, you
+     can decrease the maximum number of buffers. By specifying a
+     negative number you reduce the number of buffers. If your
+     AddBuffers does not like negative buffer counts, simply add 65536
+     to the (negative) number you actually intend. So, instead of -1
+     you can also specify 65535, -2 is 65534.  You wouldn't want to add
+     more than 32767 buffers at once anyway.
+
+     Note that @{b}MSH:@{ub} initially allocates 25 buffers. You cannot lower
+     this number from the Mountlist, since the long filename support
+     really likes to walk through whole directories often and several
+     times soon after each other. If you really insist though, you can
+     reduce the number of buffers with AddBuffers, but I wouldn't
+     recommend it.
+
+
+@EndNode
+
+@Node "Special Files" "MSH.guide/Special Files"
+@Prev "Extended Packets"
+@Toc "Extensions"
+
+Special Files
+-------------
+
+   @{i}DEPRECATED @{ui}
+
+   There are a few file names that have a special meaning. They all
+start with @{b}MSH::@{ub} with two colons instead of @{b}MSH:@{ub} with one colon.  For
+some reason, some versions of AmigaDOS require you to use 3 colons
+instead of 2.
+
+   @{i}DEPRECATED @{ui}
+
+MSH::B
+     By default, MSH: checks the bootblock to see if it contains a 8086
+     or 68000 JMP instruction, or a 0 in the first byte. If so, it
+     assumes that the bootblock is valid, and proceeds to fetch the
+     information as detailed above. Then it checks if the values make
+     any sense, in particular some minimum values are enforced. If this
+     is not the case, all values are replaced with defaults. These
+     defaults are based on a 720K disk with 2 FATS of 3 sectors (or
+     whatever you specified in the Mountlist), clusters of 1K, and 112
+     root directory entries.
+
+     This default can be selected again by accessing the file
+     "MSH::B7". (Note that the "B" @{i}must @{ui}be in uppercase).
+
+     An alternative behaviour is that disks with 'senseless' bootblocks
+     are rejected instead of being 'fixed'. This can be selected by
+     accessing the file "MSH::B3".
+
+     Yet another option is that the bootblock is not checked at all,
+     and the defaults are used in all cases.  This can be selected by
+     accessing the file "MSH::B8".
+
+     After accessing some MSH::B "file" a requester appears to confirm
+     the value you selected. MSH: pauses until you click in the OK
+     gadget.
+
+     See also @{"Boot block format" Link "Boot block format"}.
+
+MSH::F
+     Some messydos computers have 80-track floppy drives, but the
+     FORMAT command does not know that. If you format an 80-track
+     floppy on such a system, it is possible that only 40 tracks get
+     formatted, and even the 'wrong' 40 tracks: the outer 40 tracks
+     instead of every other track. If you insert such a disk in an MSH:
+     drive, then MSH: knows that the disk uses only 40 tracks, but
+     wrongly thinks it must use or simulate a 40 track drive. The
+     result is that the files on that disk seem to contain garbage, or
+     parts of other files. To correct this situation, you can access
+     the special file name "MSH::F-" (the F must be in uppercase) each
+     time after you insert that particular disk. On the other hand, the
+     name "MSH::F+" forces MSH: to use 40 track drive emulation mode.
+
+     After accessing MSH::F+ or ::F- a requester appears to confirm the
+     value you selected. MSH: pauses until you click in the OK gadget.
+
+MSH::M
+     You can disable these requesters with MSH::M- and re-enable them
+     with MSH::M+.
+
+MSH::C
+     See @{"Character Conversions" Link "Character Conversions"}, @{"Utilities" Link "Utilities"}.
+
+   @{i}DEPRECATED @{ui}
+
+
+@EndNode
+
+@Node "Limitations" "MSH.guide/Limitations"
+@Prev "Extensions"
+@Toc "Compatibility"
+
+Limitations
+===========
+
+   Due to the difference between messydos and AmigaDOS file systems,
+not all operations that are available for Amiga files can be applied to
+messydos files.
+
+   The following items are noteworthy:
+
+
+ @{" File names " Link "File names"}                   no longer that silly 8+3 format!
+ @{" Special directories " Link "Special directories"}          "." and ".."
+ @{" Filenotes " Link "Filenotes"}                    are impossible, of course
+ @{" File protection bits " Link "File protection bits"}         versus file attributes
+ @{" Boot block format " Link "Boot block format"}            what is used of it
+ @{" FAT " Link "FAT"} 
+ @{" Workbench " Link "Workbench"}                    cooperation with
+ @{" Volume label " Link "Volume label"} 
+ @{" Volume and directory dates " Link "Volume and directory dates"}   when are they updated and where
+                                are they stored
+ @{" Multiple file systems " Link "Multiple file systems"}        how to have MS0: and MS1: etc.
+
+
+@EndNode
+
+@Node "File names" "MSH.guide/File names"
+@Next "Special directories"
+@Toc "Limitations"
+
+File names
+----------
+
+   It used to be that file names could only be "8 + 3" characters long.
+In Losedows '95 micro$oft introduced a very ugly way to finally
+overcome this extremely annoying and oldfashioned limitation. However
+ugly it is, it became a must to incorporate this method in MSH.
+
+   This also means that file names with lowercase letters and non-ASCII
+characters in them are now supported. As a side-effect, if you already
+had filenames that were not proper M$-DOS file names, they might look
+different now, since a conversion takes place between DOS and Amiga
+character codes.
+
+   The method used to create long file names also requires that a unique
+short name is created for each file. This involves scanning the whole
+directory, possibly several times, until a name is generated that does
+not exist yet. For example, if a file with the name @{b}msdosfs_lookup.c@{ub} is
+created, the first attempt at a unique name is @{b}MSDOSF~1.C@{ub}. If that name
+already exists, for instance because it belongs to a file
+@{b}msdosfs_vnops.c@{ub}, the next attempt is @{b}MSDOSF~2.C@{ub}, and so on. You can
+understand that this can take a long time, especially in a long
+directory with many files with similar names.
+
+   The attempted short names are created from long names by converting
+all letters to upper case, removing illegal characters, and inserting a
+~ followed by a number. Also, non-ASCII characters are converted from
+Amiga character codes (ISO Latin 1) to M$-DOS character codes.
+
+   Also, if a directory with long names is modified on a system which
+knows nothing about them, there will be "junk" left in the directory:
+parts of long file names that do not belong to a file anymore.
+Therefore, every time a file is renamed or removed its directory is
+cleaned up. This also involves two scans of the whole directory. (I am
+considering methods to reduce the frequency of this cleaning operation,
+since it happens way too often.)
+
+   As stated above, each file that has a long name also has a short
+name.  You will see the short names in the filenote field. I use the
+following alias to list a MSH directory in a (usually) tidy manner:
+
+   	@{b}alias lc list lformat "%-26N%6L %D %T %C" []@{ub}
+
+   This produces a listing like this:
+
+MSDOSF~1.C                     6 Yesterday 17:19:48
+MSDOSF~2.C                     6 Yesterday 17:20:44
+MSDOSF~3.C                     6 Yesterday 17:27:34
+dir1a                        Dir Yesterday 20:53:54 DIR1A
+a-very-long-file-name-that-needs-several-entries.c     6 Yesterday 17:37:48 A-VERY~1.C
+dir2                         Dir Yesterday 20:54:10 DIR2
+éíóáú                      empty Today     22:19:54 ÉÍÓÁÚ
+msdosfs_lookup.c           28934 02-Mar-97 21:00:22 MSDOSF~4.C
+
+   The -26 indicates the amount of space available for the long file
+name, and you can adjust it to taste.
+
+   You may notice that you can open files by both their long and short
+name. This will give you exactly the same file. But if you use the short
+name MSH: does not know that there was a long name. This means that
+deleting it leaves the long name as "junk" in the directory, and the
+result of a call to Examine() on the file does not reveal the long name.
+
+   The length of a long file name can be 255 characters, but due to
+internal AmigaDOS limitations, only up to 104 characters can be shown.
+If a filename longer than that occurs, its short name will be used and
+its long name will be ignored. (The size of the fib_FileName field in a
+FileInfoBlock is only 108 characters, and 104 is a nice multiple of 13).
+A long file name consists of Unicode characters. That is a 16-bit code,
+the first 256 characters of which correspond with ISO-Latin-1, which
+happens to be the code AmigaOS uses. File names are translated to and
+from Unicode automatically. If a name occurs that cannot be converted
+into ISO-Latin-1, it is ignored and the short name will be used.
+
+   MSH can still be set not to recognise long names, or even to ignore
+all lose'95 features altogether. You can do this by setting bits in the
+Interleave field in the Mountlist. Of course you can add together
+various option bits to enable multiple options.
+
+0x80000 (SHORTNAME)
+     This option removes the recognition and creation of long names.
+     Cleanup of directories still takes place. When you use a name that
+     is too long, it will be truncated to 8+3 format, but not exactly
+     the same way it used to happen in previous MSH versions. It is
+     more like the way short names are generated from long names,
+     except that there is no "~number" inserted.  This holds for lookup
+     and creation of names.
+
+0x40000 (NO_WIN95)
+     Setting NO_WIN95 also implies SHORTNAME.  This option removes ALL
+     knowledge about long names and other Lose'95 features from MSH.
+     Currently this means that long names are not removed from
+     directories when their associated short names are removed, and that
+     directories are not cleaned up. Also, should additional lose'95
+     features be built into MSH, this option will keep them turned off.
+
+   As before, there are still some names that MSH allows you to create
+that M$DOS cannot handle. These include the device names CON, AUX, PRN,
+NUL, and the patterns COM[1-4] and LPT[1-4].
+
+   You can go even further and disable the long file name support
+completely. Refer to source file @{b}han/han.h@{ub} for compile-time
+configuration options. In that case, the following old bit of
+documentation still holds.
+
+Old situation of file names
+---------------------------
+
+   The most eye-catching difference are the file names: messydos file
+names can be at most "8 + 3" characters long. This means that the "base"
+part of the file name may be eight characters long, maybe followed by a
+three-character "extension", which is separated from the base name with
+a period ('.'). Also, you cannot use all characters in the file names
+you wish, but the charater choice is basically limited to the uppercase
+letters A-Z, digits 0-9, and most "punctuation" characters except space
+* ? . < > / = | , : and \.
+
+   MSH: will try to map file names that you or a program attempts to
+use to names that are actually allowed. But for utmost flexibility,
+only the most basic limitations are enforced: the length of the name
+(8+3), uppercase alphabetics and no non-ASCII characters, and the
+presence of only one period in the name. This means that you might
+create file names that a messydos computer does not correctly know how
+to handle. But care has been taken that in no case it would be possible
+to create a file name that, once created, cannot be handled anymore by
+MSH:. You can always refer to that file with the same name you used
+before, even if MSH: changed it for you.
+
+
+@EndNode
+
+@Node "Special directories" "MSH.guide/Special directories"
+@Next "Filenotes"
+@Prev "File names"
+@Toc "Limitations"
+
+Special directories ('.' and '..')
+----------------------------------
+
+   On messydos floppies, every subdirectory has two special entries
+called "." and "..". They refer to the directory itself and its "parent"
+directory, respectively. Programs that traverse directory trees on
+messydos systems take care to skip these "subdirectories", since they
+really are not "sub" direcories and recursively entering them would lead
+to nothing but trouble.  (Their presence prevents the file system from
+having a tree structure.) Therefore, they are @{i}completely @{ui}hidden from
+sight. You cannot see them in directory listings nor refer to them by
+any name. Nor will their dates/times be updated when they are changed
+in their respective primary directory entries.
+
+   But even while it is hidden, the ".." entry is of course still
+updated to reflect the new parent directory when a directory is renamed
+and moved.  Note, by the way, that moving directories is an operation
+that is not supported by m$-dos itself.
+
+   Of course, the usual methods of accessing the current directory (the
+empty name "") and the parent directory ("/") do work.
+
+   It may be that in the future, when softlinks are supported better in
+AmigaDOS, these "." and ".." directories will be made visible again, but
+in the disguise of a soft link. In that case, programs which don't know
+how to handle them should either not exist anymore or ignore the links
+themselves.
+
+
+@EndNode
+
+@Node "Filenotes" "MSH.guide/Filenotes"
+@Next "File protection bits"
+@Prev "Special directories"
+@Toc "Limitations"
+
+Filenotes (ACTION_SET_COMMENT)
+------------------------------
+
+   Messydos has no provision for file notes and therefore they cannot be
+supported. However, to remain friends with the CLONE option of the
+C:Copy command, MSH: pretends success when setting a filenote.
+
+   Instead, if the file has a long name, you will see the short name of
+the file in the filenote field.
+
+
+@EndNode
+
+@Node "File protection bits" "MSH.guide/File protection bits"
+@Next "Boot block format"
+@Prev "Filenotes"
+@Toc "Limitations"
+
+File protection bits vs. file attributes
+----------------------------------------
+
+   Currently, the following interpretation of messydos file attributes
+is performed. The Directory and Volumelabel attributes are honored to
+make these directory entries different from plain files.
+
+   The HIDDEN and SYSTEM attributes are mapped to the H(idden) bit. The
+H bit is mapped to the HIDDEN attribute; the SYSTEM attribute cannot be
+changed.
+
+   The READ-ONLY attribute is mapped to the W(rite) and D(elete) bits.
+Inversely, if a file is set to either Write or Delete protected, the
+READ-ONLY attribute is set.
+
+   The ARCHIVE bit, when clear, sets the A(rchived) bit. On messydos the
+ARCHIVE attribute means (when set) that the file MUST be backed up (by a
+backup program). A write to a file sets the ARCHIVE attribute. On
+AmigaDOS the Archived bit means (when set) that the file has been
+archived already.  A write to a file clears the Archived protection bit.
+
+
+@EndNode
+
+@Node "Boot block format" "MSH.guide/Boot block format"
+@Next "FAT"
+@Prev "File protection bits"
+@Toc "Limitations"
+
+Boot block format
+-----------------
+
+   MSH: relies on the information in the boot block regarding the
+number of bytes per block, blocks per track, tracks per cylinder,
+blocks per cluster, etc. The physical information is not actually used
+to access the disk, except for the number of tracks which is derived
+from other information. It is used to decide if a 40 track disk is
+inserted in a 80 track drive. Single sided disks are not supported. The
+number of sectors may be whatever the underlying device driver
+supports. (With messydisk.device this is 8, 9 or 10; with
+trackdisk.device it is 11). Only the logical layout information is
+used: Size of a block, number of reserved blocks, number of FATs,
+number of blocks per FAT, number of root directory entries, number of
+blocks per cluster. The total number of blocks is used to determine the
+usable part of the disk. (If the FAT says "use a block beyond the
+limit", this error is not always detected).
+
+   If you format a disk on a messydos computer and wish to use it with
+MSH:, be sure to use a messydos version new enough to write this
+information in the boot block. (Version 3.2 works nicely for me.) If
+you wish to format such a disk on your Amiga, you can use the standard
+AmigaDOS Format command, or use the supplied messyfmt program.
+
+   MSH recognises DOS 5.0 style bootblocks and uses some of their
+extended information. For now, the bootblocks written by MSH are still
+DOS 3.x style. The volume serial number and volume label in the
+bootblock are not used.
+
+   See also @{"Special Files" Link "Special Files"}.
+
+
+@EndNode
+
+@Node "FAT" "MSH.guide/FAT"
+@Next "Workbench"
+@Prev "Boot block format"
+@Toc "Limitations"
+
+FAT
+---
+
+   The FAT is currently not checked for integrity and consistency.  The
+FAT is assumed to have 12-bit entries if the disk has at most 4086
+($FF6) clusters. If the disk has more clusters than that, 16 bit FAT
+entries are assumed. This is the method that seems to be used by messy
+dos 3.0.
+
+   If a DOS 5.0 style bootblock is found, it always contains the number
+of bits per FAT entry. 32-bits FATs are not supported yet.
+
+
+@EndNode
+
+@Node "Workbench" "MSH.guide/Workbench"
+@Next "Volume label"
+@Prev "FAT"
+@Toc "Limitations"
+
+Workbench
+---------
+
+   If MSH is compiled without long filename support, then the Workbench
+wants to use filenames that are impossible on messydos floppies: the
+icon files which end with @{b}.info@{ub}.
+
+   To still make this possible, all filenames with the extension INF are
+converted to look like they end in .info. Which looks kind of silly, by
+the way, in directory listings.
+
+   If long file name support is compiled in, then this is not necessary
+and won't happen. This remains true when you use the option to turn off
+long file names.
+
+
+@EndNode
+
+@Node "Volume label" "MSH.guide/Volume label"
+@Next "Volume and directory dates"
+@Prev "Workbench"
+@Toc "Limitations"
+
+Volume label
+------------
+
+   Normal AmigaDOS floppies have a part of the disk reserved for their
+name.  With messydos floppies a name is optional, and should be in the
+directory in an entry with the special flag (attribute) Volumelabel.
+MSH: looks in the first directory block only to locate such a volume
+label. If found, it decides the name and creation date of the disk; if
+not found, the name will become "Unnamed" and the creation date will
+become 1-Jan-80. Note that AmigaDOS (and MSH:) keep disks apart by
+their name and creation date. As a result, all unlabeled disks, (and
+all disks with the same name) will look equivalent and cannot be
+distinguished. It is therefore strongly recommended that you provide
+every disk with a unique volume label; the standard AmigaDOS command
+Relabel can be used for this.
+
+   If you label a disk that had no label (in the first directory sector)
+before, MSH: will try to move a file from the first directory block to
+somewhere else in the root directory. If this is not possible, for
+instance because the root directory is full, then the labeling will
+fail as well.
+
+   The normal date that is contained in the volume node is the
+modification time of the root directory (so, if no label is present,
+the date is not kept either). The additional creation date is an
+nonstandard MSH feature, which may or may not be compatible with all
+versions of messydos. It will only be added when a new label is
+created; otherwise it is left undisturbed.
+
+   See also @{"Volume and directory dates" Link "Volume and directory dates"}.
+
+
+@EndNode
+
+@Node "Volume and directory dates" "MSH.guide/Volume and directory dates"
+@Next "Multiple file systems"
+@Prev "Volume label"
+@Toc "Limitations"
+
+Volume and directory dates
+--------------------------
+
+   To recapulate the behaviour of directory and volume modification
+dates:
+
+1.
+     Directory modification dates are the dates in the normal directory
+     entry that refers to that directory. This means that the date in
+     "." and ".." entries is not updated. Since the root directory has
+     no such directory entry, the volume label (if it exists) is used
+     instead.
+
+2.
+     The volume creation date is put in some spare room in the volume
+     label (the four unused bytes following the attribute byte).
+
+3.
+     If there is no volume label, the creation date is set to 1-1-1980,
+     the first date allowed by messydos. The root directory
+     modification date is only remembered as long as the disk is known
+     to MSH; if it is later re-inserted it is reset to the initial date
+     of 1-1-1980. The disk name is set to Unnamed. All such Unnamed
+     disks look the same to AmigaDOS, @{i}and cannot be distinguished.
+     NEVER have two such disks in use at the same time, or diaster will
+     result.@{ui}
+
+   See also @{"Volume label" Link "Volume label"}.
+
+
+@EndNode
+
+@Node "Multiple file systems" "MSH.guide/Multiple file systems"
+@Prev "Volume and directory dates"
+@Toc "Limitations"
+
+Multiple file systems
+---------------------
+
+   The MessyFileSystem (versions 1.51 and higher) is "pure".  Running
+two file systems from the same memory image is possible by using the
+separate utility MountShare. AmigaDOS 2.04 and before are not so smart
+to see that two file systems share the same FileSystem name in the
+Mountlist, so explicit use of MountShare is the only way to force
+sharing. See the appropriate documentation for details.
+
+   AmigaDOS 2.1 and higher has a Mount command that does this
+automatically by using the FileSystem.resource.
+
+   Therefore it is important the DosType value in the mountlist is set
+correctly.
+
+
+@EndNode
+
+@Node "Utilities" "MSH.guide/Utilities"
+@Next "Suggestions"
+@Prev "Compatibility"
+@Toc "Main"
+
+Utilities
+*********
+
+   @{b}*@{ub} If you want to format default disks, and you are using system
+     2.0+, you can use the system standard Format command or the
+     Workbench "Format Disk" menu. Default format means that you can
+     only format disks with the same number of sectors as is specified
+     in the Mountlist or mountfile (or twice that for HD floppies; see
+     the MOUNTLIST section for details). A "quick" format is possible
+     if the disk already was default-formatted and you only want to
+     erase all files. A quick format on non-default formatted disks will
+     appear normal but may result in loss of data at a later time.
+
+     If you want to format a disk in a special way you can always use
+     one of the special messy formatting utilities as mentioned below.
+
+        @{b}*@{ub} To format your disks you can use @{b}MSH-Format@{ub} (if you are
+          running AmigaOS 2.04 or greater). This is a very intuitive
+          program so you just need to point and click to format disks.
+          You can set all kinds of parameters, if you need to, but not
+          all combinations of them result in usable disks.
+
+        @{b}*@{ub} There is a commodity called @{b}MSH-Set@{ub} (if you are running
+          AmigaOS 2.04 or greater). This is a very intuitive program to
+          set options in MSH. It supports the usual commodity ToolTypes
+          CX_PRIORITY (default 0), CX_POPKEY (default rawkey ctrl alt
+          m) and CX_POPUP (default YES). Should accidentally the
+          commodities exchange libary not be available, then this
+          commodity still runs as an ordinary program without commodity
+          features.
+
+          For an explanation of the flags, it is best to refer to the
+          (hereby obsolete) MSH:: commands. Furthermore, the function
+          of LoadConv (see below) is contained in MSH-Set.
+
+        @{b}*@{ub} A program called @{b}MessyFmt@{ub} allows you to format disks in
+          messydos format. It runs on all versions of AmigaDOS.
+
+          Usage: messyfmt [ASK/BOOT/QUICK] <unitnr> [<device>]
+
+          Formats a messydos volume in any desired shape.
+
+          The items between [ brackets ] are optional.
+
+          You can specify one of ASK, BOOT or QUICK.
+
+          The <device> name defaults to "messydisk.device".
+
+          Example: The command "messyfmt 1" will format the disk in
+          floppy disk unit #1, also used for DF1:.
+
+          If you specify QUICK, the tracks with the bootblock, the FAT
+          and the root directory are formatted, but the rest of the
+          disk is untouched.
+
+          If you specify BOOT, only the bootblock is written. The disk
+          must already be formatted in messydos format for this to work.
+
+          If you do not specify any of these options, the whole disk is
+          formatted with all default parameters.
+
+          If you specify ASK, the program asks for all parameters to
+          put in the bootblock, like
+
+          Bytes per sector? [512]
+
+          If you just hit return you accept the default value,
+          otherwise you can enter a new value in the usual notation: 0x
+          = hexadecimal (the digits A-F must be in upper case), 0 =
+          octal, and everything else is decimal. A few suffixes are
+          allowed as multiplication factor: m = mega (1048576), k = kilo
+          (1024), s = sectors (512) and b = byte (1). (Not all terms
+          make sense with all questions.) You may create 8, 9, 10, or
+          18 up to 21 sector disks by answering the question "Sectors
+          per track" appropriately. This value is stored in the boot
+          block, and also used in the format command for the disk
+          device.
+
+          You are also asked if you wish to format the whole disk, and
+          if not, if you want to write only the bootblock, or the
+          bootblock, FAT and directory.
+
+          Finally, to see if you are still awake, you must enter 42 if
+          you are sure to do it.
+
+          After formatting has completed, you must remove the disk from
+          the drive, in order to let all involved filesystems know that
+          the disk just died and reincarnated.
+
+          Hint: If you want to format a 40 track floppy in an 80 track
+          drive, it is probably easiest to first format it with 80
+          tracks, and then re-format just the bootblock. Only then you
+          need to give the correct values for 40 tracks.
+
+   @{b}*@{ub}     @{b}Die@{ub} allows you (under certain circumstances) to terminate the
+     MSH: process and unload the MessyFileSystem from memory.
+
+     Usage: die [unshare|unload] MSH-DEV:
+
+     So if you have mounted MSH as MSH:, and use "Die MSH:", an
+     ACTION_DIE packet is sent. MSH then checks if any files or locks
+     are still outstanding. If there are none, termination is possible.
+
+     The optional argument @{i}unload @{ui}has the effect that the DIE packet is
+     tagged specifically so that MSH knows that it should unload
+     itself. Sometimes this is not a safe operation, therefore the
+     extra reminder is needed.
+
+     If you used MountShare (see appropriate documentation), you should
+     specify @{i}unshare @{ui}for all devices but the last one, and then @{i}unload
+     @{ui}for the last one, if you have checked that it is really the last
+     one. You can check this with the @{b}C:Info@{ub} command: if only the last
+     device is shown it is safe to specify @{i}unload.@{ui}  The effect of the
+     @{i}unshare @{ui}option is that MSH: will erase the SegList pointer from
+     its DeviceNode, which was put there by MountShare.
+
+   @{b}*@{ub} Not only can character conversions be performed on files read and
+     written (see @{"Character Conversions" Link "Character Conversions"}), the conversion table can even
+     be user-defined with help of the program @{b}LoadConv@{ub}.
+
+     Usage: loadconv MSH-DEV: X file
+
+     where X is the conversion id (A or B).
+
+     From then on, all reads on files opened as "file;X" use the new
+     conversion.
+
+     The file must contain exactly 512 bytes of data. The first 256
+     bytes form the conversion table used when writing files, the
+     second 256 bytes are the reading conversion table. This table
+     simply contains the converted values of the characters 0 upto 255,
+     i.e. if you want Amiga character number 13 to be translated into
+     other character 10, the write table contains a 10 in position 13,
+     and the read table contains a 13 in position 10.
+
+   @{b}*@{ub} In order to help making your own conversion tables, a rexx script
+     called @{b}MakeConv.rexx@{ub} is supplied.
+
+     Usage: [rx] makeconv filename [ amiga-char other-char ]*
+
+     The first argument is the filename in which the table is to be
+     written.  Next are any number of pairs (including none) of
+     characters, the first is the Amiga character, the second the
+     converted one. The conversion tables are then constructed such
+     that they are each other's inverse, as long as this is possible.
+     For instance, this is impossible if you issue the command
+
+     rx makeconv test 1 2  1 3
+
+     The tables are updated left-to-right, so that the result will be
+     that Amiga-1 is converted into Other-3, and Other-2 and -3 both
+     into Amiga-1.
+
+     You can specify the characters in decimal (5), hexadecimal ($78 or
+     0xAB), or as characters ('a or "z").
+
+     There are 2 additional rexx programs, which use makeconv, and
+     allow you to create the equivalent of the default "A" and "B"
+     conversion tables. They are called MakePC.rexx and MakeST.rexx,
+     and create files called PC-conv.msh and ST-conv.msh. You can adapt
+     these to generate more elaborate conversions. These commands take
+     no arguments.
+
+   @{b}*@{ub}     @{b}DiskCopy@{ub} can be used to copy messydos disks, provided you have
+     one or more file systems mounted.
+
+
+@EndNode
+
+@Node "Suggestions" "MSH.guide/Suggestions"
+@Next "Bugs"
+@Prev "Utilities"
+@Toc "Main"
+
+Suggestions
+***********
+
+   The things I mention here are merely interesting suggestions. They
+have not all been tried. If they work for you, or if you think of some
+more, please let me know.
+
+   Since you can use any disk-type device under MSH:, you need not
+necessarily use messydisk.device, but you could use trackdisk.device
+(the normal Amiga disk driver), some kind of harddisk.device or
+jdisk.device (for use with messydos partitions on bridgeboards), or
+Matt Dillons fmsdisk.device (a file disguised as a disk device, if you
+have a messydos disk in an AmigaDOS file for JLink). I have heard of a
+case where an Amiga drive with MSH: was accessed from the BridgeBoard
+through JLink.
+
+
+@EndNode
+
+@Node "Bugs" "MSH.guide/Bugs"
+@Next "Credits"
+@Prev "Suggestions"
+@Toc "Main"
+
+Bugs
+****
+
+   With AmigaOS 2.00 - 2.03, versions prior to 1.40 are unable to write
+to disks because messydisk.device can't do this for some reason. 2.04
+does not pose any problems for those very old versions, as far as I
+know.
+
+   See also @{"Compatibility" Link "Compatibility"}, @{"2.0+ Functions" Link "2.0+ Functions"}, @{"Extensions" Link "Extensions"}, @{"Limitations" Link "Limitations"}.
+
+
+@EndNode
+
+@Node "Credits" "MSH.guide/Credits"
+@Next "Glossary"
+@Prev "Bugs"
+@Toc "Main"
+
+Credits
+*******
+
+   Some legalese: The VFAT support (for long file names) is mostly
+based on NetBSD code and some inspiration from mtools. The following
+notice appears because of this.
+
+/*-
+ * Copyright (C) 1994, 1995 Wolfgang Solfrank.
+ * Copyright (C) 1994, 1995 TooLs GmbH.
+ * All rights reserved.
+ * Original code by Paul Popelka (paulp@uts.amdahl.com) (see below).
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by TooLs GmbH.
+ * 4. The name of TooLs GmbH may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY TOOLS GMBH ``AS IS'' AND ANY EXPRESS OR
+ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ * IN NO EVENT SHALL TOOLS GMBH BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+ * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
+ * OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+/*
+ * Written by Paul Popelka (paulp@uts.amdahl.com)
+ *
+ * You can do anything you want with this software, just don't say you wrote
+ * it, and don't remove this notice.
+ *
+ * This software is provided "as is".
+ *
+ * The author supplies this software to be publicly redistributed on the
+ * understanding that the author is not responsible for the correct
+ * functioning of this software in any circumstances and is not liable for
+ * any damages caused by this software.
+ *
+ * October 1992
+ */
+
+
+@EndNode
+
+@Node "Glossary" "MSH.guide/Glossary"
+@Next "Index"
+@Prev "Credits"
+@Toc "Main"
+
+Glossary
+********
+
+   This chapter deliberately left empty.
+
+FAT
+     File Allocation Table. Messydos' silly way of recording where the
+     clusters for each file are.
+
+cluster
+     The minimum allocation unit for files and subdirectories. A
+     cluster may be a power of two, and is expressed in sectors.
+
+volume label
+     The silly way of storing the name of the disk. Not all disks have
+     one.
+
+
+@EndNode
+
+@Node "Index" "MSH.guide/Index"
+@Prev "Glossary"
+@Toc "Main"
+
+Index
+*****
+
+@Index "Index"
+
+
+
+ @{" ACTION_DIE " Link "Utilities"}                           Utilities
+ @{" ACTION_DIE " Link "Extended Packets"}                           Extended Packets
+ @{" ACTION_FORMAT " Link "Utilities"}                        Utilities
+ @{" ACTION_FREE_DISK_FFSM " Link "2.0+ Functions"}                2.0+ Functions
+ @{" ACTION_GET_DISK_FFSM " Link "2.0+ Functions"}                 2.0+ Functions
+ @{" ACTION_MORECACHE " Link "Extended Packets"}                     Extended Packets
+ @{" ACTION_SERIALIZE_DISK " Link "2.0+ Functions"}                2.0+ Functions
+ @{" ACTION_SET_COMMENT " Link "Filenotes"}                   Filenotes
+ @{" ACTION_SET_PROTECT " Link "File protection bits"}                   File protection bits
+ @{" ACTION_WRITE_PROTECT " Link "2.0+ Functions"}                 2.0+ Functions
+ @{" Boot block format " Link "Boot block format"}                    Boot block format
+ @{" Bugs " Link "Bugs"}                                 Bugs
+ @{" C:Lock " Link "2.0+ Functions"}                               2.0+ Functions
+ @{" ChangeMode() " Link "2.0+ Functions"}                         2.0+ Functions
+ @{" Character Conversions " Link "Character Conversions"}                Character Conversions
+ @{" Compatibility " Link "Compatibility"}                        Compatibility
+ @{" Copying Disks " Link "Utilities"}                        Utilities
+ @{" Credits " Link "Credits"}                              Credits
+ @{" Die " Link "Utilities"}                                  Utilities
+ @{" DiskCopy " Link "Utilities"}                             Utilities
+ @{" DosType " Link "Mountlist"}                              Mountlist
+ @{" DupLockFromFH() " Link "2.0+ Functions"}                      2.0+ Functions
+ @{" EndNotify() " Link "2.0+ Functions"}                          2.0+ Functions
+ @{" ExAll() " Link "2.0+ Functions"}                              2.0+ Functions
+ @{" ExAllEnd() " Link "2.0+ Functions"}                           2.0+ Functions
+ @{" ExamineFH() " Link "2.0+ Functions"}                          2.0+ Functions
+ @{" Extended Packets " Link "Extended Packets"}                     Extended Packets
+ @{" FAT " Link "FAT"}                                  FAT
+ @{" File names " Link "File names"}                           File names
+ @{" File protection bits vs. file attributes " Link "File protection bits"} File protection bits
+ @{" Filenotes " Link "Filenotes"}                            Filenotes
+ @{" Format() " Link "2.0+ Functions"}                             2.0+ Functions
+ @{" Format() " Link "Utilities"}                             Utilities
+ @{" Formatting Disks " Link "Utilities"}                     Utilities
+ @{" Glossary " Link "Glossary"}                             Glossary
+ @{" Index " Link "Index"}                                Index
+ @{" Installation " Link "Installation"}                         Installation
+ @{" Installation Problems " Link "Installation Problems"}                Installation Problems
+ @{" Interleave " Link "Compatibility"}                           Compatibility
+ @{" Interleave " Link "Mountlist"}                           Mountlist
+ @{" IsFilesystem() " Link "2.0+ Functions"}                       2.0+ Functions
+ @{" Jaz " Link "Mountlist"}                                  Mountlist
+ @{" Limitations " Link "Limitations"}                          Limitations
+ @{" LoadConv. " Link "Utilities"}                            Utilities
+ @{" LockRecord() " Link "2.0+ Functions"}                         2.0+ Functions
+ @{" MakeConv.rexx " Link "Utilities"}                        Utilities
+ @{" MakeLink() " Link "2.0+ Functions"}                           2.0+ Functions
+ @{" MessyFmt " Link "Utilities"}                             Utilities
+ @{" MFS " Link "Mountlist"}                                  Mountlist
+ @{" Mountlist " Link "Mountlist"}                            Mountlist
+ @{" MSH-Format " Link "Utilities"}                           Utilities
+ @{" MSH-Set " Link "Utilities"}                              Utilities
+ @{" MSH::B " Link "Special Files"}                               Special Files
+ @{" MSH::C " Link "Character Conversions"}                               Character Conversions
+ @{" MSH::F " Link "Special Files"}                               Special Files
+ @{" MSH::M " Link "Special Files"}                               Special Files
+ @{" MultiFileSystem " Link "Mountlist"}                      Mountlist
+ @{" Multiple file systems " Link "Multiple file systems"}                Multiple file systems
+ @{" Old situation of file names " Link "File names"}          File names
+ @{" OpenFromLock() " Link "2.0+ Functions"}                       2.0+ Functions
+ @{" Overview " Link "Overview"}                             Overview
+ @{" ParentOfFH() " Link "2.0+ Functions"}                         2.0+ Functions
+ @{" ReadLink() " Link "2.0+ Functions"}                           2.0+ Functions
+ @{" Requirements " Link "Requirements"}                         Requirements
+ @{" SameLock() " Link "2.0+ Functions"}                           2.0+ Functions
+ @{" SetFileSize() " Link "2.0+ Functions"}                        2.0+ Functions
+ @{" Special directories ('.' and '..') " Link "Special directories"}   Special directories
+ @{" Special Files " Link "Special Files"}                        Special Files
+ @{" StartNotify() " Link "2.0+ Functions"}                        2.0+ Functions
+ @{" Syquest " Link "Mountlist"}                              Mountlist
+ @{" UnLockRecord() " Link "2.0+ Functions"}                       2.0+ Functions
+ @{" Volume and directory dates " Link "Volume and directory dates"}           Volume and directory dates
+ @{" Volume label " Link "Volume label"}                         Volume label
+ @{" Workbench " Link "Workbench"}                            Workbench
+ @{" Zip " Link "Mountlist"}                                  Mountlist
+
+@EndNode
+

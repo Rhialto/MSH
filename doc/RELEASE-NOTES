@@ -1,11 +1,27 @@
 
 	M E S S Y D O S   F I L E   S Y S T E M   H A N D L E R
 	-------------------------------------------------------
-	by Olaf 'Rhialto' Seibert                   22-Dec-1996
+	by Olaf 'Rhialto' Seibert                   20-Oct-2005
 
 *******************************************************************************
-    MSH is (C) Copyright 1989-1996 by Olaf Seibert. All rights reserved.
+    MSH is (C) Copyright 1989-2005 by Olaf Seibert. All rights reserved.
 *******************************************************************************
+
+====20-Oct-2005=====Finally, after all these years=============================
+1.58
+
+Since the previous version I did a lot of work, and then I abandoned the
+Amiga for the BeBox (I hoped it would be more like a BeMiga). Then, when
+Be went under, like Commodore before, I went to Unix (NetBSD to be precise),
+first on a Digital Alpha (who disappeared, like Be and Commodore), then
+an AMD-64 machine.
+
+There must be things I wanted to finish before a release, but alas, I don't
+remember them and that is for the better, since now you're finally getting
+something again (if you still want it).
+
+Oh, and let's call it Freeware now - but if you like you can still send
+fanmail or money :-)
 
 ====22-Dec-1996=====Shareware again============================================
 1.56
@@ -142,7 +158,7 @@ yourself.
 msh.man and dev.man. Fanmail and money will always reach me at the
 following address:
 
-	rhialto@mbfys.kun.nl, or
+	rhialto@falu.nl, or
 
 	Olaf Seibert
 	Beek 5
@@ -150,7 +166,7 @@ following address:
 	The Netherlands
 
     Ordinary mail can also be addressed to the following address, which is
-valid from december 1996:
+valid as of october 2005:
 
 	Olaf Seibert
 	Heideparkseweg 462

@@ -1,6 +1,12 @@
 /*-
- * $Id: support.c,v 1.55 1993/12/30 23:02:45 Rhialto Rel $
+ * $Id: support.c,v 1.58 2005/10/19 16:53:52 Rhialto Exp $
  * $Log: support.c,v $
+ * Revision 1.58  2005/10/19  16:53:52  Rhialto
+ * Finally a new version!
+ *
+ * Revision 1.56  1996/12/22  00:22:33  Rhialto
+ * Added taskwait() and some packets to debug function.
+ *
  * Revision 1.55  1993/12/30  23:02:45	Rhialto
  * Add a few packet names.
  *

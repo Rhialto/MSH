@@ -1,0 +1,17 @@
+;;;;
+;
+; Script to make a clean distribution
+;
+cd syslog
+mymake clean
+mymake all
+cd /
+cd dev
+mymake clean
+mymake all
+cd /
+cd han
+mymake spotless
+mymake all
+cd /
+LHa a t:MSH-1.58.lha @FILES

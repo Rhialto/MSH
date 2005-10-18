@@ -14,6 +14,9 @@ LD	= DCC
 all:	log syslogd syslogl.o syslogi.o syslogil.o
 	@echo "All done."
 
+clean:
+	delete *.o
+
 syslog.o:   syslog.h syslog_private.h
 syslogd.o:  syslog.h syslog_private.h
 

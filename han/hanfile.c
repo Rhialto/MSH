@@ -1,6 +1,13 @@
 /*-
- * $Id: hanfile.c,v 1.55 1993/12/30 23:28:00 Rhialto Rel $
+ * $Id: hanfile.c,v 1.58 2005/10/19 16:53:52 Rhialto Exp $
  * $Log: hanfile.c,v $
+ * Revision 1.58  2005/10/19  16:53:52  Rhialto
+ * Finally a new version!
+ *
+ * Revision 1.56  1996/12/22  00:22:33  Rhialto
+ * Also update file lock (dir entry) on filw write error.
+ * And file write success.
+ *
  * Revision 1.55  1993/12/30  23:28:00	Rhialto
  * Freeze for MAXON5.
  * Check Write() size to see it it will all fit.
@@ -70,11 +77,11 @@
 
 Prototype int GetFat(void);
 Prototype void FreeFat(void);
-Prototype word GetFatEntry(word cluster);
-Prototype void SetFatEntry(word cluster, word value);
-Prototype word FindFreeCluster(word prev);
-Prototype word ExtendClusterChain(word cluster);
-Prototype void FreeClusterChain(word cluster);
+Prototype cluster_t GetFatEntry(cluster_t cluster);
+Prototype void SetFatEntry(cluster_t cluster, cluster_t value);
+Prototype cluster_t FindFreeCluster(cluster_t prev);
+Prototype cluster_t ExtendClusterChain(cluster_t cluster);
+Prototype void FreeClusterChain(cluster_t cluster);
 Prototype struct MSFileHandle *MakeMSFileHandle(struct MSFileLock *fl, long mode);
 Prototype struct MSFileHandle *MSOpen(struct MSFileLock *parentdir, char *name, long mode);
 Prototype long MSClose(struct MSFileHandle *fh);
@@ -109,7 +116,7 @@ GetFat()
 	    FreeSec(secptr);
 	} else {
 	    /* q&d way to set the entire FAT to FAT_EOF */
-	    setmem(Fat + i * Disk.bps, (int) Disk.bps, FAT_EOF);	/* 0xFF */
+	    memset(Fat + i * Disk.bps, FAT_EOF, (int) Disk.bps); /* 0xFF */
 	}
     }
 
@@ -117,7 +124,7 @@ GetFat()
 
     Disk.freeclusts = 0;
     for (i = MS_FIRSTCLUST; i <= Disk.maxclst; i++) {
-	if (GetFatEntry((word) i) == FAT_UNUSED)
+	if (GetFatEntry((cluster_t) i) == FAT_UNUSED)
 	    Disk.freeclusts++;
     }
 
@@ -145,35 +152,41 @@ FreeFat()
  *  are packed as	bc 3a 12
 -*/
 
-word
+cluster_t
 GetFatEntry(cluster)
-word		cluster;
+cluster_t		cluster;
 {
     if (!Fat && !GetFat())
 	return FAT_EOF;
 
-    if (Disk.fat16bits) {
+    switch (Disk.fatbits) {
+#if 0
+    case 32:
+	return OtherEndianLong(((ulong *)Fat)[cluster]);
+#endif
+    case 16:
 	return OtherEndianWord(((word *)Fat)[cluster]);
-    } else {
-	int	offset = 3 * (cluster / 2);
-	word	twoentries;
+    default: {
+	    int	offset = 3 * (cluster / 2);
+	    word	twoentries;
 
-	if (cluster & 1) {
-	    twoentries = Fat[offset + 1] >> 4;
-	    twoentries |= Fat[offset + 2] << 4;
-	} else {
-	    twoentries = Fat[offset];
-	    twoentries |= (Fat[offset + 1] & 0x0F) << 8;
+	    if (cluster & 1) {
+		twoentries = Fat[offset + 1] >> 4;
+		twoentries |= Fat[offset + 2] << 4;
+	    } else {
+		twoentries = Fat[offset];
+		twoentries |= (Fat[offset + 1] & 0x0F) << 8;
+	    }
+
+	    /*
+	     * Convert the special values 0xFF7 .. 0xFFF to 16 bits so they
+	     * can be checked consistently.
+	     */
+	    if (twoentries >= 0xFF7)
+		twoentries |= 0xF000;
+
+	    return twoentries;
 	}
-
-	/*
-	 * Convert the special values 0xFF7 .. 0xFFF to 16 bits so they
-	 * can be checked consistently.
-	 */
-	if (twoentries >= 0xFF7)
-	    twoentries |= 0xF000;
-
-	return twoentries;
     }
 }
 
@@ -181,25 +194,33 @@ word		cluster;
 
 void
 SetFatEntry(cluster, value)
-word		cluster;
-word		value;
+cluster_t		cluster;
+cluster_t		value;
 {
     if (!Fat && !GetFat())
 	return;
 
-    if (Disk.fat16bits) {
+    switch (Disk.fatbits) {
+#if 0
+    case 32:
+	((ulong *)Fat)[cluster] = OtherEndianLong(value);
+	break;
+#endif
+    case 16:
 	((word *)Fat)[cluster] = OtherEndianWord(value);
-    } else {
-	int	offset = 3 * (cluster / 2);
+	break;
+    default: {
+	    int	offset = 3 * (cluster / 2);
 
-	if (cluster & 1) {	    /* 123 kind of entry */
-	    Fat[offset + 2] = value >> 4;
-	    Fat[offset + 1] &= 0x0F;
-	    Fat[offset + 1] |= (value & 0x0F) << 4;
-	} else {		    /* abc kind of entry */
-	    Fat[offset + 0] = value;
-	    Fat[offset + 1] &= 0xF0;
-	    Fat[offset + 1] |= (value >> 8) & 0x0F;
+	    if (cluster & 1) {	    /* 123 kind of entry */
+		Fat[offset + 2] = value >> 4;
+		Fat[offset + 1] &= 0x0F;
+		Fat[offset + 1] |= (value & 0x0F) << 4;
+	    } else {		    /* abc kind of entry */
+		Fat[offset + 0] = value;
+		Fat[offset + 1] &= 0xF0;
+		Fat[offset + 1] |= (value >> 8) & 0x0F;
+	    }
 	}
     }
 
@@ -216,11 +237,11 @@ word		value;
  * harm either.
  */
 
-word
+cluster_t
 FindFreeCluster(prev)
-word		prev;
+cluster_t		prev;
 {
-    word   i;
+    cluster_t   i;
 
     if (prev == 0 || prev == FAT_EOF)
 	prev = MS_FIRSTCLUST - 1;
@@ -246,11 +267,11 @@ word		prev;
  * know that is on the chain, even if it is the first one.
  */
 
-word
+cluster_t
 ExtendClusterChain(cluster)
-word	cluster;
+cluster_t	cluster;
 {
-    word   nextcluster;
+    cluster_t   nextcluster;
 
     /*
      * Find the end of the cluster chain to tack the new cluster on to.
@@ -271,9 +292,9 @@ word	cluster;
 
 void
 FreeClusterChain(cluster)
-word	cluster;
+cluster_t	cluster;
 {
-    word   nextcluster;
+    cluster_t   nextcluster;
 
     while (cluster != FAT_EOF) {
 	nextcluster = NextCluster(cluster);
@@ -368,7 +389,7 @@ makefh:
     if (!(lockmode & MODE_CREATEFILE) && (fl = EmptyFileLock)) {
 	debug(("Creating new file\n"));
 	EmptyFileLock = NULL;
-	fl->msfl_Msd.msd_Attributes = ATTR_ARCHIVED;
+	fl->msfl_Msd.msd_Attributes = ATTR_ARCHIVE;
 	UpdateFileLock(fl);
 #if ! CREATIONDATE_ONLY
 	UpdateFileLock(fl->msfl_Parent);
@@ -408,7 +429,6 @@ long		mode;
 	return position;
     case OFFSET_CURRENT:
 	return fh->msfh_SeekPos + position;
-	break;
     case OFFSET_END:
 	return fh->msfh_FileLock->msfl_Msd.msd_Filesize + position;
     }
@@ -436,9 +456,9 @@ long		mode;
     long	    oldpos;
     long	    newpos;
     long	    filesize = fh->msfh_FileLock->msfl_Msd.msd_Filesize;
-    word	    cluster = fh->msfh_Cluster;
-    word	    oldcluster;
-    word	    newcluster;
+    cluster_t	    cluster = fh->msfh_Cluster;
+    cluster_t	    oldcluster;
+    cluster_t	    newcluster;
 
 #if defined(ACTION_SET_FILE_SIZE)
     if (fh->msfh_SeekPos > fh->msfh_FileLock->msfl_Msd.msd_Filesize) {
@@ -498,13 +518,13 @@ long	size;
     oldsize = size;
 
     while (size > 0) {
-	word		offset;
-	word		sector;
+	int		offset;
+	sector_t	sector;
 	byte	       *diskbuffer;
 	long		tocopy;
 
 	offset = fh->msfh_SeekPos % Disk.bpc;
-	sector = ClusterOffsetToSector(fh->msfh_Cluster, (word) offset);
+	sector = ClusterOffsetToSector(fh->msfh_Cluster, offset);
 	if (diskbuffer = ReadSec(sector)) {
 	    offset %= Disk.bps;
 	    tocopy = lmin(size, Disk.bps - offset);
@@ -546,8 +566,8 @@ long	size;
 #else
     long	    oldsize;
     struct MSFileLock *fl = fh->msfh_FileLock;
-    word	    prevclust = fl->msfl_Msd.msd_Cluster;
-    word	    update = 0;
+    cluster_t	    prevclust = fl->msfl_Msd.msd_Cluster;
+    int		    update = 0;
 
     if (CheckLock(fl))
 	return -1;
@@ -581,7 +601,7 @@ long	size;
 	 */
 
 	if (fh->msfh_Cluster == 0 || fh->msfh_Cluster == FAT_EOF) {
-	    word	    newclust;
+	    cluster_t	    newclust;
 
 	    newclust = ExtendClusterChain(prevclust);
 	    debug(("Extend with %ld\n", (long)newclust));
@@ -598,19 +618,20 @@ long	size;
 	    }
 	}
 	{
-	    word	    offset;
-	    word	    sector;
+	    int		    offset;
+	    sector_t	    sector;
 	    byte	   *diskbuffer;
 	    long	    tocopy;
 
 	    offset = fh->msfh_SeekPos % Disk.bpc;
-	    sector = ClusterOffsetToSector(fh->msfh_Cluster, (word) offset);
+	    sector = ClusterOffsetToSector(fh->msfh_Cluster, offset);
 	    offset %= Disk.bps;
 	    tocopy = lmin(size, Disk.bps - offset);
 
-	    if (offset == 0 && fh->msfh_SeekPos >= fl->msfl_Msd.msd_Filesize)
+	    if (offset == 0 && fh->msfh_SeekPos >= fl->msfl_Msd.msd_Filesize) {
 		diskbuffer = EmptySec(sector);
-	    else
+		/* memset(diskbuffer, 0, Disk.bps); */
+	    } else
 		diskbuffer = ReadSec(sector);
 
 	    if (diskbuffer != NULL) {
@@ -629,7 +650,7 @@ long	size;
 		    fh->msfh_Cluster = NextCluster(fh->msfh_Cluster);
 		if (fh->msfh_SeekPos > fl->msfl_Msd.msd_Filesize)
 		    fl->msfl_Msd.msd_Filesize = fh->msfh_SeekPos;
-		fl->msfl_Msd.msd_Attributes |= ATTR_ARCHIVED;
+		fl->msfl_Msd.msd_Attributes |= ATTR_ARCHIVE;
 		update = 1;
 	    } else {		/* Write error. */
 	some_error:
@@ -715,6 +736,10 @@ byte	       *name;
 	    FreeClusterChain(fl->msfl_Msd.msd_Cluster);
 	fl->msfl_Msd.msd_Name[0] = DIR_DELETED;
 	WriteFileLock(fl);
+#if VFATSUPPORT
+	EraseLongName(fl);
+	/* CleanupDirectory(fl->msfl_Parent); */
+#endif
 #if ! CREATIONDATE_ONLY
 	UpdateFileLock(fl->msfl_Parent);
 #endif
@@ -739,7 +764,7 @@ struct DateStamp *datestamp;
 
     fl = MSLock(parentdir, name, EXCLUSIVE_LOCK);
     if (fl) {
-	ToMSDate(&fl->msfl_Msd.msd_Date, &fl->msfl_Msd.msd_Time, datestamp);
+	ToMSDate(&fl->msfl_Msd.msd_ModDate, &fl->msfl_Msd.msd_ModTime, datestamp);
 	WriteFileLock(fl);
 	MSUnLock(fl);
 
@@ -782,18 +807,18 @@ byte	       *name;
 	if ((fl->msfl_Msd.msd_Cluster = FindFreeCluster(FAT_EOF)) != FAT_EOF) {
 	    struct MsDirEntry direntry;
 	    byte	   *sec;
-	    word	    sector;
+	    sector_t	    sector;
 
 	    sector = ClusterToSector(fl->msfl_Msd.msd_Cluster);
 	    sec = EmptySec(sector);
 	    if (sec == NULL)
 		goto error_no_free_store;
-	    setmem(sec, (int) Disk.bps, 0);
+	    memset(sec, 0, (int) Disk.bps);
 
 	    /*
 	     * Turn the file into a directory.
 	     */
-	    fl->msfl_Msd.msd_Attributes = ATTR_DIRECTORY | ATTR_ARCHIVED;
+	    fl->msfl_Msd.msd_Attributes = ATTR_DIRECTORY | ATTR_ARCHIVE;
 	    fl->msfl_Refcount = 1;	/* Make it non-exclusive */
 	    UpdateFileLock(fl);
 
@@ -822,7 +847,7 @@ byte	       *name;
 	     */
 	    direntry = parentdir->msfl_Msd;
 	    strncpy(direntry.msd_Name, DotDot, L_8 + L_3);
-	    direntry.msd_Attributes = ATTR_DIRECTORY | ATTR_ARCHIVED;
+	    direntry.msd_Attributes = ATTR_DIRECTORY | ATTR_ARCHIVE;
 	    OtherEndianMsd(&direntry);
 	    ((struct MsDirEntry *) sec)[1] = direntry;
 
@@ -839,7 +864,7 @@ byte	       *name;
 		sec = EmptySec(sector);
 		if (sec == NULL)
 		    goto error_no_free_store;
-		setmem(sec, (int) Disk.bps, 0);
+		memset(sec, 0, (int) Disk.bps);
 		MarkSecDirty(sec);
 		FreeSec(sec);
 	    }
@@ -873,6 +898,11 @@ some_error:
  * name, then look for a slot to put the destination name. If that fails,
  * we undo the deletion. By playing with the cache, we even avoid a write
  * of the sector with the undeleted entry.
+#if VFATSUPPORT
+ * These tricks are unfortunately suboptimal for the long file name entries.
+ * Those remain as garbage in the directory. Therefore we call the
+ * cleaners to clean it at least partially.
+#endif
  */
 
 long
@@ -989,6 +1019,15 @@ undelete:
 	    FreeSec((byte *)dir);
 	}
     }
+
+#if VFATSUPPORT
+    /*
+     * As last action in the old directory, clean it up.
+     */
+    /* EraseLongName(sfl); may erase new name too, if unlucky */
+    CleanupDirectory(sfl->msfl_Parent);
+#endif
+
     /*
      * Move the name from the new entry to the old filelock. We do this
      * for the case that somebody else has a lock on the (possibly moved)
@@ -998,14 +1037,14 @@ undelete:
     strncpy(sfl->msfl_Msd.msd_Name, dfl->msfl_Msd.msd_Name, L_8 + L_3);
     sfl->msfl_DirSector = dfl->msfl_DirSector;
     sfl->msfl_DirOffset = dfl->msfl_DirOffset;
-    /*
+     /*
      * Free the old, and get the new parent directory. They might be the
      * same, of course...
      */
     MSUnLock(sfl->msfl_Parent);
     sfl->msfl_Parent = dfl->msfl_Parent;
     dfl->msfl_Parent = NULL;
-    sfl->msfl_Msd.msd_Attributes |= ATTR_ARCHIVED;
+    sfl->msfl_Msd.msd_Attributes |= ATTR_ARCHIVE;
     WriteFileLock(sfl); 	/* Write the new name; the old name
 				 * already has been deleted. */
 #if ! CREATIONDATE_ONLY

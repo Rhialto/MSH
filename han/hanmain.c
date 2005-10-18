@@ -1,6 +1,12 @@
 /*-
- * $Id: hanmain.c,v 1.55 1993/12/30 23:02:45 Rhialto Rel $
+ * $Id: hanmain.c,v 1.58 2005/10/19 16:53:52 Rhialto Exp $
  * $Log: hanmain.c,v $
+ * Revision 1.58  2005/10/19  16:53:52  Rhialto
+ * Finally a new version!
+ *
+ * Revision 1.56  1996/12/22  00:22:33  Rhialto
+ * Add IEQUALIFIER_MULTIBROADCAST to disk inserted/removed events.
+ *
  * Revision 1.55  1993/12/30  23:02:45	Rhialto
  * New LONGNAMES filesystem, changes throughout the handler.
  * Optional (compile-time) broadcast IECLASS_DISKINSERTED messages.
@@ -51,7 +57,7 @@
  *  Some start/stop stuff that is not really part of the
  *  file system itself but that must be done anyway.
  *
- *  This code is (C) Copyright 1989-1994 by Olaf Seibert. All rights reserved.
+ *  This code is (C) Copyright 1989-1996 by Olaf Seibert. All rights reserved.
  *  May not be used or copied without a licence.
 -*/
 
@@ -91,7 +97,7 @@ struct Library *IntuitionBase;
 #if INPUTDEV
 struct IOStdReq *InputIOReq;
 #endif
-Local const char RCSId[] = "\0$\VER: Messydos filing system $Revision: 1.55 $ $Date: 1993/12/30 23:02:45 $, by Olaf Seibert";
+Local const char RCSId[] = "\0$""VER: Messydos filing system $Revision: 1.58 $ $Date: 2005/10/19 16:53:52 $, by Olaf Seibert";
 
 #define CONV_SEP    ';'
 
@@ -126,6 +132,22 @@ byte	       *begin,
 
     return end;
 }
+
+#if VFATSUPPORT
+Prototype byte		*ComponentEnd(char *source);
+
+byte		*
+ComponentEnd(char *source)
+{
+    byte *end = source;
+
+    while (*end != '\0' && *end != '/')
+	end++;
+    /* XXX should do something about ;X before the end */
+    return end;
+}
+
+#else
 
 /*
  * Map an arbitrary file name to MS-DOS conventions. The output format is
@@ -228,7 +250,9 @@ byte	       *source;
     }
 
     if (slashp[0] == CONV_SEP && slashp[1]) {
+#if CONVERSIONS
 	int		c;
+#endif
 
 	slashp++;
 #if CONVERSIONS
@@ -244,6 +268,8 @@ byte	       *source;
     return slashp;
 #endif
 }
+
+#endif /* VFATSUPPORT */
 
 /*
  * Do the Info call.
@@ -289,16 +315,34 @@ MSDiskInserted(locks, cookie)
 struct LockList **locks;
 void	       *cookie;
 {
+#if HDEBUG
     debug(("MSDiskInserted %08lx\n", cookie));
-
+    if (RootLock)
+	debug(("*** RootLock not NULL when new disk inserted !!!\n"));
+#endif
     LockList = *locks;
+    RootLock = NULL;
 
     if (LockList == NULL) {
+	debug(("MSDiskInserted: no LockList - make fresh one\n"));
 	LockList = NewLockList(cookie);
-	RootLock = MakeLock(NULL, &Disk.vollabel, SHARED_LOCK);
     } else {
+	debug(("MSDiskInserted: LockList %p @ %p- RootLock can be duplicated\n", LockList, locks));
 	RootLock = MSDupLock(GetTail(&LockList->ll_List));
+	/* will be NULL when GetTail() returns NULL */
+#if HDEBUG
+	if (RootLock == NULL) {
+	    debug(("*** RootLock == NULL when taken from LockList !!!\n"));
+	}
+#endif
     }
+    if (RootLock == NULL) {
+	RootLock = MakeLock(NULL, &Disk.vollabel, SHARED_LOCK);
+    }
+#if HDEBUG
+    debug(("MSDiskInserted: RootLock = %p\n", RootLock));
+    PrintDirEntry((struct DirEntry *)&RootLock->msfl_Msd);
+#endif
 }
 
 /*
@@ -328,12 +372,23 @@ struct LockList **locks;
     *locks = NULL;
 
     if (RootLock == NULL) {
-	debug(("MSDiskRemoved with no RootLock\n"));
+#if HDEBUG
+	debug(("*** MSDiskRemoved with no RootLock\n"));
+	if (LockList) {
+	    void *p;
+
+	    debug(("LockList != NULL: %p\n", LockList));
+	    if (p = GetTail(&LockList->ll_List)) {
+		debug(("LockList isn't even empty: tail = %p\n", p));
+	    }
+	}
+	/* LockList = NULL;	/ * memory leak */
+#endif
 	return 1;
     }
 #if HDEBUG
     if (RootLock != GetTail(&LockList->ll_List)) {
-	debug(("RootLock not at end of LockList!\n"));
+	debug(("*** RootLock not at end of LockList!\n"));
 	/* Get the lock on the root dir at the tail of the List */
 	Remove((struct Node *)RootLock);
 	AddTail((struct List *)&LockList->ll_List, (struct Node *)RootLock);
@@ -350,10 +405,12 @@ struct LockList **locks;
     RootLock = NULL;
 
     if (LockList) {
+	debug(("Storing LockList %p @ %p\n", LockList, locks));
 	*locks = LockList;	/* VolNode can't be gone now... */
 	LockList = NULL;
 	return 0;		/* not all references gone */
     } else {
+	debug(("LockList is gone - no locks left on disk\n"));
 	return 1;		/* all gone, even the VolNode */
     }
 }
@@ -505,7 +562,8 @@ HanOpenUp()
     }
 #endif
 
-    IntuitionBase = OpenLibrary("intuition.library", 0L);
+    IntuitionBase = OpenLibrary("intuition.library", 0L);   /* cannot fail */
+    CheckETDCommands();
     debug(("HanOpenUp() done.\n"));
     return DOSTRUE;
 
@@ -529,7 +587,7 @@ byte	       *newname;
      * A null or empty string means: remove the label, if any.
      */
     if (!newname || !*newname) {
-	if (RootLock->msfl_DirSector != (word)ROOT_SEC) {
+	if (RootLock->msfl_DirSector != ROOT_SEC) {
 	    RootLock->msfl_Msd.msd_Name[0] = DIR_DELETED;
 	    RootLock->msfl_Msd.msd_Attributes = 0;
 	    WriteFileLock(RootLock);
@@ -546,7 +604,7 @@ byte	       *newname;
      * something else for it.
      */
 
-    if (RootLock->msfl_DirSector == (word)ROOT_SEC) {
+    if (RootLock->msfl_DirSector == ROOT_SEC) {
 	struct MSFileLock *new;
 
 	new = MSLock(RootLock, "OLAF-><>.\\*", EXCLUSIVE_LOCK ^ MODE_CREATEFILE);
@@ -559,9 +617,9 @@ byte	       *newname;
 	    ToMSDate(&msd_CreationDate(Disk.vollabel.de_Msd),
 		     &msd_CreationTime(Disk.vollabel.de_Msd), &dateStamp);
 
-	    Disk.vollabel.de_Msd.msd_Date =
+	    Disk.vollabel.de_Msd.msd_ModDate =
 		msd_CreationDate(Disk.vollabel.de_Msd);
-	    Disk.vollabel.de_Msd.msd_Time =
+	    Disk.vollabel.de_Msd.msd_ModTime =
 		msd_CreationTime(Disk.vollabel.de_Msd);
 
 	    if (new->msfl_DirSector == Disk.rootdir) {

@@ -1,15 +1,17 @@
 /*-
- * $Id$
+ * $Id: loadconv.c,v 1.58 2005/10/19 17:02:28 Rhialto Exp $
  *
  *  LOADCONV.C
  *
- *  This code is (C) Copyright 1992 by Olaf Seibert. All rights reserved.
+ *  This code is (C) Copyright 2005 by Olaf Seibert. All rights reserved.
  *  May not be used or copied without a licence.
 -*/
 
 #include <stdio.h>
 #include <string.h>
 #include "han.h"
+#undef CONVERSIONS
+#define CONVERSIONS	1
 #include "hanconv.h"
 
 #ifndef EXEC_TYPES_H
@@ -26,7 +28,7 @@
 #include <clib/dos_protos.h>
 #endif
 
-const char	idString[] = "$\VER: LoadConv $Revision$ $Date$\r\n";
+const char	idString[] = "$\VER: LoadConv $Revision: 1.58 $ $Date: 2005/10/19 17:02:28 $\r\n";
 
 /*
  * Arg2 -> Arg2, the world turned upside down.
@@ -84,6 +86,10 @@ main(int argc, char **argv)
     int 	    conversion;
     unsigned char   table[256];
     BPTR	    file;
+
+#if VFATSUPPORT
+    puts("Warning: Conversion syntax is not compatible with VFAT long file names.");
+#endif
 
     if (argc != 4) {
 	puts("Usage: loadconv MSH-DEV: C file\n\twhere C is the conversion id.");

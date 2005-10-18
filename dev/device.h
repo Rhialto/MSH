@@ -1,6 +1,15 @@
 /*-
- *  $Id: device.h,v 1.56 1996/12/21 23:34:35 Rhialto Rel $
+ *  $Id: device.h,v 1.58 2005/10/19 16:51:06 Rhialto Exp $
  *  $Log: device.h,v $
+ * Revision 1.58  2005/10/19  16:51:06  Rhialto
+ * Finally a new version!
+ *
+ * Revision 1.58  2005/10/19  16:41:19  Rhialto
+ * Finally a new version!
+ *
+ * Revision 1.56  1996/12/21  23:45:39  Rhialto
+ * Bump revision number to 16.
+ *
  * Revision 1.56  1996/12/21  23:34:35  Rhialto
  * No changes.
  *
@@ -33,7 +42,7 @@
  * Revision 1.30  90/06/04  23:19:28  Rhialto
  * Release 1 Patch 3
  *
- *  This code is (C) Copyright 1989-1993 by Olaf Seibert. All rights reserved.
+ *  This code is (C) Copyright 1989-1997 by Olaf Seibert. All rights reserved.
  *  May not be used or copied without a licence.
 -*/
 
@@ -86,7 +95,7 @@ extern struct ExecBase *SysBase;
 #define TRK2SIDE(track) ((track) & 1)
 
 #define VERSION 	SYS2_04
-#define REVISION	16
+#define REVISION	17
 
 struct MessyDevice {
     struct Device   md_Dev;
@@ -159,6 +168,7 @@ typedef struct MessyUnit   UNIT;
 
 
 #define TASKPRI     5L
+#define MAXTASKPRI  127L
 #define TASKSTACK   1024L
 
 /*

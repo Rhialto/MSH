@@ -1,7 +1,13 @@
 /*-
- * $Id: han.h,v 1.55 1993/12/30 23:28:00 Rhialto Rel $
+ * $Id: han.h,v 1.58 2005/10/19 16:53:52 Rhialto Exp $
  *
  * $Log: han.h,v $
+ * Revision 1.58  2005/10/19  16:53:52  Rhialto
+ * Finally a new version!
+ *
+ * Revision 1.56  1996/12/22  00:22:33  Rhialto
+ * Cosmetics.
+ *
  * Revision 1.55  1993/12/30  23:28:00	Rhialto
  * Freeze for MAXON5.
  * Add compile time options LONGNAMES and CREATIONDATE_ONLY.
@@ -43,8 +49,8 @@
  *
  *  The header file for the MESSYDOS: file system handler
  *
- *  This code is (C) Copyright 1989 by Olaf Seibert. All rights reserved. May
- *  not be used or copied without a licence.
+ *  This code is (C) Copyright 1989-1997 by Olaf Seibert. All rights reserved.
+ *  May not be used or copied without a licence.
 -*/
 
 #define SysBase_DECLARED
@@ -68,8 +74,18 @@ extern struct ExecBase *SysBase;
 #define INPUTDEV		1
 #define CREATIONDATE_ONLY	1
 #define TASKWAIT		1
+#define VFATSUPPORT		1
 
 /*----- End configuration section -----*/
+
+#if VFATSUPPORT
+/*
+ * For now, long file names are not compatible with the syntax
+ * for character conversion.
+ */
+#undef CONVERSIONS
+#define CONVERSIONS		0
+#endif
 
 #define MODE_CREATEFILE (1L<<31)
 #define FILE_DIR     2
@@ -83,21 +99,33 @@ extern struct ExecBase *SysBase;
 #define MS_SPF	    3		/* Sectors per FAT */
 #define MS_ROOTDIR  (MS_RES + MS_SPF * MS_NFATS)
 #define MS_DIRENTSIZE  sizeof(struct MsDirEntry) /* size of a directory entry */
+#define MS_DIRENT_SHIFT	5	/* 1 << MS_DIRENT_SHIFT == MS_DIRENTSIZE */
 
 #define MS_FIRSTCLUST	2	/* Very strange convention... */
 
-#define FAT_EOF     0xFFFF	/* end of file FAT entry */
+#define FAT_EOF     ((cluster_t)0xFFFF)	/* end of file FAT entry */
 #define FAT_UNUSED  0		/* unused block */
-#define SEC_EOF     ((word)-1)	/* end of FAT chain */
-#define ROOT_SEC    ((word)-1)	/* where the root directory 'is' */
+#define SEC_EOF     ((sector_t)-1)	/* end of FAT chain */
+#define ROOT_SEC    ((sector_t)-1)	/* where the root directory 'is' */
 
 #define DIR_DELETED	    0xE5
 #define DIR_DELETED_MASK    0x80
+#define DIR_E5_REPLACEMENT  0x05
+#define DIR_END		    0x00
+
+#if VFATSUPPORT
+#define INITIAL_MAX_CACHE	25
+#else
+#define INITIAL_MAX_CACHE	5
+#endif
+
+typedef word	cluster_t;
+typedef ulong	sector_t;
 
 #if LONGNAMES
 struct MsDirEntry {
-    word	    msd_Time;
-    word	    msd_Date;
+    word	    msd_ModTime;
+    word	    msd_ModDate;
     word	    msd_Cluster;
     ulong	    msd_Filesize;
     byte	    msd_Attributes;
@@ -117,11 +145,14 @@ struct MsDirEntry {
     byte	    msd_Name[8];
     byte	    msd_Ext[3];
     byte	    msd_Attributes;
+    byte	    msd_Case;
+    byte	    msd_CreationTimems;
     word	    msd_CreationTime;	    /* vollabel only */
     word	    msd_CreationDate;	    /* vollabel only */
-    byte	    msd_Pad1[6];
-    word	    msd_Time;
-    word	    msd_Date;
+    word	    msd_ClusterHigh; 	    /* not msd_AccessTime */
+    word	    msd_AccessDate;
+    word	    msd_ModTime;
+    word	    msd_ModDate;
     word	    msd_Cluster;
     ulong	    msd_Filesize;
 };
@@ -137,40 +168,71 @@ void  OtherEndianMsd(struct MsDirEntry *msd);
 #define ATTR_SYSTEM	    0x04
 #define ATTR_VOLUMELABEL    0x08
 #define ATTR_DIRECTORY	    0x10
-#define ATTR_ARCHIVED	    0x20
+#define ATTR_ARCHIVE	    0x20
 
+#define ATTR_WIN95	    0x0F	    /* RO | HIDDEN | SYSTEM | LABEL */
 #define ATTR_DIR	    (ATTR_DIRECTORY | ATTR_VOLUMELABEL)
 
 #define DATE_MIN	    0x21
 
+#define BASECASE	    0x10	    /* base name is lowercase */
+#define EXTCASE		    0x08	    /* extension is lowercase */
+
+#if VFATSUPPORT
+
+struct MsVfatSubEntry {
+    byte	    se_Count;
+#define SE_LAST	    0x40
+#define SE_COUNT    0x3F
+    byte	    se_Part1[10];
+    byte	    se_Attributes;
+    byte	    se_Pad1;
+    byte	    se_Checksum;
+    byte	    se_Part2[12];
+    word	    se_Pad2;
+    byte	    se_Part3[4];
+};
+#define SE_CHARS    13			    /* number of chars per SubEntry */
+#define SE_MAX_ENTRIES	8		    /* We do names up to 104 chars */
+#define SE_MAX_CHARS	(SE_CHARS*SE_MAX_ENTRIES) /* due to the size of
+					     * fib_Filename[108] */
+
+#endif
+
 struct DirEntry {
     struct MsDirEntry de_Msd;
-    word	    de_Sector;
-    word	    de_Offset;
+    sector_t	    de_Sector;
+    int		    de_Offset;
+#if VFATSUPPORT
+    sector_t	    de_VfatnameSector;
+    int		    de_VfatnameOffset;
+#endif
 };
 
 struct DiskParam {
-    word	    bps;	/* bytes per sector */
-    word	    spc;	/* byte: sectors per cluster */
-    word	    res;	/* reserved sectors (boot block) */
-    word	    nfats;	/* byte: number of fats */
-    word	    ndirs;	/* number of directory entries */
-    word	    nsects;	/* total number of sectors on disk */
-    word	    media;	/* byte: media byte */
-    word	    spf;	/* sectors per fat */
-    word	    spt;	/* sectors per track */
-    word	    nsides;	/* # sides */
-    word	    nhid;	/* Number of hidden sectors */
+    int		    bps;	/* bytes per sector */
+    int		    spc;	/* byte: sectors per cluster */
+    sector_t	    res;	/* reserved sectors (boot block) */
+    int		    nfats;	/* byte: number of fats */
+    int		    ndirs;	/* number of directory entries */
+    sector_t	    nsects;	/* total number of sectors on disk */
+    int		    media;	/* byte: media byte */
+    int		    spf;	/* sectors per fat */
+    int		    spt;	/* sectors per track */
+    int		    nsides;	/* # sides */
+    sector_t	    nhid;	/* Number of hidden sectors */
     /* derived parameters */
-    word	    start;	/* sector of cluster 0 */
-    word	    maxclst;	/* highest cluster number */
-    word	    rootdir;	/* first sector of root dir */
-    word	    ndirsects;	/* # of root directory sectors */
-    word	    datablock;	/* first block available for files &c */
-    word	    bpc;	/* bytes per cluster */
-    word	    freeclusts; /* amount of free space */
+    sector_t	    start;	/* sector of cluster 0 */
+    cluster_t	    maxclst;	/* highest cluster number */
+    sector_t	    rootdir;	/* first sector of root dir */
+    sector_t	    ndirsects;	/* # of root directory sectors */
+    sector_t	    datablock;	/* first block available for files &c */
+    int		    bpc;	/* bytes per cluster */
+    cluster_t	    freeclusts; /* amount of free space */
     struct DirEntry vollabel;	/* copy of volume label */
-    word	    fat16bits;	/* Is the FAT 16 bits/entry? */
+    int		    fatbits;	/* Is the FAT 12 or 16 bits/entry? */
+    int		    dos5;	/* is this a DOS 5+ disk? */
+    int		    examinesecshift;
 };
 
 #define CHECK_BOOTJMP	0x01	/* accept disk only with JMP or 00 */
@@ -184,8 +246,10 @@ struct Partition {
     int 	    spt_hd;	/* #s/t for HD floppies */
 };
 
-#define NICE_TO_DFx	(1L<<16)/* flag bit in de_Interleave */
-#define PROMISE_NOT_TO_DIE  (1L<<17)/* flag bit in de_Interleave */
+#define OPT_NICE_TO_DFx	(1L<<16)/* flag bit in de_Interleave */
+#define OPT_PROMISE_NOT_TO_DIE  (1L<<17)/* flag bit in de_Interleave */
+#define OPT_NO_WIN95	(1L<<18)
+#define OPT_SHORTNAME	(1L<<19)
 
 #define MSH_MAGIC	'Msh\0' /* Magic word in DosPackets */
 
@@ -206,12 +270,33 @@ struct MSFileLock {
 					 * locks */
     struct MSFileLock *msfl_Parent;	/* Pointer to parent directory */
     struct MsDirEntry msfl_Msd; 	/* Copy of directory entry */
-    word	    msfl_DirSector;	/* Location of directory entry */
-    word	    msfl_DirOffset;
+    sector_t	    msfl_DirSector;	/* Location of directory entry */
+    int		    msfl_DirOffset;
+#if VFATSUPPORT
+    sector_t	    msfl_VfatnameSector;
+    int		    msfl_VfatnameOffset;
+#endif
     word	    msfl_Flags;
 };
 
 #define MSFL_DIRTY  0x01		/* Only used in MSWrite */
+
+/*
+ * For Examine()/ExNext() we need to encode the current location
+ * in 32 bits, and also a flag to record if we need to enter
+ * into a directory (when Examine()ing a directory for the first time).
+ *
+ * We assume: 32 bytes per directory entry,
+ * hence 5 low-order offset bits that are always 0.
+ */
+
+#define PACK_EXAMINE_LOCATION(sec, off) \
+	((sec << Disk.examinesecshift) | (off >> 4))
+#define UNPACK_EXAMINE_SECTOR(loc) \
+	(loc >> Disk.examinesecshift)
+#define UNPACK_EXAMINE_OFFSET(loc) \
+	((loc & ((1L << Disk.examinesecshift)-1-1)) << 4)
+	/* extra -1 to mask out the flag bit */
 
 /*
  * A pointer to an MSFileHandle is put into the fh_Arg1 field of a DOS
@@ -222,23 +307,11 @@ struct MSFileLock {
 struct MSFileHandle {
     struct MSFileLock *msfh_FileLock;
     long	    msfh_SeekPos;
-    word	    msfh_Cluster;
+    cluster_t	    msfh_Cluster;
 #if CONVERSIONS
     int 	    msfh_Conversion;
 #endif
 };
-
-/*
- * Return values of CompareNames.
- */
-
-#define CMP_NOT_EQUAL	    0	/* Names do not match at all */
-#define CMP_OK_DIR	    1	/* Name matches with a subdir entry */
-#define CMP_OK_FILE	    2	/* Name matches with a file entry */
-#define CMP_INVALID	    3	/* First part of name matches with a file
-				 * entry, or other invalid component name */
-#define CMP_FREE_SLOT	    5
-#define CMP_END_OF_DIR	    6
 
 struct LockList {
     struct MinList  ll_List;
@@ -248,7 +321,7 @@ struct LockList {
 struct CacheSec {
     struct MinNode  sec_NumberNode;
     struct MinNode  sec_LRUNode;
-    word	    sec_Number;
+    sector_t	    sec_Number;
     word	    sec_Refcount;
     byte	    sec_Data[2];/* Really Disk.bps */
 };
@@ -269,13 +342,20 @@ struct PrivateInfo {
     short	   *CheckBootBlock;
     short	   *DefaultConversion;
     struct IOExtTD **DiskIOReq;
-#if CONVERSIONS
     short	    NumConversions;
     struct {
 	unsigned char **to, **from;
     }		    Table[2];
-#endif
 };
+
+/*
+ * Constants for unix2dos
+ */
+#define U2D_CANNOT_CONVERT	0
+#define U2D_CONVERTED_SAME	1
+#define U2D_CONVERTED_OK	2
+#define U2D_CONVERTED_GENNR	3
+#define U2D_CONVERTED_TRUNC	4
 
 #define PRIVATE_REVISION    2
 

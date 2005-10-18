@@ -1,7 +1,13 @@
 ;;;;
 ;
-; $Id: devio1.a,v 1.55 1993/12/30 22:45:10 Rhialto Rel $
+; $Id: devio1.a,v 1.58 2005/10/19 16:51:06 Rhialto Exp $
 ; $Log: devio1.a,v $
+; Revision 1.58  2005/10/19  16:51:06  Rhialto
+; Finally a new version!
+;
+; Revision 1.56  1996/12/21  23:34:35  Rhialto
+; No changes.
+;
 ; Revision 1.55  1993/12/30  22:45:10  Rhialto
 ; Remove hardware constants (are now in c.i).
 ; Trackbuffer is a pointer now instead of an array.

@@ -2,9 +2,9 @@
 @c %**start of header
 @setfilename MSH.guide
 @set name MSH:
-@set version 1.56
-@set rev 56
-@set rcsid $Id$
+@set version 1.58
+@set rev 58
+@set rcsid $Id: msh.texi,v 1.58 2005/10/19 16:57:04 Rhialto Exp $
 @settitle @value{name}
 @setchapternewpage odd
 @c %**end of header
@@ -21,7 +21,7 @@
 @vskip 0pt plus 1filll
 This document describes @value{name} @value{version}.
 
-Copyright @copyright{} 1989-1996 by Olaf 'Rhialto' Seibert.
+Copyright @copyright{} 1989-2005 by Olaf 'Rhialto' Seibert.
 All Rights Reserved. May not be used or copied without a license.
 
 @end titlepage
@@ -33,14 +33,15 @@ All Rights Reserved. May not be used or copied without a license.
 This file documents @value{name} @value{version}.
 
 @noindent
-Copyright @copyright{} 1989-1996 by Olaf 'Rhialto' Seibert.
+Copyright @copyright{} 1989-2005 by Olaf 'Rhialto' Seibert.
 All Rights Reserved. May not be used or copied without a license.
 
 @noindent
-If you like the program, feel free to send me some $$, or even $$$
-if you feel like it. Please don't send any cheques not written in Dutch
-guilders (standard abbreviation: nlg or hfl), since they cost a lot of
-money (at least nlg 12.50; more than US$ 7) to cash.
+If you like the program, feel free to send me some Euros, or even
+ManyEuros
+if you feel like it. Please don't send any cheques: they don't exist
+anymore in the Netherlands and they cost a lot of money to cash, if that
+is possible at all.
 
 @noindent
 All shareware resellers (and especially those in Germany) are reminded
@@ -58,7 +59,8 @@ source!
 * Compatibility::       How compatible is it?
 * Utilities::
 * Suggestions::
-* Bugs::                Know bugs. Don't look: there are none :)
+* Bugs::                Known bugs. Don't look: there are none :)
+* Credits::             Whose software I ripped off to make this.
 * Glossary::            What all the words mean.
 * Index::               Where to find what in this manual.
 @end menu
@@ -66,6 +68,7 @@ source!
 @noindent
 Amiga, AmigaDOS, Workbench are trademarks of Amiga, Inc.
 Messydos is presumably a trademark of MessySoft, Inc.
+This product includes software developed by TooLs GmbH.
 
 @noindent
 The messy file system handler is written by @emph{Sourcerer }Olaf
@@ -90,6 +93,9 @@ if your current directory is somewhere on
 formatted diskettes. You can use files on such messydos disks in almost
 exactly the same way as you use files on normal Amiga disks.
 
+Now Lose'95-style long file names are also supported, although this can
+be turned off.
+
 Supported are 40 or 80 tracks, double-sided 8, 9 or 10 sector
 double-density (DD) floppy disks, double-sided 15-21 sector high-density
 (HD) floppy disks, and harddisks with a 12 or 16-bit FAT of any
@@ -104,6 +110,7 @@ and @ref{MAIN, , why pclones can't read Amiga disks, Haynie}.
 @chapter Requirements
 @cindex Requirements
 Besides what is included in this archive, you need AmigaDOS 1.2 or better.
+I run it on my own system with AmigaDOS 3.0.
 You may also need some knowledge of installing @code{Mountlist}s and
 @code{.device}s.
 
@@ -155,26 +162,29 @@ MSH:    FileSystem = L:MessyFileSystem
         Surfaces = 2
         BlocksPerTrack = 9
 /*
- *  Initially the disk cache will be 5 sectors.
+ *  Initially the disk cache will be 25 sectors.
  */
-        Buffers = 5
+        Buffers = 25
 /*
  *  Our type of filesystem is 'MSD\0'.
  */
         DosType = 0x4D534400
 /*
- *  If Interleave is set to 65536, MSH: will wait for DFx:
+ *  If Interleave is set to 0x10000, MSH: will wait for DFx:
  *  (where x depends on the Unit parameter above) to recognize
  *  inserted disks (or not). @xref{Compatibility}.
+ *  Do @emph{not }use this option when using the MultiFileSystem,
+ *  or Zip/Jaz/etc drives, or anything else besides DF0 ... DF3!
+ *  There are some more options too (see @ref{File names}).
  */
-        Interleave = 65536	
+        Interleave = 0x10000
 /*
  *  Use BufMemType = 3 [for MEMF_CHIP | MEMF_PUBLIC] if you
- *  use MSH: on the trackdisk.device.
+ *  use MSH: on (older versions of) the trackdisk.device.
  */
         BufMemType = 1
         BootPri = 0
-        Stacksize = 3072
+        Stacksize = 8192	/* Note increase since previous releases! */
         Priority = 9
         GlobVec  = -1
 /*
@@ -221,14 +231,24 @@ implemented by this handler. As of AmigaOS 2.0, Commodore-Amiga defined a
 value for messy-type file systems: 0x4D534400 ('M' 'S' 'D' 0).
 
 @cindex Interleave
+@cindex Zip
+@cindex Jaz
+@cindex Syquest
+@cindex MFS
+@cindex MultiFileSystem
+
 The Interleave parameter indicates whether MSH: should be nice to
 another file system which happens to use the same floppy drive. More
 about this below.  Using floppies, you'll want to set Interleave to
-65536, for use with harddisks 0 is needed.  The lower 16 bits of
-Interleave are reserved to specify interleaving of sectors, but are
-currently ignored.
+0x10000, for use with anything else (such as harddisks and removables
+like Zip, Jaz, or Syquest) 0 is needed.  Also, if you use the
+MultiFileSystem (MFS) to automatically select between different file
+systems, you MUST NOT set this option.
 
-Older versions used DosType = 1, but this does not work anymore.
+The lower 16 bits of Interleave are reserved to specify interleaving of
+sectors, but are currently ignored.
+
+Older versions used DosType = 1, but this does really not work anymore.
 
 @node Installation Problems
 @section Installation Problems
@@ -251,6 +271,12 @@ Some Mount commands do funny things if the DosType parameter is missing.
 Not only does it default the value for DosType, but also for Stack, even if
 you do specify it. However this default of 3072 bytes is too small for some
 handlers, which causes mysterious dysfunctions.
+@item
+The required stack size has increased. If you upgraded from a previous
+version of MSH and did not change your Mountlist entry, MSH might not
+completely clean up directories when you remove files from long
+directories (either with many files, or very long names). Increase the
+Stacksize field if you somehow notice that this happens, and try again.
 @end itemize
 
 @node Compatibility
@@ -279,7 +305,7 @@ The @code{Interleave}
 parameter indicates whether MSH: should be nice to another file system
 which happens to use the same floppy drive. Because this can only be DF0:,
 DF1:, DF2: or DF3:, MSH: can derive the name from the Unit parameter. If
-Interleave is set to 65536, MSH: will wait for DFx: (where x depends on the
+Interleave is set to 0x10000, MSH: will wait for DFx: (where x depends on the
 Unit parameter) to recognize inserted disks. If it recognizes an inserted
 disk as an AmigaDOS disk, MSH: will conclude that it should not even
 attempt to access the disk. If DFx: only notices that some disk has been
@@ -292,8 +318,9 @@ If Interleave is not set, both MSH: and DFx: will try to access the disk at
 the same time. Only one of the two can succeed, but in the mean time they
 may have a violent fight about the control of the disk drive.
 
-For harddisk(partition)s, there is probably no other file system that MSH:
-must wait for, so Interleave should be set to 0.
+For harddisk(partition)s, and Zip/Jaz/Syquest/etc drives, there is no
+other file system that MSH: must wait for, so Interleave should be set
+to 0.
 
 @item
 It is recommended that you don't attempt to refer to MSH: while other
@@ -371,9 +398,20 @@ MakeLink(), ReadLink().
 @cindex Character Conversions
 @cindex MSH::C
 
+@emph{Note: }The file character conversions have been disabled in
+favour of the long file name support. The form of a filename with
+conversion is now a valid file name.
+
+If you really want the conversions back, recompile MSH: with
+@code{#define VFATSUPPORT 0} in han/han.h. I don't think anybody used it
+anyway, but if there is a public outcry about this I may try to get them
+going again, possibly in some different form.
+
+@subsection Disabled Character Conversions
+
 MSH: has two character conversion tables installed, that can be used while
 reading or writing a file. These tables convert the character codes of the
-ü, ä, ö), Ü, Ä, Ö and ß characters
+ü, ä, ö, Ü, Ä, Ö and ß characters
 between the Amiga codes and PC or ST codes.
 
 To open a file with PC character conversion, add ";A" to the end of the
@@ -421,8 +459,9 @@ is supplied that sends the ACTION_DIE packet to any handler you wish.
 (See @ref{Utilities})
 If there is any program running that expects MSH: to remain present even
 while there are no open or locked files on MSH:, it may be dangerous to
-remove MSH:. Unfortunately, one such program is the Workbench, so you
-should not kill MSH: if you also have the Workbench running.
+remove MSH:. Unfortunately, one such program is the Workbench (in older
+AmigaOS versions), so you should not kill MSH: if you also have the
+Workbench running.
 
 @item ACTION_MORECACHE
 @cindex ACTION_MORECACHE
@@ -439,20 +478,27 @@ number of buffers. If your AddBuffers does not like negative buffer counts,
 simply add 65536 to the (negative) number you actually intend. So, instead
 of -1 you can also specify 65535, -2 is 65534.
 You wouldn't want to add more than 32767 buffers at once anyway.
+
+Note that @code{MSH:} initially allocates 25 buffers. You cannot lower
+this number from the Mountlist, since the long filename support really
+likes to walk through whole directories often and several times soon
+after each other. If you really insist though, you can reduce the number
+of buffers with AddBuffers, but I wouldn't recommend it.
+ 
 @end table
 
 @node Special Files
 @subsection Special Files
 @cindex Special Files
 
-@emph{DEPRECATED}
+@emph{DEPRECATED }
 
 There are a few file names that have a special meaning. They all start
 with @code{MSH::} with two colons instead of @code{MSH:} with one colon.
 For some reason, some versions of AmigaDOS require you to use 3 colons
 instead of 2.
 
-@emph{DEPRECATED}
+@emph{DEPRECATED }
 
 @table @asis
 @item MSH::B
@@ -509,7 +555,7 @@ MSH::M+.
 See @ref{Character Conversions}, @ref{Utilities}.
 @end table
 
-@emph{DEPRECATED}
+@emph{DEPRECATED }
 
 @node Limitations
 @section Limitations
@@ -522,7 +568,7 @@ files.
 The following items are noteworthy:
 
 @menu
-* File names::                  that silly 8+3 format
+* File names::                  no longer that silly 8+3 format!
 * Special directories::         "." and ".."
 * Filenotes::                   are impossible, of course
 * File protection bits::        versus file attributes
@@ -539,6 +585,116 @@ The following items are noteworthy:
 @subsection File names
 @cindex File names
 
+It used to be that file names could only be "8 + 3" characters long.  In
+Losedows '95 micro$oft introduced a very ugly way to finally overcome
+this extremely annoying and oldfashioned limitation. However ugly it is,
+it became a must to incorporate this method in MSH.
+
+This also means that file names with lowercase letters and non-ASCII
+characters in them are now supported. As a side-effect, if you already
+had filenames that were not proper M$-DOS file names, they might look
+different now, since a conversion takes place between DOS and Amiga
+character codes.
+
+The method used to create long file names also requires that a unique
+short name is created for each file. This involves scanning the whole
+directory, possibly several times, until a name is generated that does
+not exist yet. For example, if a file with the name
+@code{msdosfs_lookup.c} is created, the first attempt at a unique name
+is @code{MSDOSF~1.C}. If that name already exists, for instance because
+it belongs to a file @code{msdosfs_vnops.c}, the next attempt is
+@code{MSDOSF~2.C}, and so on. You can understand that this can take a
+long time, especially in a long directory with many files with similar
+names.
+
+The attempted short names are created from long names by converting all
+letters to upper case, removing illegal characters, and inserting a ~
+followed by a number. Also, non-ASCII characters are converted from
+Amiga character codes (ISO Latin 1) to M$-DOS character codes.
+
+Also, if a directory with long names is modified on a system which knows
+nothing about them, there will be "junk" left in the directory: parts of
+long file names that do not belong to a file anymore. Therefore, every
+time a file is renamed or removed its directory is cleaned up. This also
+involves two scans of the whole directory. (I am considering methods to
+reduce the frequency of this cleaning operation, since it happens way
+too often.)
+
+As stated above, each file that has a long name also has a short name.
+You will see the short names in the filenote field. I use the following
+alias to list a MSH directory in a (usually) tidy manner:
+
+	@code{alias lc list lformat "%-26N%6L %D %T %C" []}
+
+This produces a listing like this:
+
+@format
+MSDOSF~1.C                     6 Yesterday 17:19:48 
+MSDOSF~2.C                     6 Yesterday 17:20:44 
+MSDOSF~3.C                     6 Yesterday 17:27:34 
+dir1a                        Dir Yesterday 20:53:54 DIR1A
+a-very-long-file-name-that-needs-several-entries.c     6 Yesterday 17:37:48 A-VERY~1.C
+dir2                         Dir Yesterday 20:54:10 DIR2
+éíóáú                      empty Today     22:19:54 ÉÍÓÁÚ
+msdosfs_lookup.c           28934 02-Mar-97 21:00:22 MSDOSF~4.C
+@end format
+
+The -26 indicates the amount of space available for the long file name,
+and you can adjust it to taste.
+
+You may notice that you can open files by both their long and short
+name. This will give you exactly the same file. But if you use the short
+name MSH: does not know that there was a long name. This means that
+deleting it leaves the long name as "junk" in the directory, and the
+result of a call to Examine() on the file does not reveal the long name.
+
+The length of a long file name can be 255 characters, but due to
+internal AmigaDOS limitations, only up to 104 characters can be shown.
+If a filename longer than that occurs, its short name will be used and
+its long name will be ignored. (The size of the fib_FileName field in a
+FileInfoBlock is only 108 characters, and 104 is a nice multiple of 13).
+A long file name consists of Unicode characters. That is a 16-bit code,
+the first 256 characters of which correspond with ISO-Latin-1, which
+happens to be the code AmigaOS uses. File names are translated to and
+from Unicode automatically. If a name occurs that cannot be converted
+into ISO-Latin-1, it is ignored and the short name will be used.
+
+MSH can still be set not to recognise long names, or even to ignore all
+lose'95 features altogether. You can do this by setting bits in the
+Interleave field in the Mountlist. Of course you can add together
+various option bits to enable multiple options.
+
+@table @asis
+@item 0x80000 (SHORTNAME)
+This option removes the recognition and creation of long names. Cleanup
+of directories still takes place. When you use a name that is too long,
+it will be truncated to 8+3 format, but not exactly the same way it used
+to happen in previous MSH versions. It is more like the way short names
+are generated from long names, except that there is no "~number" inserted.
+This holds for lookup and creation of names.
+
+@item 0x40000 (NO_WIN95)
+Setting NO_WIN95 also implies SHORTNAME.
+This option removes ALL knowledge about long names and other Lose'95
+features from MSH. Currently this means that long names are not removed
+from directories when their associated short names are removed, and that
+directories are not cleaned up. Also, should additional lose'95 features
+be built into MSH, this option will keep them turned off.
+
+@end table
+
+As before, there are still some names that MSH allows you to create that
+M$DOS cannot handle. These include the device names CON, AUX, PRN, NUL,
+and the patterns COM[1-4] and LPT[1-4].
+
+You can go even further and disable the long file name support
+completely. Refer to source file @code{han/han.h} for compile-time
+configuration options. In that case, the following old bit of
+documentation still holds.
+
+@subsection Old situation of file names
+@cindex Old situation of file names
+
 The most eye-catching difference are the file names: messydos file
 names can be at most "8 + 3" characters long. This means that the "base"
 part of the file name may be eight characters long, maybe followed by a
@@ -549,14 +705,15 @@ A-Z, digits 0-9, and most "punctuation" characters except space * ? . < >
 / = | , : and \.
 
 MSH: will try to map file names that you or a program attempts to use to
-names that are actually allowed. But for utmost flexibility, only the most
-basic limitations are enforced: the length of the name (8+3), uppercase
-alphabetics, and the presence of only one period in the name. This means
-that you might create file names that a messydos computer does not
-correctly know how to handle. But care has been taken that in no case it
-would be possible to create a file name that, once created, cannot be
-handled anymore by MSH:. You can always refer to that file with the same
-name you used before, even if MSH: changed it for you.
+names that are actually allowed. But for utmost flexibility, only the
+most basic limitations are enforced: the length of the name (8+3),
+uppercase alphabetics and no non-ASCII characters, and the presence of
+only one period in the name. This means that you might create file names
+that a messydos computer does not correctly know how to handle. But care
+has been taken that in no case it would be possible to create a file
+name that, once created, cannot be handled anymore by MSH:. You can
+always refer to that file with the same name you used before, even if
+MSH: changed it for you.
 
 @node Special directories
 @subsection Special directories ('.' and '..')
@@ -576,7 +733,7 @@ in their respective primary directory entries.
 But even while it is hidden, the ".." entry is of course still updated to
 reflect the new parent directory when a directory is renamed and moved.
 Note, by the way, that moving directories is an operation that is not
-supported by messydos itself.
+supported by m$-dos itself.
 
 Of course, the usual methods of accessing the current directory (the
 empty name "") and the parent directory ("/") do work.
@@ -595,6 +752,9 @@ themselves.
 Messydos has no provision for file notes and therefore they cannot be
 supported. However, to remain friends with the CLONE option of the
 C:Copy command, MSH: pretends success when setting a filenote.
+
+Instead, if the file has a long name, you will see the short name of
+the file in the filenote field.
 
 @node File protection bits
 @subsection File protection bits vs. file attributes
@@ -642,6 +802,11 @@ the boot block. (Version 3.2 works nicely for me.) If you wish to format
 such a disk on your Amiga, you can use the standard AmigaDOS Format
 command, or use the supplied messyfmt program.
 
+MSH recognises DOS 5.0 style bootblocks and uses some of their extended
+information. For now, the bootblocks written by MSH are still DOS 3.x
+style. The volume serial number and volume label in the bootblock are
+not used.
+
 See also @ref{Special Files}.
 
 @node FAT
@@ -653,16 +818,24 @@ is assumed to have 12-bit entries if the disk has at most 4086 ($FF6)
 clusters. If the disk has more clusters than that, 16 bit FAT entries
 are assumed. This is the method that seems to be used by messy dos 3.0.
 
+If a DOS 5.0 style bootblock is found, it always contains the number of
+bits per FAT entry. 32-bits FATs are not supported yet.
+
 @node Workbench
 @subsection Workbench
 @cindex Workbench
 
-The Workbench wants to use filenames that are impossible on messydos
+If MSH is compiled without long filename support, then
+the Workbench wants to use filenames that are impossible on messydos
 floppies: the icon files which end with @code{.info}.
 
 To still make this possible, all filenames with the extension INF are
 converted to look like they end in .info. Which looks kind of silly, by
 the way, in directory listings.
+
+If long file name support is compiled in, then this is not necessary and
+won't happen. This remains true when you use the option to turn off long
+file names.
 
 @node Volume label
 @subsection Volume label
@@ -825,9 +998,10 @@ enter a new value in the usual notation: 0x = hexadecimal (the digits A-F
 must be in upper case), 0 = octal, and everything else is decimal. A few
 suffixes are allowed as multiplication factor: m = mega (1048576), k = kilo
 (1024), s = sectors (512) and b = byte (1). (Not all terms make sense with
-all questions.) You may create 8, 9 or 10 sector disks by answering the
-question "Sectors per track" appropriately. This value is stored in the
-boot block, and also used in the format command for the disk device.
+all questions.) You may create 8, 9, 10, or 18 up to 21 sector disks by
+answering the question "Sectors per track" appropriately. This value is
+stored in the boot block, and also used in the format command for the
+disk device.
 
 You are also asked if you wish to format the whole disk, and if not, if
 you want to write only the bootblock, or the bootblock, FAT and directory.
@@ -872,9 +1046,8 @@ pointer from its DeviceNode, which was put there by MountShare.
 
 @item
 Not only can character conversions be performed on files read and
-written, the conversion table can even be user-defined with help of the
-program
-@code{LoadConv}.
+written (see @ref{Character Conversions}), the conversion table can even be
+user-defined with help of the program @code{LoadConv}.
 @cindex LoadConv.
 
 Usage: loadconv MSH-DEV: X file
@@ -955,6 +1128,62 @@ See also
 @ref{2.0+ Functions},
 @ref{Extensions},
 @ref{Limitations}.
+
+@node Credits
+@chapter Credits
+@cindex Credits
+Some legalese: The VFAT support (for long file names) is mostly based on
+NetBSD code and some inspiration from mtools. The following notice appears
+because of this.
+
+@format
+/*-
+ * Copyright (C) 1994, 1995 Wolfgang Solfrank.
+ * Copyright (C) 1994, 1995 TooLs GmbH.
+ * All rights reserved.
+ * Original code by Paul Popelka (paulp@@uts.amdahl.com) (see below).
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by TooLs GmbH.
+ * 4. The name of TooLs GmbH may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY TOOLS GMBH ``AS IS'' AND ANY EXPRESS OR
+ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ * IN NO EVENT SHALL TOOLS GMBH BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+ * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
+ * OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+/*
+ * Written by Paul Popelka (paulp@@uts.amdahl.com)
+ * 
+ * You can do anything you want with this software, just don't say you wrote
+ * it, and don't remove this notice.
+ * 
+ * This software is provided "as is".
+ * 
+ * The author supplies this software to be publicly redistributed on the
+ * understanding that the author is not responsible for the correct
+ * functioning of this software in any circumstances and is not liable for
+ * any damages caused by this software.
+ * 
+ * October 1992
+ */
+@end format
 
 @node Glossary
 @chapter Glossary
