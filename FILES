@@ -13,6 +13,7 @@ c/MSH-Set.info
 dev/c.i
 dev/dev.h
 dev/device.h
+dev/device.i
 dev/device1.a
 dev/device2.c
 dev/devio1.a
@@ -60,7 +61,6 @@ han/pack.c
 han/RCS_Link
 han/support.c
 han/tags
-Make-Dist
 messydisk.device
 MessyFileSystem
 Mountlist
@@ -80,6 +80,7 @@ syslog/syslogi.o
 syslog/syslogil.o
 syslog/syslogl.o
 syslog/syslog_private.h
+tags
 util/die.c
 util/fmtmain.c
 util/fmtwindow.c
