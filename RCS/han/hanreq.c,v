@@ -1,0 +1,646 @@
+head	1.56;
+access;
+symbols
+	SHAREWARE2:1.56
+	MAXON5:1.55
+	MAXON4:1.53
+	MAXON3:1.51
+	MAXON2:1.46
+	MAXON1:1.40
+	Patch3:1.30
+	Patch1:1.2
+	Rel1:1.1;
+locks;
+comment	@ * @;
+
+
+1.56
+date	96.12.22.00.22.33;	author Rhialto;	state Rel;
+branches;
+next	1.55;
+
+1.55
+date	93.12.30.23.28.00;	author Rhialto;	state Rel;
+branches;
+next	1.54;
+
+1.54
+date	93.06.24.05.12.49;	author Rhialto;	state Exp;
+branches;
+next	1.53;
+
+1.53
+date	92.10.25.02.42.27;	author Rhialto;	state Rel;
+branches;
+next	1.51;
+
+1.51
+date	92.04.17.15.38.20;	author Rhialto;	state Rel;
+branches;
+next	1.46;
+
+1.46
+date	91.10.06.18.25.03;	author Rhialto;	state Rel;
+branches;
+next	1.45;
+
+1.45
+date	91.10.04.00.12.06;	author Rhialto;	state Exp;
+branches;
+next	1.43;
+
+1.43
+date	91.09.28.01.37.13;	author Rhialto;	state Exp;
+branches;
+next	1.42;
+
+1.42
+date	91.06.13.23.47.15;	author Rhialto;	state Exp;
+branches;
+next	1.40;
+
+1.40
+date	91.03.03.17.54.07;	author Rhialto;	state Rel;
+branches;
+next	1.32;
+
+1.32
+date	90.11.23.23.53.42;	author Rhialto;	state Exp;
+branches;
+next	1.30;
+
+1.30
+date	90.06.04.23.17.48;	author Rhialto;	state Rel;
+branches;
+next	1.2;
+
+1.2
+date	90.03.11.17.46.08;	author Rhialto;	state Rel;
+branches;
+next	1.1;
+
+1.1
+date	89.12.17.20.03.24;	author Rhialto;	state Rel;
+branches;
+next	;
+
+
+desc
+@The read/write error requester
+@
+
+
+1.56
+log
+@Cosmetics only.
+@
+text
+@/*-
+ * $Id: hanreq.c,v 1.55 1993/12/30 23:28:00 Rhialto Rel $
+ * $Log: hanreq.c,v $
+ * Revision 1.55  1993/12/30  23:28:00	Rhialto
+ * Freeze for MAXON5.
+ *
+ * Revision 1.54  1993/06/24  05:12:49	Rhialto
+ * DICE 2.07.54R.
+ *
+ * Revision 1.53  92/10/25  02:42:27  Rhialto
+ * No real change.
+ *
+ * Revision 1.51  92/04/17  15:38:20  Rhialto
+ * Freeze for MAXON.
+ *
+ * Revision 1.46  91/10/06  18:25:03  Rhialto
+ *
+ * Freeze for MAXON
+ *
+ * Revision 1.45  91/10/04  00:12:06  Rhialto
+ * Add general information requester
+ *
+ * Revision 1.43  91/09/28  01:37:13  Rhialto
+ * Changed to newer syslog stuff.
+ *
+ * Revision 1.42  91/06/13  23:47:15  Rhialto
+ * DICE conversion
+ *
+ * Revision 1.40  91/03/03  17:54:07  Rhialto
+ * Freeze for MAXON
+ *
+ * Revision 1.32  90/11/23  23:53:42  Rhialto
+ * Prepare for syslog
+ *
+ * Revision 1.30  90/06/04  23:17:48  Rhialto
+ * Release 1 Patch 3
+ *
+ *  HANREQ.C
+ *
+ *  The code for the messydos file system handler.
+ *
+ *  Read/Write error requesters.
+ *
+ *  This code is (C) Copyright 1989-1993 by Olaf Seibert. All rights reserved.
+ *  May not be used or copied without a licence.
+-*/
+
+#include "han.h"
+#include "dos.h"
+
+#define IntuitionBase_DECLARED
+
+#ifndef INTUITION_INTUITION_H
+#include <intuition/intuition.h>
+#endif
+#ifndef CLIB_INTUITION_PROTOS_H
+#include <clib/intuition_protos.h>
+#endif
+
+extern struct IntuitionBase *IntuitionBase;
+
+#if HDEBUG
+#   include "syslog.h"
+#else
+#   define	debug(x)
+#endif
+
+Prototype short Cancel; 	/* Cancel all R/W errors */
+Prototype long	RetryRwError(struct IOExtTD *req);
+Prototype void	DisplayMessage(char *msg);
+Local	  struct Window *Getpr_WindowPtr(void);
+
+short		Cancel = 0;	/* Cancel all R/W errors */
+
+static const UBYTE retry[] = "Retry";
+static const UBYTE cancel[] = "Cancel";
+
+static const struct IntuiText Positive = {
+    AUTOFRONTPEN, AUTOBACKPEN, AUTODRAWMODE,
+    AUTOLEFTEDGE, AUTOTOPEDGE, AUTOITEXTFONT,
+    retry,
+    AUTONEXTTEXT
+};
+
+static const struct IntuiText Negative = {
+    AUTOFRONTPEN, AUTOBACKPEN, AUTODRAWMODE,
+    AUTOLEFTEDGE, AUTOTOPEDGE, AUTOITEXTFONT,
+    cancel,
+    AUTONEXTTEXT
+};
+
+static const UBYTE volume[] = "Messydos volume";
+static const UBYTE hasrwerr[] = "has a Read or Write error";
+
+static struct IntuiText RwError[] = {
+    {
+	AUTOFRONTPEN, AUTOBACKPEN, AUTODRAWMODE,
+	16,	      5,	   AUTOITEXTFONT,
+	volume,
+	&RwError[1]
+    },
+    {
+	AUTOFRONTPEN, AUTOBACKPEN, AUTODRAWMODE,
+	16,	      15,	   AUTOITEXTFONT,
+	(UBYTE *)NULL,
+	&RwError[2]
+    },
+    {
+	AUTOFRONTPEN, AUTOBACKPEN, AUTODRAWMODE,
+	16,	      25,	   AUTOITEXTFONT,
+	hasrwerr,
+	NULL
+    },
+};
+
+static const UBYTE must[] = "You MUST!! replace messy volume";
+static const UBYTE inthat[] = "in that floppy drive !!";
+
+struct IntuiText MustReplace[] = {
+    {
+	AUTOFRONTPEN, AUTOBACKPEN, AUTODRAWMODE,
+	16,	      5,	   AUTOITEXTFONT,
+	must,
+	&MustReplace[1]
+    },
+    {
+	AUTOFRONTPEN, AUTOBACKPEN, AUTODRAWMODE,
+	16,	      15,	   AUTOITEXTFONT,
+	(UBYTE *)NULL,
+	&MustReplace[2]
+    },
+    {
+	AUTOFRONTPEN, AUTOBACKPEN, AUTODRAWMODE,
+	16,	      25,	   AUTOITEXTFONT,
+	inthat,
+	NULL
+    },
+};
+
+static struct Window *
+Getpr_WindowPtr()
+{
+    if (DosPacket != NULL) { /* A user-requested action */
+	struct MsgPort *port;
+	struct Process *proc;
+
+	port = DosPacket->dp_Port;
+	if ((port->mp_Flags & PF_ACTION) != PA_SIGNAL)
+	    return (struct Window *)-1;
+	proc = (struct Process *)port->mp_SigTask;
+	if (proc->pr_Task.tc_Node.ln_Type != NT_PROCESS)
+	    return (struct Window *)-1;
+	return (struct Window *)proc->pr_WindowPtr;
+    } else
+	return NULL;
+}
+
+long
+RetryRwError(req)
+struct IOExtTD *req;
+{
+    struct Window  *window;
+    struct IntuiText *text;
+    long	    result;
+
+    if (Cancel) {
+	debug(("RetryRwError: Cancel != 0\n"));
+	goto fail;
+    }
+
+    window = Getpr_WindowPtr();
+    if (window == (struct Window *)-1) {
+	debug(("RetryRwError: pr_WindowPtr == -1\n"));
+	goto fail;
+    }
+
+    if (req->iotd_Req.io_Error == TDERR_DiskChanged) {
+	text = MustReplace;
+	DiskChanged = 0;
+    } else
+	text = RwError;
+
+    if (VolNode)
+	text[1].IText = (UBYTE *)BTOC(VolNode->dl_Name)+1;
+    else
+	text[1].IText = (UBYTE *)"";
+
+again:
+    result = AutoRequest(window, text, &Positive, &Negative,
+			 0L, 0L, 320L, 72L);
+
+    if (req->iotd_Req.io_Error == TDERR_DiskChanged && result != FALSE) {
+	TDChangeNum();	/* Get new disk change number */
+	DiskChanged = 0;
+    }
+
+    return result;
+
+fail:
+    return FALSE;
+}
+
+static const UBYTE ok[] = "Ok";
+
+static const struct IntuiText Ok = {
+    AUTOFRONTPEN, AUTOBACKPEN, AUTODRAWMODE,
+    AUTOLEFTEDGE, AUTOTOPEDGE, AUTOITEXTFONT,
+    ok,
+    AUTONEXTTEXT
+};
+
+static struct IntuiText AnyMessage[] = {
+    {
+	AUTOFRONTPEN, AUTOBACKPEN, AUTODRAWMODE,
+	16,	      10,	   AUTOITEXTFONT,
+	(UBYTE *)NULL,
+	&AnyMessage[1]
+    },
+    {
+	AUTOFRONTPEN, AUTOBACKPEN, AUTODRAWMODE,
+	16,	      25,	   AUTOITEXTFONT,
+	(UBYTE *)NULL,
+	NULL
+    }
+};
+
+void
+DisplayMessage(msg)
+char	    *msg;
+{
+    struct Window  *window;
+
+    window = Getpr_WindowPtr();
+    if (window == (struct Window *)-1)
+	window = NULL;
+
+    AnyMessage[0].IText = (UBYTE *)BTOC(DevNode->dn_Name) + 1;
+    AnyMessage[1].IText = msg;
+    (void) AutoRequest(window, AnyMessage, NULL, &Ok,
+		       0L, 0L, 320L, 72L);
+
+}
+@
+
+
+1.55
+log
+@Freeze for MAXON5.
+@
+text
+@d2 1
+a2 1
+ * $Id: hanreq.c,v 1.54 1993/06/24 05:12:49 Rhialto Exp $
+d4 4
+a7 1
+ * Revision 1.54  1993/06/24  05:12:49  Rhialto
+d51 2
+d62 1
+a62 1
+#ifdef HDEBUG
+d166 2
+a167 1
+    if (Cancel)
+d169 1
+d172 2
+a173 1
+    if (window == (struct Window *)-1)
+d175 1
+d193 1
+a193 1
+	TDChangeNum();  /* Get new disk change number */
+@
+
+
+1.54
+log
+@DICE 2.07.54R.
+@
+text
+@d2 5
+a6 2
+ * $Id: hanreq.c,v 1.53 92/10/25 02:42:27 Rhialto Rel $
+ * $Log:	hanreq.c,v $
+@
+
+
+1.53
+log
+@No real change.
+@
+text
+@d2 1
+a2 1
+ * $Id: hanreq.c,v 1.51 92/04/17 15:38:20 Rhialto Rel $
+d4 3
+d38 2
+a39 2
+ *  This code is (C) Copyright 1989 by Olaf Seibert. All rights reserved. May
+ *  not be used or copied without a licence.
+a41 1
+#include <functions.h>
+d44 1
+d48 5
+@
+
+
+1.51
+log
+@Freeze for MAXON.
+@
+text
+@d2 1
+a2 1
+ * $Id: hanreq.c,v 1.46 91/10/06 18:25:03 Rhialto Rel $
+d4 3
+a38 1
+#include <amiga.h>
+@
+
+
+1.46
+log
+@
+Freeze for MAXON
+@
+text
+@d2 1
+a2 1
+ * $Id: hanreq.c,v 1.45 91/10/04 00:12:06 Rhialto Exp $
+d4 4
+d10 1
+a10 1
+ * 
+d50 4
+a53 2
+extern struct DeviceNode *DevNode;
+static struct Window *Getpr_WindowPtr(void);
+d57 4
+a60 1
+static struct IntuiText Positive = {
+d63 1
+a63 1
+    (UBYTE *)"Retry",
+d67 1
+a67 1
+static struct IntuiText Negative = {
+d70 1
+a70 1
+    (UBYTE *)"Cancel",
+d74 3
+d81 1
+a81 1
+	(UBYTE *)"Messydos volume",
+d93 1
+a93 1
+	(UBYTE *)"has a Read or Write error",
+d98 3
+d105 1
+a105 1
+	(UBYTE *)"You MUST!! replace messy volume",
+d117 1
+a117 1
+	(UBYTE *)"in that floppy drive !!",
+d181 3
+a183 1
+static struct IntuiText Ok = {
+d186 1
+a186 1
+    (UBYTE *)"Ok",
+@
+
+
+1.45
+log
+@Add general information requester
+@
+text
+@d2 1
+a2 1
+ * $Id: hanreq.c,v 1.43 91/09/28 01:37:13 Rhialto Exp $
+d4 3
+@
+
+
+1.43
+log
+@Changed to newer syslog stuff.
+@
+text
+@d2 1
+a2 1
+ * $Id: hanreq.c,v 1.42 91/06/13 23:47:15 Rhialto Exp $
+d4 3
+d43 3
+d104 18
+d126 1
+a126 1
+    register struct Window *window;
+d133 3
+a135 15
+    if (DosPacket != NULL) { /* A user-requested action */
+	struct MsgPort *port;
+	struct Process *proc;
+
+	port = DosPacket->dp_Port;
+	if ((port->mp_Flags & PF_ACTION) != PA_SIGNAL)
+	    goto fail;
+	proc = (struct Process *)port->mp_SigTask;
+	if (proc->pr_Task.tc_Node.ln_Type != NT_PROCESS)
+	    goto fail;
+	window = (struct Window *)proc->pr_WindowPtr;
+	if (window == (struct Window *)-1)
+	    goto fail;
+    } else
+	window = NULL;
+d161 39
+@
+
+
+1.42
+log
+@DICE conversion
+@
+text
+@d2 1
+a2 1
+ * $Id: hanreq.c,v 1.40 91/03/03 17:54:07 Rhialto Rel $
+d4 3
+d35 1
+a35 4
+#   define	debug(x)  syslog x
+    void initsyslog(void);
+    void syslog(char *, ...);
+    void uninitsyslog(void);
+@
+
+
+1.40
+log
+@Freeze for MAXON
+@
+text
+@d2 1
+a2 1
+ * $Id: hanreq.c,v 1.32 90/11/23 23:53:42 Rhialto Exp $
+d4 3
+d9 1
+a9 1
+ * 
+d23 3
+d27 1
+a27 1
+#include "han.h"
+d29 1
+d33 3
+@
+
+
+1.32
+log
+@Prepare for syslog
+@
+text
+@d2 1
+a2 1
+ * $Id: hanreq.c,v 1.30 90/06/04 23:17:48 Rhialto Rel $
+d4 3
+@
+
+
+1.30
+log
+@Release 1 Patch 3
+@
+text
+@d2 1
+a2 1
+ * $Id: hanreq.c,v 1.2 90/03/11 17:46:08 Rhialto Rel $
+d4 3
+d22 1
+a22 1
+#   define	debug(x)  dbprintf x
+@
+
+
+1.2
+log
+@Patch1
+@
+text
+@d2 1
+a2 1
+ * $Id: hanreq.c,v 1.1 89/12/17 20:03:24 Rhialto Rel Locker: Rhialto $
+a3 3
+ * Revision 1.1  89/12/17  20:03:24  Rhialto
+ * Initial revision
+ *
+d15 1
+d24 3
+a26 1
+struct IntuiText Positive = {
+d33 1
+a33 1
+struct IntuiText Negative = {
+d40 1
+a40 1
+struct IntuiText RwError[] = {
+a81 5
+long AutoRequest();
+extern struct DosPacket *DosPacket;
+extern struct DeviceList *VolNode;
+extern short DiskChanged;
+
+a86 2
+    struct MsgPort *port;
+    struct Process *proc;
+d88 1
+a88 1
+    long result;
+d90 3
+d94 3
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d2 4
+a5 2
+ * $Id$
+ * $Log$
+a17 2
+#include <exec/io.h>
+#include <devices/trackdisk.h>
+d20 1
+a20 1
+#ifdef DEBUG
+d119 1
+a119 1
+	text[1].IText = NULL;
+d123 1
+a123 1
+		       0L, 0L, 320L, 72L);
+a125 2
+	if (DiskChanged == 0)   /* Cheating, huh ? */
+	    goto again;
+@

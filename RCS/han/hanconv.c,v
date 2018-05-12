@@ -1,0 +1,575 @@
+head	1.56;
+access;
+symbols
+	SHAREWARE2:1.56
+	MAXON5:1.55
+	MAXON4:1.53
+	MAXON3:1.51
+	MAXON2:1.46;
+locks;
+comment	@ * @;
+
+
+1.56
+date	96.12.22.00.22.33;	author Rhialto;	state Rel;
+branches;
+next	1.55;
+
+1.55
+date	93.12.30.23.28.00;	author Rhialto;	state Rel;
+branches;
+next	1.54;
+
+1.54
+date	93.06.24.05.12.49;	author Rhialto;	state Exp;
+branches;
+next	1.53;
+
+1.53
+date	92.10.25.02.41.38;	author Rhialto;	state Rel;
+branches;
+next	1.51;
+
+1.51
+date	92.04.17.15.38.09;	author Rhialto;	state Rel;
+branches;
+next	1.48;
+
+1.48
+date	91.11.03.00.56.34;	author Rhialto;	state Exp;
+branches;
+next	1.46;
+
+1.46
+date	91.10.06.18.24.51;	author Rhialto;	state Rel;
+branches;
+next	1.45;
+
+1.45
+date	91.10.03.23.34.41;	author Rhialto;	state Exp;
+branches;
+next	;
+
+
+desc
+@Implement conversions during Read()/Write()
+@
+
+
+1.56
+log
+@Cosmetics only.
+@
+text
+@/*-
+ * $Id: hanconv.c,v 1.55 1993/12/30 23:28:00 Rhialto Rel $
+ * $Log: hanconv.c,v $
+ * Revision 1.55  1993/12/30  23:28:00	Rhialto
+ * Freeze for MAXON5.
+ *
+ * Revision 1.54  1993/06/24  05:12:49	Rhialto
+ * DICE 2.07.54R.
+ *
+ * Revision 1.53  92/10/25  02:41:38  Rhialto
+ * Rearrange initialisation of tables.
+ *
+ * Revision 1.51  92/04/17  15:38:09  Rhialto
+ * Freeze for MAXON.
+ *
+ * Revision 1.48  91/11/03  00:56:34  Rhialto
+ * Codes for s on PC/ST were swapped.
+ *
+ * Revision 1.46  91/10/06  18:24:51  Rhialto
+ *
+ * Freeze for MAXON
+ *
+ * Revision 1.45  91/10/03  23:34:41  Rhialto
+ * Initial version
+ *
+ *
+ * HANCONV.C
+ *
+ * The code for the messydos file system handler.
+ *
+ * This parts handles conversions on file data: PC/ST codes vs ISO-Latin-1.
+ *
+ * This code is (C) Copyright 1991-1993 by Olaf Seibert. All rights reserved.
+ * May not be used or copied without a licence.
+-*/
+
+#include "han.h"
+
+#if CONVERSIONS
+#include "hanconv.h"
+
+#if HDEBUG
+#   include "syslog.h"
+#else
+#   define	debug(x)
+#endif
+
+unsigned char  *InitTable(unsigned char *init);
+
+void		rdwr_CopyMem(byte *from, byte *to, long fromsize);
+void		rd_FromPC(byte *from, byte *to, long fromsize);
+void		rd_FromST(byte *from, byte *to, long fromsize);
+
+void		wr_ToPC(byte *from, byte *to, long fromsize);
+void		wr_ToST(byte *from, byte *to, long fromsize);
+
+const ConversionFunc rd_Conv[] = {
+    rdwr_CopyMem, rd_FromPC, rd_FromST
+};
+
+const ConversionFunc wr_Conv[] = {
+    rdwr_CopyMem, wr_ToPC, wr_ToST
+};
+
+/*
+ * The conversion table pointers can be shared among multiple running
+ * instances of the handler, as long as we won't introduce user-defined
+ * conversion tables. Then we can do a copy-on-write.
+ * Must really protect against some race conditions with a shared semaphore.
+ */
+
+Prototype short 	    ConversionImbeddedInFileName;
+Prototype short 	    DefaultConversion;
+Prototype __shared unsigned char *Table_ToPC;
+Prototype __shared unsigned char *Table_FromPC;
+Prototype __shared unsigned char *Table_ToST;
+Prototype __shared unsigned char *Table_FromST;
+Prototype void		  ConvCleanUp(void);
+
+short		  ConversionImbeddedInFileName;
+short		  DefaultConversion = ConvNone;
+__shared unsigned char *Table_ToPC;
+__shared unsigned char *Table_FromPC;
+__shared unsigned char *Table_ToST;
+__shared unsigned char *Table_FromST;
+void		ConvCleanUp(void);
+
+unsigned char  *
+InitTable(init)
+unsigned char  *init;
+{
+    unsigned char  *table;
+
+    if (table = AllocMem(256L, 0L)) {
+	int		i;
+
+	for (i = 0; i < 256; i++)
+	    table[i] = i;
+
+	do {
+	    i = *init++;
+	    table[i] = *init++;
+	} while (i != 0);
+    }
+
+    return table;
+}
+
+void
+rdwr_CopyMem(from, to, fromsize)
+byte	       *from;
+byte	       *to;
+long		fromsize;
+{
+    CopyMem(from, to, fromsize);
+}
+
+void
+rd_FromPC(from, to, fromsize)
+byte	       *from;
+byte	       *to;
+long		fromsize;
+{
+    static unsigned char init_FromPC[] = {
+	0x81, 0xFC,   /* u */
+	0x84, 0xE4,   /* a */
+	0x94, 0xF6,   /* o */
+	0x9A, 0xDC,   /* U */
+	0x8E, 0xC4,   /* A */
+	0x99, 0xD6,   /* O */
+	0xE1, 0xDF,   /* s */
+	0, 0
+    };
+
+    Forbid();
+    if (Table_FromPC == 0)
+	Table_FromPC = InitTable(init_FromPC);
+    Permit();
+
+    if (Table_FromPC != 0) {
+	unsigned char *table = Table_FromPC;
+
+	for (; fromsize > 0; fromsize--, from++, to++)
+	    *to = table[*from];
+    }
+}
+
+void
+rd_FromST(from, to, fromsize)
+byte	       *from;
+byte	       *to;
+long		fromsize;
+{
+    static unsigned char init_FromST[] = {
+	0x81, 0xFC,   /* u */
+	0x84, 0xE4,   /* a */
+	0x94, 0xF6,   /* o */
+	0x9A, 0xDC,   /* U */
+	0x8E, 0xC4,   /* A */
+	0x99, 0xD6,   /* O */
+	0x9E, 0xDF,   /* s */
+	0, 0
+    };
+
+    Forbid();
+    if (Table_FromST == 0)
+	Table_FromST = InitTable(init_FromST);
+    Permit();
+
+    if (Table_FromST != 0) {
+	unsigned char *table = Table_FromST;
+
+	for (; fromsize > 0; fromsize--, from++, to++)
+	    *to = table[*from];
+    }
+}
+
+void
+wr_ToPC(from, to, fromsize)
+byte	       *from;
+byte	       *to;
+long		fromsize;
+{
+    static unsigned char init_ToPC[] = {
+	0xFC, 0x81,   /* u */
+	0xE4, 0x84,   /* a */
+	0xF6, 0x94,   /* o */
+	0xDC, 0x9A,   /* U */
+	0xC4, 0x8E,   /* A */
+	0xD6, 0x99,   /* O */
+	0xDF, 0xE1,   /* s */
+	0, 0
+    };
+
+    Forbid();
+    if (Table_ToPC == 0)
+	Table_ToPC = InitTable(init_ToPC);
+    Permit();
+
+    if (Table_ToPC != 0) {
+	unsigned char *table = Table_ToPC;
+
+	for (; fromsize > 0; fromsize--, from++, to++)
+	    *to = table[*from];
+    }
+}
+
+void
+wr_ToST(from, to, fromsize)
+byte	       *from;
+byte	       *to;
+long		fromsize;
+{
+    static unsigned char init_ToST[] = {
+	0xFC, 0x81,   /* u */
+	0xE4, 0x84,   /* a */
+	0xF6, 0x94,   /* o */
+	0xDC, 0x9A,   /* U */
+	0xC4, 0x8E,   /* A */
+	0xD6, 0x99,   /* O */
+	0xDF, 0x9E,   /* s */
+	0, 0
+    };
+
+    Forbid();
+    if (Table_ToST == 0)
+	Table_ToST = InitTable(init_ToST);
+    Permit();
+
+    if (Table_ToST != 0) {
+	unsigned char *table = Table_ToST;
+
+	for (; fromsize > 0; fromsize--, from++, to++)
+	    *to = table[*from];
+    }
+}
+
+void
+ConvCleanUp()
+{
+    Forbid();
+    if (Table_FromPC) {
+	FreeMem(Table_FromPC, 256L);
+	Table_FromPC = 0;
+    }
+    if (Table_FromST) {
+	FreeMem(Table_FromST, 256L);
+	Table_FromST = 0;
+    }
+    if (Table_ToPC) {
+	FreeMem(Table_ToPC, 256L);
+	Table_ToPC = 0;
+    }
+    if (Table_ToST) {
+	FreeMem(Table_ToST, 256L);
+	Table_ToST = 0;
+    }
+    Permit();
+}
+
+#endif /* CONVERSIONS */
+@
+
+
+1.55
+log
+@Freeze for MAXON5.
+@
+text
+@d2 1
+a2 1
+ * $Id: hanconv.c,v 1.54 1993/06/24 05:12:49 Rhialto Exp $
+d4 4
+a7 1
+ * Revision 1.54  1993/06/24  05:12:49  Rhialto
+d39 1
+a39 1
+#ifdef CONVERSIONS
+d42 1
+a42 1
+#ifdef HDEBUG
+@
+
+
+1.54
+log
+@DICE 2.07.54R.
+@
+text
+@d2 5
+a6 2
+ * $Id: hanconv.c,v 1.53 92/10/25 02:41:38 Rhialto Rel $
+ * $Log:	hanconv.c,v $
+@
+
+
+1.53
+log
+@Rearrange initialisation of tables.
+@
+text
+@d2 1
+a2 1
+ * $Id: hanconv.c,v 1.51 92/04/17 15:38:09 Rhialto Rel $
+d4 3
+d27 1
+a27 1
+ * This code is (C) Copyright 1991,1992 by Olaf Seibert. All rights reserved.
+a30 1
+#include <functions.h>
+d129 1
+d132 1
+d159 1
+d162 1
+d189 1
+d192 1
+d219 1
+d222 1
+d235 1
+d252 1
+@
+
+
+1.51
+log
+@Freeze for MAXON.
+@
+text
+@d2 1
+a2 1
+ * $Id: hanconv.c,v 1.48 91/11/03 00:56:34 Rhialto Exp $
+d4 3
+a27 1
+#include <amiga.h>
+d40 5
+a44 3
+void rdwr_CopyMem(byte *from, byte *to, long fromsize);
+void rd_FromPC(byte *from, byte *to, long fromsize);
+void rd_FromST(byte *from, byte *to, long fromsize);
+d46 2
+a47 2
+void wr_ToPC(byte *from, byte *to, long fromsize);
+void wr_ToST(byte *from, byte *to, long fromsize);
+d64 36
+a99 5
+int		ConversionImbeddedInFileName;
+static __shared unsigned char *Table_FromPC;
+static __shared unsigned char *Table_FromST;
+static __shared unsigned char *Table_ToPC;
+static __shared unsigned char *Table_ToST;
+d116 16
+a131 2
+    if ((Table_FromPC == NULL) && (Table_FromPC = AllocMem(256L, 0L))) {
+	int i;
+d133 2
+a134 15
+	for (i = 0; i < 256; i++)
+	    Table_FromPC[i] = i;
+
+	Table_FromPC[0x81] = 0xFC;   /* u */
+	Table_FromPC[0x84] = 0xE4;   /* a */
+	Table_FromPC[0x94] = 0xF6;   /* o */
+	Table_FromPC[0x9A] = 0xDC;   /* U */
+	Table_FromPC[0x8E] = 0xC4;   /* A */
+	Table_FromPC[0x99] = 0xD6;   /* O */
+	Table_FromPC[0xE1] = 0xDF;   /* s */
+    }
+
+    if (Table_FromPC != NULL) {
+	for (; fromsize > 0; fromsize--)
+	    *to++ = Table_FromPC[*from++];
+d144 16
+a159 5
+    if ((Table_FromST == NULL) && (Table_FromST = AllocMem(256L, 0L))) {
+	int i;
+
+	for (i = 0; i < 256; i++)
+	    Table_FromST[i] = i;
+d161 2
+a162 12
+	Table_FromST[0x81] = 0xFC;   /* u */
+	Table_FromST[0x84] = 0xE4;   /* a */
+	Table_FromST[0x94] = 0xF6;   /* o */
+	Table_FromST[0x9A] = 0xDC;   /* U */
+	Table_FromST[0x8E] = 0xC4;   /* A */
+	Table_FromST[0x99] = 0xD6;   /* O */
+	Table_FromST[0x9E] = 0xDF;   /* s */
+    }
+
+    if (Table_FromST != NULL) {
+	for (; fromsize > 0; fromsize--)
+	    *to++ = Table_FromST[*from++];
+d172 16
+a187 2
+    if ((Table_ToPC == NULL) && (Table_ToPC = AllocMem(256L, 0L))) {
+	int i;
+d189 2
+a190 15
+	for (i = 0; i < 256; i++)
+	    Table_ToPC[i] = i;
+
+	Table_ToPC[0xFC] = 0x81;   /* u */
+	Table_ToPC[0xE4] = 0x84;   /* a */
+	Table_ToPC[0xF6] = 0x94;   /* o */
+	Table_ToPC[0xDC] = 0x9A;   /* U */
+	Table_ToPC[0xC4] = 0x8E;   /* A */
+	Table_ToPC[0xD6] = 0x99;   /* O */
+	Table_ToST[0xDF] = 0xE1;   /* s */
+    }
+
+    if (Table_ToPC != NULL) {
+	for (; fromsize > 0; fromsize--)
+	    *to++ = Table_ToPC[*from++];
+d200 16
+a215 5
+    if ((Table_ToST == NULL) && (Table_ToST = AllocMem(256L, 0L))) {
+	int i;
+
+	for (i = 0; i < 256; i++)
+	    Table_ToST[i] = i;
+d217 2
+a218 12
+	Table_ToST[0xFC] = 0x81;   /* u */
+	Table_ToST[0xE4] = 0x84;   /* a */
+	Table_ToST[0xF6] = 0x94;   /* o */
+	Table_ToST[0xDC] = 0x9A;   /* U */
+	Table_ToST[0xC4] = 0x8E;   /* A */
+	Table_ToST[0xD6] = 0x99;   /* O */
+	Table_ToPC[0xDF] = 0x9E;   /* s */
+    }
+
+    if (Table_ToST != NULL) {
+	for (; fromsize > 0; fromsize--)
+	    *to++ = Table_ToST[*from++];
+d227 1
+a227 1
+	Table_FromPC = NULL;
+d231 1
+a231 1
+	Table_FromST = NULL;
+d235 1
+a235 1
+	Table_ToPC = NULL;
+d239 1
+a239 1
+	Table_ToST = NULL;
+@
+
+
+1.48
+log
+@Codes for ß on PC/ST were swapped.  This patch was corrupted in the RCS file and it has been attempted to restore it.
+@
+text
+@d2 1
+a2 1
+ * $Id: hanconv.c,v 1.46 91/10/06 18:24:51 Rhialto Exp $
+d4 3
+d13 7
+d93 1
+a93 1
+	Table_FromPC[0x9E] = 0xDF;   /* s */
+d120 1
+a120 1
+	Table_FromST[0xE1] = 0xDF;   /* s */
+d147 1
+a147 1
+	Table_ToST[0xDF] = 0x9E;   /* s */
+d174 1
+a174 1
+	Table_ToPC[0xDF] = 0xE1;   /* s */
+@
+
+
+1.46
+log
+@
+Freeze for MAXON
+@
+text
+@d2 1
+a2 1
+ * $Id: hanconv.c,v 1.45 91/10/03 23:34:41 Rhialto Exp $
+d4 4
+a9 1
+ * 
+d11 1
+d83 1
+a83 1
+	Table_FromPC[0x9E] = 0xDF;   /* ß */
+d110 1
+a110 1
+	Table_FromST[0xE1] = 0xDF;   /* ß */
+d137 1
+a137 1
+	Table_ToPC[0xDF] = 0x9E;   /* ß */
+d164 1
+a164 1
+	Table_ToST[0xDF] = 0xE1;   /* ß */
+@
+
+
+1.45
+log
+@Initial version
+@
+text
+@d2 5
+a6 2
+ * $Id$
+ * $Log$
+@

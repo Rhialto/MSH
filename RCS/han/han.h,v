@@ -1,0 +1,1016 @@
+head	1.56;
+access;
+symbols
+	SHAREWARE2:1.56
+	MAXON5:1.55
+	MAXON4:1.53
+	MAXON3:1.51
+	MAXON2:1.46
+	MAXON1:1.40
+	Patch3a:1.31
+	Patch3:1.30
+	Patch1:1.5
+	Rel1:1.4;
+locks;
+comment	@ * @;
+
+
+1.56
+date	96.12.22.00.22.33;	author Rhialto;	state Rel;
+branches;
+next	1.55;
+
+1.55
+date	93.12.30.23.28.00;	author Rhialto;	state Rel;
+branches;
+next	1.54;
+
+1.54
+date	93.06.24.05.12.49;	author Rhialto;	state Exp;
+branches;
+next	1.53;
+
+1.53
+date	92.10.25.02.44.29;	author Rhialto;	state Rel;
+branches;
+next	1.52;
+
+1.52
+date	92.09.06.00.06.08;	author Rhialto;	state Exp;
+branches;
+next	1.51;
+
+1.51
+date	92.04.17.15.39.01;	author Rhialto;	state Rel;
+branches;
+next	1.46;
+
+1.46
+date	91.10.06.18.26.52;	author Rhialto;	state Rel;
+branches;
+next	1.43;
+
+1.43
+date	91.09.28.01.50.02;	author Rhialto;	state Exp;
+branches;
+next	1.42;
+
+1.42
+date	91.06.14.00.09.19;	author Rhialto;	state Exp;
+branches;
+next	1.40;
+
+1.40
+date	91.03.03.17.55.38;	author Rhialto;	state Rel;
+branches;
+next	1.35;
+
+1.35
+date	91.03.03.17.43.39;	author Rhialto;	state Exp;
+branches;
+next	1.31;
+
+1.31
+date	90.11.10.02.50.47;	author Rhialto;	state Exp;
+branches;
+next	1.30;
+
+1.30
+date	90.06.04.23.18.28;	author Rhialto;	state Rel;
+branches;
+next	1.5;
+
+1.5
+date	90.03.11.17.46.58;	author Rhialto;	state Rel;
+branches;
+next	1.4;
+
+1.4
+date	90.01.27.20.33.22;	author Rhialto;	state Rel;
+branches;
+next	1.3;
+
+1.3
+date	90.01.23.02.31.07;	author Rhialto;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	89.12.17.23.07.26;	author Rhialto;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	89.12.17.20.08.20;	author Rhialto;	state Exp;
+branches;
+next	;
+
+
+desc
+@internal include file for the messydos handler
+@
+
+
+1.56
+log
+@Cosmetics.
+@
+text
+@/*-
+ * $Id: han.h,v 1.55 1993/12/30 23:28:00 Rhialto Rel $
+ *
+ * $Log: han.h,v $
+ * Revision 1.55  1993/12/30  23:28:00	Rhialto
+ * Freeze for MAXON5.
+ * Add compile time options LONGNAMES and CREATIONDATE_ONLY.
+ * Move lowcyl from Disk to Partition.
+ *
+ * Revision 1.54  1993/06/24  05:12:49	Rhialto
+ * DICE 2.07.54R.
+ *
+ * Revision 1.53  92/10/25  02:44:29  Rhialto
+ * Add PrivateInfo. #define magic cookie.
+ *
+ * Revision 1.52  92/09/06  00:06:08  Rhialto
+ * Add cast to *_EOFs.
+ *
+ * Revision 1.51  92/04/17  15:39:01  Rhialto
+ * Freeze for MAXON3.
+ *
+ * Revision 1.46  91/10/06  18:26:52  Rhialto
+ *
+ * Freeze for MAXON
+ *
+ * Revision 1.43  91/09/28  01:50:02  Rhialto
+ * Byteswap routines no longer __stkargs.
+ *
+ * Revision 1.42  91/06/14  00:09:19  Rhialto
+ * DICE conversion
+ *
+ * Revision 1.40  91/03/03  17:55:38  Rhialto
+ * Freeze for MAXON
+ *
+ * Revision 1.35  91/03/03  17:43:39  Rhialto
+ * Cache list is now two lists: LRU and sorted by sector.
+ *
+ * Revision 1.31  90/11/10  02:50:47  Rhialto
+ * Patch 3a. Introduce disk volume date.
+ *
+ * Revision 1.30  90/06/04  23:18:28  Rhialto
+ * Release 1 Patch 3
+ *
+ *  The header file for the MESSYDOS: file system handler
+ *
+ *  This code is (C) Copyright 1989 by Olaf Seibert. All rights reserved. May
+ *  not be used or copied without a licence.
+-*/
+
+#define SysBase_DECLARED
+
+#include "dev.h"
+
+#ifndef CLIB_EXEC_PROTOS_H
+#include <clib/exec_protos.h>
+#endif
+#ifndef CLIB_ALIB_PROTOS_H
+#include <clib/alib_protos.h>
+#endif
+
+extern struct ExecBase *SysBase;
+
+/*----- Configuration section -----*/
+
+#define CONVERSIONS		1
+#define NONCOMM 		0
+#define READONLY		0
+#define INPUTDEV		1
+#define CREATIONDATE_ONLY	1
+#define TASKWAIT		1
+
+/*----- End configuration section -----*/
+
+#define MODE_CREATEFILE (1L<<31)
+#define FILE_DIR     2
+#define FILE_FILE   -3
+
+#define MS_SPC	    2		/* Sectors per cluster */
+#define MS_RES	    1		/* Reserved sectors (boot block) */
+#define MS_NFATS    2		/* Number of FATs */
+#define MS_NDIRS    112 	/* Number of directory entries */
+#define MS_NSECTS   1440	/* total number of sectors */
+#define MS_SPF	    3		/* Sectors per FAT */
+#define MS_ROOTDIR  (MS_RES + MS_SPF * MS_NFATS)
+#define MS_DIRENTSIZE  sizeof(struct MsDirEntry) /* size of a directory entry */
+
+#define MS_FIRSTCLUST	2	/* Very strange convention... */
+
+#define FAT_EOF     0xFFFF	/* end of file FAT entry */
+#define FAT_UNUSED  0		/* unused block */
+#define SEC_EOF     ((word)-1)	/* end of FAT chain */
+#define ROOT_SEC    ((word)-1)	/* where the root directory 'is' */
+
+#define DIR_DELETED	    0xE5
+#define DIR_DELETED_MASK    0x80
+
+#if LONGNAMES
+struct MsDirEntry {
+    word	    msd_Time;
+    word	    msd_Date;
+    word	    msd_Cluster;
+    ulong	    msd_Filesize;
+    byte	    msd_Attributes;
+    byte	    msd_Name[21];	    /* Note: odd aligned */
+};
+#define 	    L_8 	21
+#define 	    L_3 	0
+#define 	    OtherEndianMsd(e)
+#define 	    msd_CreationTime(e) (*(word *)(&(e).msd_Name[17]))
+#define 	    msd_CreationDate(e) (*(word *)(&(e).msd_Name[19]))
+#else
+/*
+ * This structure has its byte order wrong, when it is on the disk.
+ */
+
+struct MsDirEntry {
+    byte	    msd_Name[8];
+    byte	    msd_Ext[3];
+    byte	    msd_Attributes;
+    word	    msd_CreationTime;	    /* vollabel only */
+    word	    msd_CreationDate;	    /* vollabel only */
+    byte	    msd_Pad1[6];
+    word	    msd_Time;
+    word	    msd_Date;
+    word	    msd_Cluster;
+    ulong	    msd_Filesize;
+};
+#define 	    L_8 	8
+#define 	    L_3 	3
+void  OtherEndianMsd(struct MsDirEntry *msd);
+#define 	    msd_CreationTime(e) ((e).msd_CreationTime)
+#define 	    msd_CreationDate(e) ((e).msd_CreationDate)
+#endif
+
+#define ATTR_READONLY	    0x01
+#define ATTR_HIDDEN	    0x02
+#define ATTR_SYSTEM	    0x04
+#define ATTR_VOLUMELABEL    0x08
+#define ATTR_DIRECTORY	    0x10
+#define ATTR_ARCHIVED	    0x20
+
+#define ATTR_DIR	    (ATTR_DIRECTORY | ATTR_VOLUMELABEL)
+
+#define DATE_MIN	    0x21
+
+struct DirEntry {
+    struct MsDirEntry de_Msd;
+    word	    de_Sector;
+    word	    de_Offset;
+};
+
+struct DiskParam {
+    word	    bps;	/* bytes per sector */
+    word	    spc;	/* byte: sectors per cluster */
+    word	    res;	/* reserved sectors (boot block) */
+    word	    nfats;	/* byte: number of fats */
+    word	    ndirs;	/* number of directory entries */
+    word	    nsects;	/* total number of sectors on disk */
+    word	    media;	/* byte: media byte */
+    word	    spf;	/* sectors per fat */
+    word	    spt;	/* sectors per track */
+    word	    nsides;	/* # sides */
+    word	    nhid;	/* Number of hidden sectors */
+    /* derived parameters */
+    word	    start;	/* sector of cluster 0 */
+    word	    maxclst;	/* highest cluster number */
+    word	    rootdir;	/* first sector of root dir */
+    word	    ndirsects;	/* # of root directory sectors */
+    word	    datablock;	/* first block available for files &c */
+    word	    bpc;	/* bytes per cluster */
+    word	    freeclusts; /* amount of free space */
+    struct DirEntry vollabel;	/* copy of volume label */
+    word	    fat16bits;	/* Is the FAT 16 bits/entry? */
+};
+
+#define CHECK_BOOTJMP	0x01	/* accept disk only with JMP or 00 */
+#define CHECK_SANITY	0x02	/* check Bios Parameter Block */
+#define CHECK_SAN_DEFAULT 0x04	/* use default values when bpb not ok */
+#define CHECK_USE_DEFAULT 0x08	/* always use default values */
+
+struct Partition {
+    long	    offset;	/* offset to sector 0 in bytes */
+    int 	    spt_dd;	/* normal #sectors/track */
+    int 	    spt_hd;	/* #s/t for HD floppies */
+};
+
+#define NICE_TO_DFx	(1L<<16)/* flag bit in de_Interleave */
+#define PROMISE_NOT_TO_DIE  (1L<<17)/* flag bit in de_Interleave */
+
+#define MSH_MAGIC	'Msh\0' /* Magic word in DosPackets */
+
+/*
+ * A pointer to an MSFileLock is put into the fl_Key field of a DOS
+ * FileLock structure. We share the MSFileLock with all FileLocks on the
+ * same file. This way, you can compare FileLocks based on their fl_Key
+ * and fl_Task fields, as seems to be done sometimes. Also, a pointer to
+ * an MSFileLock is put in MSFileHandles.
+ *
+ * For ease, we keep a copy of the directory entry in core, WITH THE BYTE
+ * ORDER CORRECTED FOR THIS PROCESSOR.
+ */
+
+struct MSFileLock {
+    struct MinNode  msfl_Node;
+    short	    msfl_Refcount;	/* -1: exclusive, >0: # of shared
+					 * locks */
+    struct MSFileLock *msfl_Parent;	/* Pointer to parent directory */
+    struct MsDirEntry msfl_Msd; 	/* Copy of directory entry */
+    word	    msfl_DirSector;	/* Location of directory entry */
+    word	    msfl_DirOffset;
+    word	    msfl_Flags;
+};
+
+#define MSFL_DIRTY  0x01		/* Only used in MSWrite */
+
+/*
+ * A pointer to an MSFileHandle is put into the fh_Arg1 field of a DOS
+ * FileHandle. We get that value with many DOS packets that manipulate the
+ * contents of a file.
+ */
+
+struct MSFileHandle {
+    struct MSFileLock *msfh_FileLock;
+    long	    msfh_SeekPos;
+    word	    msfh_Cluster;
+#if CONVERSIONS
+    int 	    msfh_Conversion;
+#endif
+};
+
+/*
+ * Return values of CompareNames.
+ */
+
+#define CMP_NOT_EQUAL	    0	/* Names do not match at all */
+#define CMP_OK_DIR	    1	/* Name matches with a subdir entry */
+#define CMP_OK_FILE	    2	/* Name matches with a file entry */
+#define CMP_INVALID	    3	/* First part of name matches with a file
+				 * entry, or other invalid component name */
+#define CMP_FREE_SLOT	    5
+#define CMP_END_OF_DIR	    6
+
+struct LockList {
+    struct MinList  ll_List;
+    void	   *ll_Cookie;	/* we don't want to know what this is! */
+};
+
+struct CacheSec {
+    struct MinNode  sec_NumberNode;
+    struct MinNode  sec_LRUNode;
+    word	    sec_Number;
+    word	    sec_Refcount;
+    byte	    sec_Data[2];/* Really Disk.bps */
+};
+
+#define SEC_DIRTY   0x8000	/* Bit in sec_Refcount */
+
+struct Cache {
+    struct MinList  LRUList;
+    struct MinList  NumberList;
+};
+
+#define OFFSETOF(tag, member)	((long)(&((struct tag *)0)->member))
+
+struct PrivateInfo {
+    short	    Revision;
+    short	    Size;
+    char	   *RCSId;
+    short	   *CheckBootBlock;
+    short	   *DefaultConversion;
+    struct IOExtTD **DiskIOReq;
+#if CONVERSIONS
+    short	    NumConversions;
+    struct {
+	unsigned char **to, **from;
+    }		    Table[2];
+#endif
+};
+
+#define PRIVATE_REVISION    2
+
+#ifndef Prototype
+#define Prototype   extern
+#endif
+#ifndef Local
+#define Local	    static
+#endif
+
+#include "hanproto.h"
+@
+
+
+1.55
+log
+@Freeze for MAXON5.
+Add compile time options LONGNAMES and CREATIONDATE_ONLY.
+Move lowcyl from Disk to Partition.
+@
+text
+@d2 8
+a9 2
+ *  $Id: han.h,v 1.54 1993/06/24 05:12:49 Rhialto Exp $
+ *  $Log: han.h,v $
+d50 2
+d65 6
+a70 5
+#define CONVERSIONS
+#undef	NONCOMM
+#undef	READONLY
+#undef	INPUTDEV
+#define CREATIONDATE_ONLY
+a73 1
+/* #define MODE_READWRITE  1004L */
+d91 2
+a92 2
+#define SEC_EOF     ((word)-1)  /* end of FAT chain */
+#define ROOT_SEC    ((word)-1)  /* where the root directory 'is' */
+d132 1
+a132 1
+#define 	    msd_CreationDate(e) ((e).msd_CreationTime)
+d226 1
+a226 1
+#ifdef CONVERSIONS
+d263 1
+a263 1
+#define OFFSETOF(tag, member)   ((long)(&((struct tag *)0)->member))
+d272 1
+a272 1
+#ifdef CONVERSIONS
+@
+
+
+1.54
+log
+@DICE 2.07.54R.
+@
+text
+@d2 5
+a6 2
+ *  $Id: han.h,v 1.53 92/10/25 02:44:29 Rhialto Rel $
+ *  $Log:	han.h,v $
+d60 2
+d89 15
+d120 6
+a163 1
+    long	    lowcyl;	/* offset to lowcyl */
+d172 6
+@
+
+
+1.53
+log
+@Add PrivateInfo. #define magic cookie.
+@
+text
+@d2 1
+a2 1
+ *  $Id: han.h,v 1.52 92/09/06 00:06:08 Rhialto Exp $
+d4 3
+d43 9
+a64 1
+/* #define MS_BPS      512	/* Bytes per sector */
+a70 3
+/* #define MS_SPT      9	/* Sectors per track */
+/* #define MS_SPT_MAX  9	/* Max sectors per track */
+/* #define MS_NSIDES   2	/* Tracks per cylinder */
+d172 1
+d175 2
+a224 6
+
+#define     DELAY_OFF	    0	/* Motor is off */
+#define     DELAY_RUNNING1  1	/* Motor may be on */
+#define     DELAY_RUNNING2  2	/* Motor may be on */
+#define     DELAY_RUNNING   3	/* Running1 | 2 */
+#define     DELAY_DIRTY     4	/* We have dirty buffers to flush */
+@
+
+
+1.52
+log
+@Add cast to *_EOFs.
+@
+text
+@d2 1
+a2 1
+ *  $Id: han.h,v 1.51 92/04/17 15:39:01 Rhialto Rel $
+d4 3
+d129 1
+a129 1
+    word	    nsectsfree; /* amount of free space */
+d143 2
+d221 14
+d236 1
+a236 9
+/*
+extern long	Wait();
+extern struct MsgPort *CreatePort();
+extern struct IOExtTD *CreateExtIO();
+extern void    *AllocMem(), FreeMem();
+extern byte    *index(), *rindex();
+extern void    *CheckIO();
+extern long	AutoRequest();
+*/
+@
+
+
+1.51
+log
+@Freeze for MAXON3.
+@
+text
+@d2 1
+a2 1
+ *  $Id: han.h,v 1.46 91/10/06 18:26:52 Rhialto Rel $
+d4 3
+d45 1
+a45 1
+#define MODE_READWRITE	1004L
+d67 2
+a68 2
+#define SEC_EOF     -1		/* end of FAT chain */
+#define ROOT_SEC    -1		/* where the root directory 'is' */
+@
+
+
+1.46
+log
+@
+Freeze for MAXON
+@
+text
+@d2 1
+a2 1
+ *  $Id: han.h,v 1.43 91/09/28 01:50:02 Rhialto Exp $
+d4 4
+d134 2
+d224 6
+a229 144
+/*
+ * PACK.C
+ */
+extern char    *DevName;
+extern long	UnitNr;
+extern long	DosType;
+extern ulong	DevFlags;
+extern struct DosPacket *DosPacket;
+extern struct DeviceList *VolNode;
+extern short	DiskChanged;
+int MayFreeVolNode(struct DeviceList *volnode);
+
+/*
+ * HANMAIN.C
+ */
+byte ToUpper(byte ch);
+long lmin(long a, long b);
+byte *ZapSpaces(byte *begin, byte *end);
+byte *ToMSName(byte *dest, byte  *source);
+long MSDiskInfo(struct InfoData *infodata);
+void MSDiskInserted(struct LockList **locks, void *cookie);
+int MSDiskRemoved(struct LockList **locks);
+void HanCloseDown(void);
+int HanOpenUp(void);
+long MSRelabel(byte *newname);
+
+/*
+ * HANSEC.C
+ */
+extern struct MsgPort *DiskReplyPort;
+extern struct IOExtTD *DiskIOReq;
+extern struct IOStdReq *DiskChangeReq;
+extern struct DiskParam Disk;
+extern byte    *Fat;
+extern short	FatDirty;	/* Fat must be written to disk */
+extern short	error;		/* To put the error value; for Result2 */
+extern long	IDDiskState;	/* InfoData.id_DiskState */
+extern long	IDDiskType;	/* InfoData.id_DiskType */
+extern struct timerequest *TimeIOReq;	/* For motor-off delay */
+extern struct Cache CacheList;/* Sector cache */
+extern int	CurrentCache;	/* How many cached buffers do we have */
+extern int	MaxCache;	/* Maximum amount of cached buffers */
+extern ulong	BufMemType;
+extern long	CacheBlockSize; /* Size of disk block + overhead */
+extern int	DelayState;
+word Get8086Word(byte *Word8086);
+word OtherEndianWord(long oew);     /* long should become word */
+ulong OtherEndianLong(ulong oel);
+void OtherEndianMsd(struct MsDirEntry *msd);
+word ClusterToSector(word cluster);
+word ClusterOffsetToSector(word cluster, word offset);
+word DirClusterToSector(word cluster);
+word SectorToCluster(word sector);
+word NextCluster(word cluster);
+word NextClusteredSector(word sector);
+word FindFreeSector(word prev);
+struct CacheSec *FindSecByNumber(int number);
+struct CacheSec *FindSecByBuffer(byte *buffer);
+struct CacheSec *NewCacheSector(struct MinNode *pred);
+void FreeCacheSector(struct CacheSec *sec);
+void InitCacheList(void);
+void FreeCacheList(void);
+void MSUpdate(int immediate);
+void StartTimer(void);
+byte *GetSec(int sector);
+byte *EmptySec(int sector);
+void PutSec(int sector, byte *data);
+void FreeSec(byte *buffer);
+void MarkSecDirty(byte *buffer);
+void WriteFat(void);
+int AwaitDFx(void);
+int ReadBootBlock(void);
+int IdentifyDisk(char *name, struct DateStamp *date);
+void TDRemChangeInt(void);
+int TDAddChangeInt(struct Interrupt *interrupt);
+int TDChangeNum(void);
+int TDProtStatus(void);
+int TDMotorOff(void);
+int TDClear(void);
+int TDUpdate(void);
+int MyDoIO(struct IOStdReq *ioreq);
+
+/*
+ * HANLOCK.C
+ */
+extern struct LockList *LockList;	/* List of all locked files we
+					 * have. Note this is not the same
+					 * as all locks we have */
+extern struct MSFileLock *RootLock;	/* Lock on root directory */
+extern struct MSFileLock *EmptyFileLock;	/* 2nd result of MSLock() */
+
+extern struct DirEntry FakeRootDirEntry;
+int CompareNames(struct MsDirEntry *dir, byte *name);
+void NextDirEntry(word *sector, word *offset);
+struct DirEntry *FindNext(struct DirEntry *previous, int createit);
+void PrintDirEntry(struct DirEntry *de);
+struct MSFileLock *MakeLock(struct MSFileLock *parentdir, struct DirEntry *dir, ulong mode);
+struct MSFileLock *MSLock(struct MSFileLock *parentdir, byte *name, ulong mode);
+struct MSFileLock *MSDupLock(struct MSFileLock *fl);
+struct MSFileLock *MSParentDir(struct MSFileLock *fl);
+int MSUnLock(struct MSFileLock *fl);
+void ExamineDirEntry(struct MsDirEntry *msd, struct FileInfoBlock *fib);
+int MSExamine(struct MSFileLock *fl, struct FileInfoBlock *fib);
+int MSExNext(struct MSFileLock *fl, struct FileInfoBlock *fib);
+long MSSetProtect(struct MSFileLock *parentdir, char *name, long mask);
+int CheckLock(struct MSFileLock *lock);
+void WriteFileLock(struct MSFileLock *fl);
+void UpdateFileLock(struct MSFileLock *fl);
+struct LockList *NewLockList(void *cookie);
+void FreeLockList(struct LockList *ll);
+
+/*
+ * HANFILE.C
+ */
+int GetFat(void);
+void FreeFat(void);
+word GetFatEntry(word cluster);
+void SetFatEntry(word cluster, word value);
+word FindFreeCluster(word prev);
+word ExtendClusterChain(word cluster);
+void FreeClusterChain(word cluster);
+struct MSFileHandle *MakeMSFileHandle(struct MSFileLock *fl, long mode);
+struct MSFileHandle *MSOpen(struct MSFileLock *parentdir, char *name, long mode);
+void MSClose(struct MSFileHandle *fh);
+long		FilePos(struct MSFileHandle *fh, long position, long mode);
+long MSSeek(struct MSFileHandle *fh, long position, long mode);
+long MSRead(struct MSFileHandle *fh, byte *userbuffer, long size);
+long MSWrite(struct MSFileHandle *fh, byte *userbuffer, long size);
+long MSDeleteFile(struct MSFileLock *parentdir, byte *name);
+long MSSetDate(struct MSFileLock *parentdir, byte *name, struct DateStamp *datestamp);
+struct MSFileLock *MSCreateDir(struct MSFileLock *parentdir, byte *name);
+long MSRename(struct MSFileLock *slock, byte *sname, struct MSFileLock *dlock, byte *dname);
+
+/*
+ * HANREQ.C
+ */
+extern short	Cancel; 	/* Cancel all R/W errors */
+long RetryRwError(struct IOExtTD *req);
+void		DisplayMessage(char *msg);
+
+/*
+ * HANCMD.C
+ */
+void HandleCommand(char *cmd);
+d231 1
+a231 5
+/*
+ * DATE.C
+ */
+void ToDateStamp(struct DateStamp *datestamp, word date, word time);
+void ToMSDate(word *date, word *time, struct DateStamp *datestamp);
+@
+
+
+1.43
+log
+@Byteswap routines no longer __stkargs.
+@
+text
+@d2 1
+a2 1
+ *  $Id: han.h,v 1.42 91/06/14 00:09:19 Rhialto Exp $
+d4 3
+d30 8
+d162 3
+d339 1
+d342 1
+d356 1
+@
+
+
+1.42
+log
+@DICE conversion
+@
+text
+@d2 1
+a2 1
+ *  $Id: han.h,v 1.40 91/03/03 17:55:38 Rhialto Rel $
+d4 3
+d249 3
+a251 3
+__stkargs word Get8086Word(byte *Word8086);
+__stkargs word OtherEndianWord(long oew);     /* long should become word */
+__stkargs ulong OtherEndianLong(ulong oel);
+@
+
+
+1.40
+log
+@Freeze for MAXON
+@
+text
+@d2 1
+a2 1
+ *  $Id: han.h,v 1.35 91/03/03 17:43:39 Rhialto Exp $
+d4 3
+d9 1
+a9 1
+ * 
+d87 2
+a88 2
+    word	    bps;	/* bytes per sector. max MS_BPS supported */
+    byte	    spc;	/* sectors per cluster */
+d90 1
+a90 1
+    byte	    nfats;	/* number of fats */
+d93 1
+a93 1
+    byte	    media;	/* media byte */
+d95 2
+a96 3
+    word	    spt;	/* sectors per track. Only MS_SPT
+				 * supported */
+    word	    nsides;	/* # sides. Max MS_NSIDES supported */
+d111 6
+d133 1
+a133 1
+    struct MsDirEntry msfl_Msd; /* Copy of directory entry */
+d191 1
+d199 1
+d211 1
+d216 10
+a225 9
+extern byte	ToUpper();
+extern long	lmin();
+extern byte    *ZapSpaces();
+extern byte    *ToMSName();
+extern long	MSDiskInfo();
+extern void	MSDiskInserted();
+extern int	MSDiskRemoved();
+extern void	HanCloseDown();
+extern int	HanOpenUp();
+d246 36
+a281 30
+extern byte    *Word8086;
+extern word	Get8086Word();
+extern word	OtherEndianWord();
+extern ulong	OtherEndianLong();
+extern void	OtherEndianMsd();
+extern word	ClusterToSector();
+extern word	ClusterOffsetToSector();
+extern word	DirClusterToSector();
+extern word	SectorToCluster();
+extern word	NextCluster();
+extern word	NextClusteredSector();
+extern word	FindFreeSector();
+extern struct CacheSec *FindSecByNumber();
+extern struct CacheSec *FindSecByBuffer();
+extern struct CacheSec *NewCacheSector();
+extern void	FreeCacheSector();
+extern void	InitCacheList();
+extern void	FreeCacheList();
+extern void	MSUpdate();
+extern void	StartTimer();
+extern byte    *GetSec();
+extern byte    *EmptySec();
+extern void	PutSec();
+extern void	FreeSec();
+extern void	MarkSecDirty();
+extern void	WriteFat();
+extern int	ReadBootBlock();
+extern int	IdentifyDisk();
+extern int	TDMotorOff();
+extern int	TDGetNumCyls();
+d293 18
+a310 18
+extern int	CompareNames();
+extern void	NextDirEntry();
+extern struct DirEntry *FindNext();
+extern struct MSFileLock *MakeLock();
+extern void	WriteLock();
+extern void	PrintDirEntry();
+extern struct MSFileLock *MSLock();
+extern struct MSFileLock *MSDupLock();
+extern struct MSFileLock *MSParentDir();
+extern int	MSUnLock();
+extern void	ExamineDirEntry();
+extern int	MSExamine();
+extern int	MSExNext();
+extern long	MSSetProtect();
+extern void	WriteFileLock();
+extern void	UpdateFileLock();
+extern struct LockList *NewLockList();
+extern void	FreeLockList();
+d315 16
+a330 15
+extern int	GetFat();
+extern void	FreeFat();
+extern word	GetFatEntry();
+extern void	SetFatEntry();
+extern word	FindFreeCluster();
+extern word	ExtendClusterChain();
+extern void	FreeClusterChain();
+extern struct MSFileHandle *MSOpen();
+extern void	MSClose();
+extern long	MSSeek();
+extern long	MSRead();
+extern long	MSWrite();
+extern long	MSDeleteFile();
+extern long	MSSetDate();
+extern struct MSFileLock *MSCreateDir();
+d336 1
+a336 1
+extern long	RetryRwError();
+d341 1
+a341 1
+extern void	HandleCommand();
+d346 2
+a347 2
+extern void	ToDateStamp();
+extern void	ToMSDate();
+@
+
+
+1.35
+log
+@Cache list is now two lists: LRU and sorted by sector.
+@
+text
+@d2 1
+a2 1
+ *  $Id: han.h,v 1.31 90/11/10 02:50:47 Rhialto Exp $
+d4 3
+@
+
+
+1.31
+log
+@Patch 3a. Introduce disk volume date.
+@
+text
+@d2 1
+a2 1
+ *  $Id: han.h,v 1.30 90/06/04 23:18:28 Rhialto Rel $
+d4 3
+d157 2
+a158 1
+    struct MinNode  sec_Node;
+d166 5
+d225 1
+a225 1
+extern struct MinList CacheList;/* Sector cache */
+@
+
+
+1.30
+log
+@Release 1 Patch 3
+@
+text
+@d2 5
+a6 2
+ *  $Id: han.h,v 1.5 90/03/11 17:46:58 Rhialto Rel $
+ *  $Log$
+d51 3
+a53 1
+    byte	    msd_Pad1[10];
+@
+
+
+1.5
+log
+@Patch1
+@
+text
+@d2 2
+a3 2
+ *  $Id: han.h,v 1.4 90/01/27 20:33:22 Rhialto Rel $
+ *
+d6 2
+d14 2
+a15 2
+#define FILE_DIR     2		/* Must be even and > 0 */
+#define FILE_FILE   -2		/* Must be even and < -1 */
+d35 1
+a35 1
+#define ROOT_SEC    -1		/* where the root directory 'is' */
+d49 1
+a49 1
+    word	    msd_Time;	/* in 2s of seconds since begin of the day */
+d172 1
+d177 7
+a183 3
+extern char *DevName;
+extern long UnitNr;
+extern ulong DevFlags;
+d295 6
+@
+
+
+1.4
+log
+@Commented out physical MS_* defines
+@
+text
+@d2 1
+a2 1
+ *  $Id: han.h,v 1.3 90/01/23 02:31:07 Rhialto Exp Locker: Rhialto $
+d12 2
+a13 2
+#define FILE_DIR    1
+#define FILE_FILE   -1
+a14 1
+
+d33 1
+d288 5
+@
+
+
+1.3
+log
+@Add 16-bit FAT support.
+@
+text
+@d2 1
+a2 1
+ *  $Id: han.h,v 1.2 89/12/17 23:07:26 Rhialto Exp Locker: Rhialto $
+d16 1
+a16 1
+#define MS_BPS	    512 	/* Bytes per sector */
+d23 3
+a25 3
+#define MS_SPT	    9		/* Sectors per track */
+#define MS_SPT_MAX  9		/* Max sectors per track */
+#define MS_NSIDES   2		/* Tracks per cylinder */
+@
+
+
+1.2
+log
+@Add MSSetProtect
+@
+text
+@d2 1
+a2 1
+ *  $Id: han.h,v 1.1 89/12/17 20:08:20 Rhialto Exp Locker: Rhialto $
+d27 1
+a27 1
+#define MS_DIRENTSIZE	32	/* size of a directory entry */
+d31 1
+a31 1
+#define FAT_EOF     0xFFF	/* end of file FAT entry */
+d65 1
+a65 1
+    struct MsDirEntry de_Msd;	/* Here also sometimes wrong byte order */
+d93 1
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d2 1
+a2 1
+ *  $Id$
+d263 1
+@

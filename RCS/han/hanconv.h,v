@@ -1,0 +1,193 @@
+head	1.56;
+access;
+symbols
+	SHAREWARE2:1.56
+	MAXON5:1.55
+	MAXON4:1.53
+	MAXON2:1.46;
+locks;
+comment	@ * @;
+
+
+1.56
+date	96.12.22.00.22.33;	author Rhialto;	state Rel;
+branches;
+next	1.55;
+
+1.55
+date	93.12.30.23.28.00;	author Rhialto;	state Rel;
+branches;
+next	1.54;
+
+1.54
+date	93.06.24.05.12.49;	author Rhialto;	state Exp;
+branches;
+next	1.53;
+
+1.53
+date	92.10.25.03.04.02;	author Rhialto;	state Rel;
+branches;
+next	1.52;
+
+1.52
+date	92.09.06.00.10.25;	author Rhialto;	state Exp;
+branches;
+next	1.46;
+
+1.46
+date	91.10.06.18.25.14;	author Rhialto;	state Rel;
+branches;
+next	1.45;
+
+1.45
+date	91.10.03.23.35.59;	author Rhialto;	state Exp;
+branches;
+next	;
+
+
+desc
+@Header for conversions during Read()/Write()
+@
+
+
+1.56
+log
+@Cosmetics.
+@
+text
+@/*-
+ * $Id: hanconv.h,v 1.55 1993/12/30 23:28:00 Rhialto Rel $
+ * $Log: hanconv.h,v $
+ * Revision 1.55  1993/12/30  23:28:00  Rhialto
+ * Freeze for MAXON5.
+ *
+ * Revision 1.54  1993/06/24  05:12:49  Rhialto
+ * DICE 2.07.54R.
+ *
+ * Revision 1.53  92/10/25  03:04:02  Rhialto
+ * Moved prototypes out of header file.
+ * 
+ * Revision 1.52  92/09/06  00:10:25  Rhialto
+ * Clean up declaration.
+ *
+ * Revision 1.46  91/10/06  18:25:14  Rhialto
+ *
+ * Freeze for MAXON
+ *
+ * Revision 1.45  91/10/03  23:35:59  Rhialto
+ * Initial version
+ *
+ * HANCONV.H
+ *
+ * This code is (C) Copyright 1991-1992 by Olaf Seibert. All rights reserved.
+ * May not be used or copied without a licence.
+-*/
+
+#if CONVERSIONS
+
+typedef void (*ConversionFunc)(byte *from, byte *to, long fromsize);
+extern const ConversionFunc rd_Conv[];
+extern const ConversionFunc wr_Conv[];
+
+enum Conversion {
+    ConvNone, ConvPCASCII, ConvSTASCII,
+    ConvFence
+};
+
+#endif /* CONVERSIONS */
+@
+
+
+1.55
+log
+@Freeze for MAXON5.
+@
+text
+@d2 1
+a2 1
+ * $Id: hanconv.h,v 1.54 1993/06/24 05:12:49 Rhialto Exp $
+d4 3
+d29 1
+a29 1
+#ifdef CONVERSIONS
+@
+
+
+1.54
+log
+@DICE 2.07.54R.
+@
+text
+@d2 5
+a6 2
+ * $Id: hanconv.h,v 1.53 92/10/25 03:04:02 Rhialto Rel $
+ * $Log:	hanconv.h,v $
+@
+
+
+1.53
+log
+@Moved prototypes out of header file.
+@
+text
+@d2 1
+a2 1
+ * $Id: hanconv.h,v 1.52 92/09/06 00:10:25 Rhialto Exp $
+d4 3
+@
+
+
+1.52
+log
+@Clean up declaration.
+@
+text
+@d2 1
+a2 1
+ * $Id: hanconv.h,v 1.46 91/10/06 18:25:14 Rhialto Rel $
+d4 3
+a13 1
+ *
+a26 1
+    ConvUnspecified = -1,
+a29 3
+
+extern int	ConversionImbeddedInFileName;
+void		ConvCleanUp(void);
+@
+
+
+1.46
+log
+@
+Freeze for MAXON
+@
+text
+@d2 1
+a2 1
+ * $Id: hanconv.h,v 1.45 91/10/03 23:35:59 Rhialto Exp $
+d4 4
+d10 1
+a10 1
+ * 
+d14 1
+a14 1
+ * This code is (C) Copyright 1991 by Olaf Seibert. All rights reserved.
+d21 2
+a22 2
+extern ConversionFunc rd_Conv[];
+extern ConversionFunc wr_Conv[];
+d25 1
+@
+
+
+1.45
+log
+@Initial version
+@
+text
+@d2 5
+a6 2
+ * $Id$
+ * $Log$
+@

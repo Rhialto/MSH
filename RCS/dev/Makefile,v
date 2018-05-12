@@ -1,0 +1,205 @@
+head	1.56;
+access;
+symbols
+	SHAREWARE2:1.56
+	MAXON5:1.55
+	MAXON4:1.53;
+locks;
+
+
+1.56
+date	96.12.21.23.45.39;	author Rhialto;	state Rel;
+branches;
+next	1.55;
+
+1.55
+date	93.12.30.22.45.10;	author Rhialto;	state Rel;
+branches;
+next	1.54;
+
+1.54
+date	93.06.24.04.56.00;	author Rhialto;	state Exp;
+branches;
+next	1.53;
+
+1.53
+date	92.10.25.03.15.23;	author Rhialto;	state Rel;
+branches;
+next	;
+
+
+desc
+@The Makefile for the device related stuff.
+@
+
+
+1.56
+log
+@Adapt to renaming of Makefile.dev to Makefile.
+@
+text
+@# $Id: Makefile.dev,v 1.55 1993/12/30 22:45:10 Rhialto Rel $
+#
+# Makefile for messydos device, for use with the DICE C compiler.
+#
+# This code is (C) Copyright 1989-1995 by Olaf Seibert. All rights reserved.
+# May not be used or copied without a licence.
+
+# DBOBJ = /syslog/syslogi.o
+# DB =	  -d2 -DDEBUG=1 -I/syslog
+# WACK =  -d2 -s
+REGARGS = -mRR -mi
+PURE = -mS
+HDR =	-Hdevice.sym=device.h
+
+DOBJ =	device1.o device2.o devio1.o devio2.o $(DBOBJ)
+DSRC =	device1.a device2.c devio1.a devio2.c dev.h device.h layout.h
+XSRC =	mkci.c Makefile /util/ignore.c
+
+.SUFFIXES: .a
+
+#   Options:
+.c.o:
+	dcc -c -proto $(REGARGS) $(PURE) $(DB) $(HDR) $*.c -o $@@
+
+.a.o:
+	a68k -q $*.a -o$@@
+
+all:	/messydisk.device /c/Ignore
+
+/messydisk.device: devproto.h $(DOBJ)
+	dcc -o $@@ -l0 $(REGARGS) $(WACK) $(DOBJ) -lc -lamiga30
+
+Mkci:	mkci.c dev.h device.h
+	dcc mkci.c $(HDR) -o Mkci
+
+/c/Ignore: /util/ignore.c dev.h device.h
+	dcc -proto $(PURE) $(HDR) /util/ignore.c -o /c/Ignore
+
+device1.o: device1.a c.i
+devio1.o: devio1.a c.i
+
+devproto.h: $(DSRC)
+	-delete devproto.h device.sym
+	makeproto -o devproto.h $(DSRC)
+
+c.i:	mkci
+	mkci c.i
+
+ci:
+	RCS:ci -u $(RCSOPT) $(DSRC) $(XSRC)
+
+co:
+	RCS:co -u $(RCSOPT) $(DSRC) $(XSRC)
+
+depend:
+	mkd -I/syslog/ -f $(DSRC) $(XSRC)
+
+clean:
+	delete *.o *.sym mkci c.i /c/Ignore
+
+# DO NOT DELETE THIS LINE - important for making dependencies!
+#|.c|$*.o|
+#|.a|$*.o|
+#|.h|
+# From this line on, everything has been created by MakeDepend.
+# Anything you add yourself will be deleted automagically.
+
+makefile.dev:
+mkci.o: devproto.h dev.h device.h mkci.c
+devio2.o: /syslog/syslog.h dev.h device.h devio2.c
+devio1.o: devio1.a
+device2.o: /syslog/syslog.h dev.h device.h device2.c
+device1.o: device1.a
+@
+
+
+1.55
+log
+@*** empty log message ***
+@
+text
+@d1 1
+a1 1
+# $Id: Makefile.dev,v 1.54 1993/06/24 04:56:00 Rhialto Exp $
+d5 1
+a5 1
+# This code is (C) Copyright 1989-1992 by Olaf Seibert. All rights reserved.
+d8 3
+a10 3
+#DBOBJ = /syslog/syslogi.o
+#DB =	 -d1 -DDEBUG -I/syslog
+#WACK =  -d1 -s
+d17 1
+a17 1
+XSRC =	mkci.c Makefile.dev /util/ignore.c
+d31 1
+a31 1
+	dcc -o $@@ -l0 $(REGARGS) $(WACK) $(DOBJ) -lc -lamiga20
+d57 3
+@
+
+
+1.54
+log
+@DICE 2.07.54R.
+@
+text
+@d1 1
+a1 1
+# $Id: Makefile.dev,v 1.53 92/10/25 03:15:23 Rhialto Rel $
+d8 3
+a10 3
+#DBOBJ = /syslog/syslog.o
+#DB =	 -DDEBUG -I/syslog
+#WACK =  -s
+d16 1
+a16 1
+DSRC =	device1.a device2.c devio1.a devio2.c dev.h device.h
+d50 1
+a50 2
+	RCS:ci $(RCSOPT) $(DSRC) $(XSRC)
+	RCS:co -u $(RCSOPT) $(DSRC) $(XSRC)
+@
+
+
+1.53
+log
+@Version for MAXON4.
+@
+text
+@d1 1
+a1 1
+# $Id: Makefile.dev,v 1.53 92/10/25 02:19:20 Rhialto Rel $
+d9 1
+a9 1
+#DB =	 -DDEBUG
+d11 1
+a11 1
+REGARGS = -mRR
+a12 2
+CLIB =	csr.lib  # when regargs are used set this to cr.lib
+#CLIB = cs.lib	 # when no regargs are used set this to c.lib
+d31 1
+a31 1
+	dcc -o $@@ -l0 $(REGARGS) $(WACK) $(DOBJ) $(CLIB) amigas13.lib
+d43 1
+a44 1
+	-delete device.sym
+a45 3
+device.sym: device.h
+	delete device.sym
+
+d50 2
+a51 1
+	RCS:ci -u $(RCSOPT) $(DSRC) $(XSRC)
+d54 1
+a54 1
+	RCS:co -l $(RCSOPT) $(DSRC) $(XSRC)
+d68 1
+a68 1
+devio2.o: /syslog/syslog.h devproto.h dev.h device.h devio2.c
+d70 1
+a70 1
+device2.o: /syslog/syslog.h devproto.h dev.h device.h device2.c
+@

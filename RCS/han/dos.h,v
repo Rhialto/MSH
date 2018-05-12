@@ -1,0 +1,477 @@
+head	1.56;
+access;
+symbols
+	SHAREWARE2:1.56
+	MAXON5:1.55
+	MAXON4:1.53
+	MAXON3:1.51
+	MAXON2:1.46
+	MAXON1:1.40
+	Patch3:1.30
+	Patch1:1.3
+	Rel1:1.2;
+locks;
+comment	@ * @;
+
+
+1.56
+date	96.12.22.00.22.33;	author Rhialto;	state Rel;
+branches;
+next	1.55;
+
+1.55
+date	93.12.30.23.28.00;	author Rhialto;	state Rel;
+branches;
+next	1.54;
+
+1.54
+date	93.06.24.05.12.49;	author Rhialto;	state Exp;
+branches;
+next	1.53;
+
+1.53
+date	92.10.25.02.44.02;	author Rhialto;	state Rel;
+branches;
+next	1.52;
+
+1.52
+date	92.09.06.00.23.30;	author Rhialto;	state Exp;
+branches;
+next	1.51;
+
+1.51
+date	92.04.17.15.38.54;	author Rhialto;	state Rel;
+branches;
+next	1.46;
+
+1.46
+date	91.10.06.18.26.32;	author Rhialto;	state Rel;
+branches;
+next	1.42;
+
+1.42
+date	91.06.14.00.05.47;	author Rhialto;	state Exp;
+branches;
+next	1.40;
+
+1.40
+date	91.03.03.17.55.29;	author Rhialto;	state Rel;
+branches;
+next	1.30;
+
+1.30
+date	90.06.04.23.18.20;	author Rhialto;	state Rel;
+branches;
+next	1.3;
+
+1.3
+date	90.03.11.17.45.55;	author Rhialto;	state Rel;
+branches;
+next	1.2;
+
+1.2
+date	90.01.27.20.29.53;	author Rhialto;	state Rel;
+branches;
+next	1.1;
+
+1.1
+date	89.12.17.20.06.01;	author Rhialto;	state Exp;
+branches;
+next	;
+
+
+desc
+@Declarations of system routines and AmigaDOS stuff
+@
+
+
+1.56
+log
+@Remove old packet names and add some new (Guru Book) ones.
+@
+text
+@
+/*
+ *  $Id: dos.h,v 1.55 1993/12/30 23:28:00 Rhialto Rel $
+ *  $Log: dos.h,v $
+ * Revision 1.55  1993/12/30  23:28:00	Rhialto
+ * Freeze for MAXON5.
+ *
+ * Revision 1.54  1993/06/24  05:12:49	Rhialto
+ * DICE 2.07.54R.
+ *
+ * Revision 1.53  92/10/25  02:44:02  Rhialto
+ * No real change.
+ *
+ * Revision 1.52  92/09/06  00:23:30  Rhialto
+ * Didn't believe in leap days and some other days.
+ *
+ * Revision 1.51  92/04/17  15:38:54  Rhialto
+ * Freeze for MAXON3.
+ *
+ * Revision 1.46  91/10/06  18:26:32  Rhialto
+ *
+ * Freeze for MAXON
+ *
+ * Revision 1.42  91/06/14  00:05:47  Rhialto
+ * DICE conversion
+ *
+ * Revision 1.40  91/03/03  17:55:29  Rhialto
+ * Freeze for MAXON
+ *
+ * Revision 1.30  90/06/04  23:18:20  Rhialto
+ * Release 1 Patch 3
+ *
+ */
+
+#ifndef EXEC_TYPES_H
+#include "exec/types.h"
+#endif
+#ifndef EXEC_MEMORY_H
+#include "exec/memory.h"
+#endif
+#ifndef EXEC_INTERRUPTS_H
+#include "exec/interrupts.h"
+#endif
+#ifndef EXEC_NODES_H
+#include "exec/nodes.h"
+#endif
+#ifndef EXEC_PORTS_H
+#include "exec/ports.h"
+#endif
+#ifndef EXEC_IO_H
+#include "exec/io.h"
+#endif
+#ifndef LIBRARIES_DOS_H
+#include "libraries/dos.h"
+#endif
+#ifndef LIBRARIES_DOSEXTENS_H
+#include "libraries/dosextens.h"
+#endif
+#ifndef LIBRARIES_FILEHANDLER_H
+#include "libraries/filehandler.h"
+#endif
+#ifndef DEVICES_TRACKDISK_H
+#include "devices/trackdisk.h"
+#endif
+#ifndef DEVICES_TIMER_H
+#include "devices/timer.h"
+#endif
+
+#ifndef CLIB_DOS_PROTOS_H
+#include <clib/dos_protos.h>
+#endif
+
+extern struct DosLibrary *DOSBase;
+
+/*
+ *  ACTIONS which do not exist in dosextens.h but which indeed exist on
+ *  the Amiga.
+ */
+
+#define ACTION_MORECACHE    18L
+#if !defined(ACTION_FLUSH)
+#define ACTION_FLUSH	    27L
+#endif
+#if !defined(ACTION_SEEK)
+#define ACTION_SEEK	    1008L
+#endif
+#if !defined(ACTION_DIRECT_READ)
+#define ACTION_DIRECT_READ  1900L
+#endif
+#if !defined(ACTION_GET_DISK_FSSM)
+#define ACTION_GET_DISK_FSSM	4201L
+#define ACTION_FREE_DISK_FSSM	4202L
+#endif
+
+#if !defined(FIBB_HIDDEN)
+#define FIBB_HIDDEN 7L
+#define FIBF_HIDDEN (1L<<FIBB_HIDDEN)
+#endif
+
+#if !defined(DE_DOSTYPE)
+#define DE_DOSTYPE	    16L
+#endif
+
+#define CTOB(x) 	(((long)(x))>>2)    /*	BCPL conversion */
+#define BTOC(x) (void *)(((long)(x))<<2)
+
+#define bmov(ss,dd,nn) CopyMem(ss,dd,(ulong)(nn))   /* Matt's habit */
+
+#define DOS_FALSE   0L
+#define DOS_TRUE    -1L
+
+typedef struct Interrupt	INTERRUPT;
+typedef struct Task		TASK;
+typedef struct FileLock 	LOCK;
+typedef struct FileInfoBlock	FIB;
+typedef struct DosPacket	PACKET;
+typedef struct Process		PROC;
+typedef struct DeviceNode	DEVNODE;
+typedef struct DeviceList	DEVLIST;
+typedef struct DosInfo		DOSINFO;
+typedef struct RootNode 	ROOTNODE;
+typedef struct FileHandle	FH;
+typedef struct MsgPort		PORT;
+typedef struct Message		MSG;
+typedef struct MinList		LIST;
+typedef struct MinNode		NODE;
+typedef struct DateStamp	STAMP;
+typedef struct InfoData 	INFODATA;
+typedef struct DosLibrary	DOSLIB;
+
+#define PType (packet->dp_Type)
+#define PArg1 (packet->dp_Arg1)
+#define PArg2 (packet->dp_Arg2)
+#define PArg3 (packet->dp_Arg3)
+#define PArg4 (packet->dp_Arg4)
+#define PRes1 (packet->dp_Res1)
+#define PRes2 (packet->dp_Res2)
+
+#define dl_MSFileLockList   dl_unused
+@
+
+
+1.55
+log
+@Freeze for MAXON5.
+@
+text
+@d3 1
+a3 1
+ *  $Id: dos.h,v 1.54 1993/06/24 05:12:49 Rhialto Exp $
+d5 4
+a8 1
+ * Revision 1.54  1993/06/24  05:12:49  Rhialto
+d81 1
+a81 1
+#ifndef ACTION_FLUSH
+d84 1
+a84 6
+#define ACTION_RAWMODE	    994L
+#define ACTION_OPENRW	    1004L
+#define ACTION_OPENOLD	    1005L
+#define ACTION_OPENNEW	    1006L
+#define ACTION_CLOSE	    1007L
+#ifndef ACTION_SEEK
+d87 7
+d95 1
+a95 1
+#ifndef FIBB_HIDDEN
+d100 1
+a100 1
+#ifndef DE_DOSTYPE
+d104 1
+a104 5
+#ifndef ID_MSDOS_DISK
+#define ID_MSDOS_DISK	    0x4D534400L     /* 'MSD\0' */
+#endif
+
+#define CTOB(x)         (((long)(x))>>2)    /*  BCPL conversion */
+@
+
+
+1.54
+log
+@DICE 2.07.54R.
+@
+text
+@d3 5
+a7 2
+ *  $Id: dos.h,v 1.53 92/10/25 02:44:02 Rhialto Rel $
+ *  $Log:	dos.h,v $
+@
+
+
+1.53
+log
+@No real change.
+@
+text
+@d3 1
+a3 1
+ *  $Id: dos.h,v 1.52 92/09/06 00:23:30 Rhialto Exp $
+d5 3
+d62 6
+@
+
+
+1.52
+log
+@Didn't believe in leap days and some other days.
+@
+text
+@d3 1
+a3 1
+ *  $Id: dos.h,v 1.51 92/04/17 15:38:54 Rhialto Rel $
+d5 3
+@
+
+
+1.51
+log
+@Freeze for MAXON3.
+@
+text
+@d3 1
+a3 1
+ *  $Id: dos.h,v 1.46 91/10/06 18:26:32 Rhialto Rel $
+d5 3
+d63 1
+d65 1
+d71 1
+d73 1
+@
+
+
+1.46
+log
+@
+Freeze for MAXON
+@
+text
+@d3 1
+a3 1
+ *  $Id: dos.h,v 1.42 91/06/14 00:05:47 Rhialto Exp $
+d5 4
+d11 1
+a11 1
+ * 
+d77 4
+a116 27
+
+
+/*
+ *  (void *)  in C means 'pointer to anything'.  I use it
+ *  extensively.
+ */
+
+extern void *AbsExecBase;
+
+void returnpacket(struct DosPacket *packet);
+int packetsqueued(void);
+void *dosalloc(ulong bytes);
+void dosfree(ulong *ptr);
+void btos(byte *bstr, byte *buf);
+void *GetHead(LIST *list);
+void *GetTail(LIST *list);
+char *typetostr(long ty);
+
+struct DeviceList *NewVolNode(char *name, struct DateStamp *date);
+void FreeVolNode(DEVLIST *volnode);
+struct FileLock *NewFileLock(struct MSFileLock *msfl, struct FileLock *fl);
+long FreeFileLock(struct FileLock *lock);
+int DiskRemoved(void);
+void DiskInserted(DEVLIST *volnode);
+DEVLIST *WhichDiskInserted(void);
+int CheckRead(struct FileLock *lock);
+int CheckWrite(struct FileLock *lock);
+@
+
+
+1.42
+log
+@DICE conversion
+@
+text
+@d3 1
+a3 1
+ *  $Id: dos.h,v 1.40 91/03/03 17:55:29 Rhialto Rel $
+d5 3
+@
+
+
+1.40
+log
+@Freeze for MAXON
+@
+text
+@d3 1
+a3 1
+ *  $Id: dos.h,v 1.30 90/06/04 23:18:20 Rhialto Rel $
+d5 3
+d10 1
+a10 1
+ * 
+d70 1
+a70 1
+#define CTOB(x) (void *)(((long)(x))>>2)    /*  BCPL conversion */
+d115 18
+a132 18
+extern struct MsgPort *CreatePort();
+extern void *AllocMem(), *RemHead(), *GetMsg();
+extern void *FindTask(), *Open(), *OpenLibrary();
+
+extern void   *dosalloc(), *NextNode(), *GetHead(), *GetTail();
+extern void   btos(), returnpacket();
+
+extern char *typetostr();
+
+extern struct DeviceList *NewVolNode();
+extern void FreeVolNode();
+extern struct FileLock *NewFileLock();
+extern long FreeFileLock();
+extern int DiskRemoved();
+extern void DiskInserted();
+extern DEVLIST *WhichDiskInserted();
+extern int CheckRead();
+extern int CheckWrite();
+@
+
+
+1.30
+log
+@Release 1 Patch 3
+@
+text
+@d3 5
+a7 2
+ *  $Id: dos.h,v 1.3 90/03/11 17:45:55 Rhialto Rel $
+ *  $Log$
+@
+
+
+1.3
+log
+@Patch1
+@
+text
+@d3 2
+a4 1
+ *  $Id: dos.h,v 1.2 90/01/27 20:29:53 Rhialto Rel $
+d55 1
+d58 5
+@
+
+
+1.2
+log
+@Add FIB?_HIDDEN
+@
+text
+@d3 1
+a3 1
+ *  $Id: dos.h,v 1.1 89/12/17 20:06:01 Rhialto Exp Locker: Rhialto $
+d6 1
+a6 1
+#ifdef NOTDEF
+d8 2
+d11 14
+d26 2
+d29 2
+d32 7
+a38 1
+#endif NOTDEF
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d3 1
+a3 1
+ *  $Id$
+d27 3
+@

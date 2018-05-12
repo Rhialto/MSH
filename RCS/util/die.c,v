@@ -1,0 +1,313 @@
+head	1.56;
+access;
+symbols
+	SHAREWARE2:1.56
+	MAXON5:1.55
+	MAXON4:1.53
+	MAXON3:1.51
+	MAXON2:1.46
+	MAXON1:1.40
+	Patch3a:1.31
+	Patch3:1.30;
+locks;
+comment	@ * @;
+
+
+1.56
+date	96.12.22.00.22.33;	author Rhialto;	state Rel;
+branches;
+next	1.55;
+
+1.55
+date	93.12.30.23.28.00;	author Rhialto;	state Rel;
+branches;
+next	1.54;
+
+1.54
+date	93.06.24.05.35.45;	author Rhialto;	state Exp;
+branches;
+next	1.53;
+
+1.53
+date	92.10.25.02.46.02;	author Rhialto;	state Rel;
+branches;
+next	1.51;
+
+1.51
+date	92.04.17.15.39.37;	author Rhialto;	state Rel;
+branches;
+next	1.46;
+
+1.46
+date	91.10.06.18.51.29;	author Rhialto;	state Rel;
+branches;
+next	1.42;
+
+1.42
+date	91.06.14.00.06.49;	author Rhialto;	state Exp;
+branches;
+next	1.40;
+
+1.40
+date	91.03.03.17.57.33;	author Rhialto;	state Rel;
+branches;
+next	1.31;
+
+1.31
+date	90.11.10.02.46.19;	author Rhialto;	state Exp;
+branches;
+next	1.30;
+
+1.30
+date	90.06.04.23.21.52;	author Rhialto;	state Rel;
+branches;
+next	;
+
+
+desc
+@Send an ACTION_DIE packet to a handler
+@
+
+
+1.56
+log
+@Version bump only..
+@
+text
+@/*-
+ * $Id: die.c,v 1.55 1993/12/30 23:28:00 Rhialto Rel $
+ *
+ *  DIE.C
+ *
+ *  This code is (C) Copyright 1989-1992 by Olaf Seibert. All rights reserved.
+ *  May not be used or copied without a licence.
+-*/
+
+#include <stdio.h>
+#include <string.h>
+#include "han.h"
+
+#ifndef EXEC_TYPES_H
+#include <exec/types.h>
+#endif
+#ifndef EXEC_MEMORY_H
+#include <exec/memory.h>
+#endif
+#ifndef LIBRARIES_DOSEXTENS_H
+#include <libraries/dosextens.h>
+#endif
+
+#ifndef CLIB_DOS_PROTOS_H
+#include <clib/dos_protos.h>
+#endif
+
+const char	idString[] = "$\VER: Die $Revision: 1.55 $ $Date: 1993/12/30 23:28:00 $\r\n";
+
+long
+dos_packet2(struct MsgPort *port, long type, long arg1, long arg2)
+{
+    struct StandardPacket *sp;
+    struct MsgPort *rp;
+    long res1;
+
+    if ((rp = CreatePort(NULL, 0)) == NULL)
+	return DOSFALSE;
+    if ((sp = AllocMem((long)sizeof(*sp), MEMF_PUBLIC|MEMF_CLEAR)) == NULL) {
+	DeletePort(rp);
+	return DOSFALSE;
+    }
+    sp->sp_Msg.mn_Node.ln_Name = (char *)&sp->sp_Pkt;
+    sp->sp_Pkt.dp_Link = &sp->sp_Msg;
+    sp->sp_Pkt.dp_Port = rp;
+    sp->sp_Pkt.dp_Type = type;
+    sp->sp_Pkt.dp_Arg1 = arg1;
+    sp->sp_Pkt.dp_Arg2 = arg2;
+    PutMsg(port, &sp->sp_Msg);
+    WaitPort(rp);
+    GetMsg(rp);
+    res1 = sp->sp_Pkt.dp_Res1;
+    FreeMem(sp, (long)sizeof(*sp));
+    DeletePort(rp);
+    return res1;
+}
+
+int
+main(int argc, char **argv)
+{
+    struct MsgPort *filehandler;
+    long	    flags = 0;
+    long	    id = 0;
+
+    if (argc == 3 && stricmp(argv[1], "unshare") == 0) {
+	id = MSH_MAGIC;
+	flags = 1;
+	argc--;
+	argv++;
+    }
+    if (argc == 3 && stricmp(argv[1], "unload") == 0) {
+	id = MSH_MAGIC;
+	flags = 1 | 2;
+	argc--;
+	argv++;
+    }
+    if (argc == 2) {
+	if (filehandler = DeviceProc(argv[1])) {
+	    dos_packet2(filehandler, ACTION_DIE, id, flags);
+	}
+    } else
+	puts("Usage: die [unshare|unload] MSH-DEV:");
+
+    return 0;
+}
+@
+
+
+1.55
+log
+@Freeze for MAXON5.
+@
+text
+@d2 1
+a2 1
+ * $Id: die.c,v 1.54 1993/06/24 05:35:45 Rhialto Exp $
+d28 1
+a28 1
+const char	idString[] = "$VER: Die $Revision: 1.54 $ $Date: 1993/06/24 05:35:45 $\r\n";
+@
+
+
+1.54
+log
+@DICE 2.07.54R.
+@
+text
+@d2 1
+a2 1
+ * $Id: die.c,v 1.53 92/10/25 02:46:02 Rhialto Rel $
+d28 1
+a28 1
+const char	idString[] = "$VER: Die $Revision$ $Date$\r\n";
+@
+
+
+1.53
+log
+@Use symbolic cookie instead of hardcoded one.
+@
+text
+@d2 1
+a2 1
+ * $Id: die.c,v 1.51 92/04/17 15:39:37 Rhialto Rel $
+a12 1
+#include <functions.h>
+d23 6
+@
+
+
+1.51
+log
+@Freeze for MAXON3. Added extra parameters for pure/shared code of handler.
+@
+text
+@d2 1
+a2 1
+ * $Id: die.c,v 1.46 91/10/06 18:51:29 Rhialto Rel $
+a9 2
+#include <amiga.h>
+#include <functions.h>
+d12 2
+d61 1
+a61 1
+	id = 'Msh\0';
+d67 1
+a67 1
+	id = 'Msh\0';
+d78 2
+@
+
+
+1.46
+log
+@Add #includes; Freeze for MAXON
+@
+text
+@d2 1
+a2 1
+ * $Id: Die.c,v 1.46 91/10/06 18:23:22 Rhialto Rel $
+d6 1
+a6 1
+ *  This code is (C) Copyright 1989-1991 by Olaf Seibert. All rights reserved.
+d13 1
+d26 1
+a26 1
+dos_packet1(struct MsgPort *port, long type, long arg1)
+d43 1
+d57 2
+d60 12
+d74 1
+a74 1
+	    dos_packet1(filehandler, ACTION_DIE, DOSTRUE);
+d77 1
+a77 1
+	printf("Usage: die DEV:\n");
+a78 1
+
+@
+
+
+1.42
+log
+@DICE conversion
+@
+text
+@d2 1
+a2 1
+ * $Id: die.c,v 1.40 91/03/03 17:57:33 Rhialto Rel $
+d13 10
+@
+
+
+1.40
+log
+@Freeze for MAXON
+@
+text
+@d2 1
+a2 1
+ * $Id: die.c,v 1.31 90/11/10 02:46:19 Rhialto Exp $
+d6 2
+a7 2
+ *  This code is (C) Copyright 1989 by Olaf Seibert. All rights reserved. May
+ *  not be used or copied without a licence.
+d10 33
+a42 3
+main(argc, argv)
+int argc;
+char **argv;
+d44 1
+a44 1
+    struct MsgPort *filehandler, *DeviceProc();
+d48 1
+a48 1
+	    dos_packet(filehandler, ACTION_DIE, DOSTRUE);
+@
+
+
+1.31
+log
+@Added Id header.
+@
+text
+@d2 1
+a2 1
+ * $Id$
+@
+
+
+1.30
+log
+@Release 1 Patch 3
+@
+text
+@d2 2
+@

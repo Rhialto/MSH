@@ -1,0 +1,730 @@
+head	1.56;
+access;
+symbols
+	SHAREWARE2:1.56
+	MAXON5:1.55
+	MAXON4:1.53
+	MAXON3:1.51
+	MAXON2:1.46
+	MAXON1:1.40
+	Patch3:1.30
+	Patch1:1.3
+	Rel1:1.2;
+locks;
+comment	@ * @;
+
+
+1.56
+date	96.12.21.23.45.39;	author Rhialto;	state Rel;
+branches;
+next	1.55;
+
+1.55
+date	93.12.30.22.45.10;	author Rhialto;	state Rel;
+branches;
+next	1.54;
+
+1.54
+date	93.06.24.04.56.00;	author Rhialto;	state Exp;
+branches;
+next	1.53;
+
+1.53
+date	92.10.25.02.17.40;	author Rhialto;	state Rel;
+branches;
+next	1.51;
+
+1.51
+date	92.04.17.15.43.10;	author Rhialto;	state Rel;
+branches;
+next	1.46;
+
+1.46
+date	91.10.06.18.25.45;	author Rhialto;	state Rel;
+branches;
+next	1.42;
+
+1.42
+date	91.06.14.00.07.33;	author Rhialto;	state Exp;
+branches;
+next	1.40;
+
+1.40
+date	91.03.03.17.56.47;	author Rhialto;	state Rel;
+branches;
+next	1.34;
+
+1.34
+date	91.01.24.00.13.57;	author Rhialto;	state Exp;
+branches;
+next	1.30;
+
+1.30
+date	90.06.04.23.19.28;	author Rhialto;	state Rel;
+branches;
+next	1.3;
+
+1.3
+date	90.03.11.17.43.50;	author Rhialto;	state Rel;
+branches;
+next	1.2;
+
+1.2
+date	90.01.27.20.39.10;	author Rhialto;	state Rel;
+branches;
+next	1.1;
+
+1.1
+date	89.12.17.20.08.06;	author Rhialto;	state Exp;
+branches;
+next	;
+
+
+desc
+@Include file internal to the messydos.device
+@
+
+
+1.56
+log
+@Bump revision number to 16.
+@
+text
+@/*-
+ *  $Id: device.h,v 1.56 1996/12/21 23:34:35 Rhialto Rel $
+ *  $Log: device.h,v $
+ * Revision 1.56  1996/12/21  23:34:35  Rhialto
+ * No changes.
+ *
+ * Revision 1.55  1993/12/30  22:45:10  Rhialto
+ * Variable DMA buffer size for DD/DH disks.
+ *
+ * Revision 1.54  1993/06/24  04:56:00	Rhialto
+ * DICE 2.07.54R.
+ *
+ * Revision 1.53  92/10/25  02:17:40  Rhialto
+ * Rearrange #inclusions and Device structure.
+ * Add TD_Getgeometry, TD_Eject.
+ *
+ * Revision 1.51  92/04/17  15:43:10  Rhialto
+ * Freeze for MAXON3. Change cyl+side units to track units.
+ *
+ * Revision 1.46  91/10/06  18:25:45  Rhialto
+ *
+ * Freeze for MAXON
+ *
+ * Revision 1.42  91/06/14  00:07:33  Rhialto
+ * DICE conversion
+ *
+ * Revision 1.40  91/03/03  17:56:47  Rhialto
+ * Freeze for MAXON
+ *
+ * Revision 1.34  91/01/24  00:13:57  Rhialto
+ * Use TD_RAWWRITE under AmigaOS 2.0.
+ *
+ * Revision 1.30  90/06/04  23:19:28  Rhialto
+ * Release 1 Patch 3
+ *
+ *  This code is (C) Copyright 1989-1993 by Olaf Seibert. All rights reserved.
+ *  May not be used or copied without a licence.
+-*/
+
+#ifndef RESOURCES_DISK_H
+#include "resources/disk.h"
+#endif
+#ifndef RESOURCES_CIA_H
+#include "resources/cia.h"
+#endif
+#ifndef HARDWARE_CIA_H
+#include "hardware/cia.h"
+#endif
+#ifndef HARDWARE_CUSTOM_H
+#include "hardware/custom.h"
+#endif
+#ifndef HARDWARE_ADKBITS_H
+#include "hardware/adkbits.h"
+#endif
+#ifndef HARDWARE_DMABITS_H
+#include "hardware/dmabits.h"
+#endif
+#ifndef HARDWARE_INTBITS_H
+#include "hardware/intbits.h"
+#endif
+#ifndef EXEC_DEVICES_H
+#include <exec/devices.h>
+#endif
+#ifndef EXEC_SEMAPHORES_H
+#include "exec/semaphores.h"
+#endif
+#ifndef CLIB_EXEC_PROTOS_H
+#include <clib/exec_protos.h>
+#endif
+#ifndef CLIB_ALIB_PROTOS_H
+#include <clib/alib_protos.h>
+#endif
+
+#ifndef MESSYDISK_DEV_H
+#include "dev.h"
+#endif
+
+extern struct ExecBase *SysBase;
+
+#define MD_NUMUNITS	4
+#ifndef NUMHEADS
+#define NUMHEADS	2   /* Used to be in devices/trackdisk.h */
+#endif
+#define TRACKS(cyls)    ((cyls) * NUMHEADS)
+#define TRK2CYL(track)  ((track) >> 1)
+#define TRK2SIDE(track) ((track) & 1)
+
+#define VERSION 	SYS2_04
+#define REVISION	16
+
+struct MessyDevice {
+    struct Device   md_Dev;
+    struct MessyUnit *md_Unit[MD_NUMUNITS];
+    long	    md_Seglist;
+    long	    md_System_2_04;
+    struct SignalSemaphore md_HardwareUse;
+    long	    md_RawbufferSize;
+    byte	   *md_Rawbuffer;
+    byte	    md_MfmDecode[128];
+};
+
+#define dev_Node	md_Dev.dd_Library.lib_Node
+#define dev_Flags	md_Dev.dd_Library.lib_Flags
+#define dev_NegSize	md_Dev.dd_Library.lib_NegSize
+#define dev_PosSize	md_Dev.dd_Library.lib_PosSize
+#define dev_Version	md_Dev.dd_Library.lib_Version
+#define dev_Revision	md_Dev.dd_Library.lib_Revision
+#define dev_IdString	md_Dev.dd_Library.lib_IdString
+#define dev_OpenCnt	md_Dev.dd_Library.lib_OpenCnt
+
+struct MessyUnit {
+    struct MsgPort  mu_Port;
+    short	    mu_OpenCnt;
+    short	    mu_UnitNr;
+    byte	    mu_Flags;
+    char	    mu_InitSectorStatus;
+    ulong	    mu_ChangeNum;
+    ulong	    mu_OpenFlags;
+    byte	    mu_DiskState;
+    byte	    mu_DmaSignal;
+    short	    mu_SectorsPerTrack; /* The nominal #sectors/track */
+    short	    mu_CurrentSectors;	/* The current #sectors on this track */
+    short	    mu_CurrentTrack;	/* what's in the track buffer */
+    short	    mu_NumTracks;
+    short	    mu_TrackChanged;
+    short	    mu_ReadLen; 	/* 1 track + ~1 sector */
+    short	    mu_WriteLen;	/* ~1 track */
+    struct DiskResourceUnit mu_DRUnit;
+    struct MsgPort  mu_DiskReplyPort;
+    struct IOExtTD *mu_DiskIOReq;
+    struct IOStdReq *mu_DiskChangeReq;
+    struct Interrupt mu_DiskChangeInt;
+    struct MinList  mu_ChangeIntList;
+    byte	   *mu_TrackBuffer;
+    char	    mu_SectorStatus[MS_SPT_MAX];
+    word	    mu_CrcBuffer[MS_SPT_MAX];
+};
+
+#define     TDERR_NoError   0
+#define     CRC_UNCHECKED   -1
+#define     CRC_CHANGED     -2
+
+#define UNITB_ACTIVE	0
+#define UNITF_STOPPED	(1<<2)
+#define UNITF_WAKETASK	(1<<3)
+
+#define STATEF_UNKNOWN	(1<<0)
+#define STATEF_PRESENT	(1<<1)
+#define STATEF_WRITABLE (1<<2)
+#define STATEF_HIGHDENSITY (1<<3)
+
+#define SYS1_2		33	/* System version 1.2 */
+#define SYS1_3		34	/* System version 1.3 */
+#define SYS2_0		36	/* System version 2.0 */
+#define SYS2_04 	37	/* System version 2.04 */
+
+typedef struct MessyDevice DEV;
+typedef struct MessyUnit   UNIT;
+
+
+#define TASKPRI     5L
+#define TASKSTACK   1024L
+
+/*
+ *  Which of the device commands are real, and which are
+ *  routed to trackdisk.device.
+ */
+
+/*  #define CMD_Invalid     */
+/*  #define CMD_Reset	    */
+/*  #define CMD_Read	    */
+/*  #define CMD_Write	    */
+/*  #define CMD_Update	    */
+/*  #define CMD_Clear	    */
+/*  #define CMD_Stop	    */
+/*  #define CMD_Start	    */
+/*  #define CMD_Flush	    */
+    #define TD_Motor	    TrackdiskGateway
+/*  #define TD_Seek	    */
+/*  #define TD_Format	    */
+    #define TD_Remove	    TrackdiskGateway
+/*  #define TD_Changenum    */
+    #define TD_Changestate  TrackdiskGateway
+    #define TD_Protstatus   TrackdiskGateway
+    #define TD_Rawread	    TrackdiskGateway
+    #define TD_Rawwrite     TrackdiskGateway
+    #define TD_Getdrivetype TrackdiskGateway
+    #define TD_Getnumtracks TrackdiskGateway
+/*  #define TD_Addchangeint */
+/*  #define TD_Remchangeint */
+/*  #define TD_Getgeometry  */
+    #define TD_Eject	    TrackdiskGateway
+
+#define STRIP(cmd)  ((unsigned char)cmd)
+#define IMMEDIATE   ((1<<CMD_INVALID)|(1<<CMD_RESET)|\
+		     (1<<CMD_STOP)|(1<<CMD_START)|(1<<CMD_FLUSH)|\
+		     (1L<<TD_ADDCHANGEINT))
+#define PerformIO(ioreq, unit) \
+		    (funcTable[STRIP(ioreq->io_Command)])(ioreq, unit)
+
+struct DiskResourceUnit *GetUnit(__A1 struct DiskResourceUnit *);
+void GiveUnit(void);
+
+#define Prototype extern
+#define Local	  static
+
+/*
+ *  Prototypes:
+ */
+
+#include "devproto.h"
+@
+
+
+1.55
+log
+@Variable DMA buffer size for DD/DH disks.
+@
+text
+@d2 1
+a2 1
+ *  $Id: device.h,v 1.54 1993/06/24 04:56:00 Rhialto Exp $
+d4 3
+d86 1
+a86 1
+#define REVISION	15
+@
+
+
+1.54
+log
+@DICE 2.07.54R.
+@
+text
+@d2 5
+a6 2
+ *  $Id: device.h,v 1.53 92/10/25 02:17:40 Rhialto Rel $
+ *  $Log:	device.h,v $
+d30 1
+a30 1
+ *  This code is (C) Copyright 1989,1991 by Olaf Seibert. All rights reserved.
+d83 1
+a83 1
+#define REVISION	14
+d91 1
+d112 2
+a113 1
+    char	    mu_DiskState;
+d128 1
+a130 1
+    byte	    mu_TrackBuffer[MS_SPT_MAX * MS_BPS];   /* Must be word aligned */
+d144 1
+@
+
+
+1.53
+log
+@Rearrange #inclusions and Device structure.
+Add TD_Getgeometry, TD_Eject.
+@
+text
+@d2 1
+a2 1
+ *  $Id: device.h,v 1.51 92/04/17 15:43:10 Rhialto Rel $
+d4 4
+d58 6
+d69 2
+d80 1
+a80 1
+#define REVISION	13
+d86 1
+a86 1
+    long	    md_UseRawWrite;
+d115 2
+d157 9
+a165 9
+/*  #define CMD_Invalid     /**/
+/*  #define CMD_Reset	    /**/
+/*  #define CMD_Read	    /**/
+/*  #define CMD_Write	    /**/
+/*  #define CMD_Update	    /**/
+/*  #define CMD_Clear	    /**/
+/*  #define CMD_Stop	    /**/
+/*  #define CMD_Start	    /**/
+/*  #define CMD_Flush	    /**/
+d167 2
+a168 2
+/*  #define TD_Seek	    /**/
+/*  #define TD_Format	    /**/
+d170 1
+a170 1
+/*  #define TD_Changenum    /**/
+d177 3
+a179 3
+/*  #define TD_Addchangeint /**/
+/*  #define TD_Remchangeint /**/
+/*  #define TD_Getgeometry  /**/
+d189 2
+a190 2
+__stkargs struct DiskResourceUnit *GetUnit(struct DiskResourceUnit *);
+__stkargs void GiveUnit(void);
+d196 1
+a196 1
+ *  Forward declarations:
+@
+
+
+1.51
+log
+@Freeze for MAXON3. Change cyl+side units to track units.
+@
+text
+@d2 1
+a2 1
+ *  $Id: device.h,v 1.46 91/10/06 18:25:45 Rhialto Rel $
+d4 3
+d48 10
+d67 2
+a68 2
+#define VERSION 	34L
+#define REVISION	12
+d109 2
+a111 2
+    word	    mu_CrcBuffer[MS_SPT_MAX];
+    char	    mu_SectorStatus[MS_SPT_MAX];
+d129 1
+d165 2
+@
+
+
+1.46
+log
+@
+Freeze for MAXON
+@
+text
+@d2 1
+a2 1
+ *  $Id: device.h,v 1.42 91/06/14 00:07:33 Rhialto Exp $
+d4 4
+d50 3
+d55 1
+a55 1
+#define REVISION	11
+d87 2
+a88 2
+    short	    mu_CurrentCylinder; /* Position of the head, and */
+    short	    mu_CurrentSide;	/* what's in the track buffer */
+a95 1
+    short	    mu_NumCyls;
+d162 3
+d169 1
+a169 57
+
+extern void Init(), _DevOpen(), _DevClose(), _DevExpunge(), _LibNull();
+extern void _DevBeginIO(), _DevAbortIO();
+
+extern char DevName[], idString[];
+
+__stkargs __geta4 DEV *CInit(ulong D2, ulong D3, long segment);
+__stkargs __geta4 void DevOpen(ulong unitno, ulong flags, ulong D2, ulong D3, struct IOStdReq *ioreq, DEV *dev);
+__stkargs __geta4 long DevClose(ulong D2, ulong D3, struct IOStdReq *ioreq, DEV *dev);
+__stkargs __geta4 long DevExpunge(ulong D2, ulong D3, DEV *dev);
+__stkargs __geta4 void DevBeginIO(ulong D2, ulong D3, struct IOStdReq *ioreq, DEV *dev);
+__stkargs __geta4 long DevAbortIO(ulong D2, ulong D3, struct IOStdReq *ioreq, DEV *dev);
+void TermIO(struct IOStdReq *ioreq);
+void WakePort(struct MsgPort *port);
+__geta4 void UnitTask(void);
+void CMD_Invalid(struct IOStdReq *ioreq, UNIT *unit);
+void CMD_Stop(struct IOStdReq *ioreq, UNIT *unit);
+void CMD_Start(struct IOStdReq *ioreq, UNIT *unit);
+void CMD_Flush(struct IOStdReq *ioreq, UNIT *unit);
+void CMD_Read(struct IOStdReq *ioreq, UNIT *unit);
+void CMD_Write(struct IOStdReq *ioreq, UNIT *unit);
+void TD_Format(struct IOStdReq *ioreq, UNIT *unit);
+void CMD_Reset(struct IOStdReq *ioreq, UNIT *unit);
+void CMD_Update(struct IOStdReq *ioreq, UNIT *unit);
+void CMD_Clear(struct IOStdReq *ioreq, UNIT *unit);
+void TD_Seek(struct IOStdReq *ioreq, UNIT *unit);
+void TD_Changenum(struct IOStdReq *ioreq, UNIT *unit);
+void TD_Addchangeint(struct IOStdReq *ioreq);
+void TD_Remchangeint(struct IOStdReq *ioreq);
+
+void TrackdiskGateway(struct IOStdReq *ioreq, UNIT *unit);
+
+int DevInit(DEV *dev);
+void InitDecoding(byte  *decode);
+long MyDoIO(struct IORequest *req);
+int TDMotorOn(struct IOExtTD *tdreq);
+int TDGetNumCyls(struct IOExtTD *tdreq);
+int TDSeek(UNIT *unit, struct IOStdReq *ioreq, int cylinder);
+void *GetDrive(struct DiskResourceUnit *drunit);
+void FreeDrive(void);
+int GetTrack(struct IOStdReq *ioreq, int side, int cylinder);
+int CheckChanged(struct IOExtTD *ioreq, UNIT *unit);
+int DevCloseDown(DEV *dev);
+int CheckRequest(struct IOExtTD *ioreq, UNIT *unit);
+UNIT *UnitInit(DEV *dev, ulong UnitNr);
+int UnitCloseDown(struct IOStdReq *ioreq, DEV *dev, UNIT *unit);
+__stkargs __geta4 void DiskChangeHandler0(UNIT *unit);
+void DiskChangeHandler(void);
+
+#ifndef READONLY
+word CalculateGapLength(int sectors);
+int InitWrite(DEV *dev);
+void FreeBuffer(DEV *dev);
+void Internal_Update(struct IOStdReq *ioreq, UNIT *unit);
+__stkargs void EncodeTrack(byte *TrackBuffer, byte *Rawbuffer, word *Crcs, long Cylinder, long Side, long GapLen, long NumSecs);
+/* should become							   word Cylinder, word Side, word GapLen, word NumSecs */
+#endif
+@
+
+
+1.42
+log
+@DICE conversion
+@
+text
+@d2 1
+a2 1
+ *  $Id: device.h,v 1.40 91/03/03 17:56:47 Rhialto Rel $
+d4 3
+d26 3
+d48 1
+a48 1
+#define REVISION	10
+@
+
+
+1.40
+log
+@Freeze for MAXON
+@
+text
+@d2 1
+a2 1
+ *  $Id: device.h,v 1.34 91/01/24 00:13:57 Rhialto Exp $
+d4 3
+d9 1
+a9 1
+ * 
+d13 2
+a14 2
+ *  This code is (C) Copyright 1989 by Olaf Seibert. All rights reserved. May
+ *  not be used or copied without a licence.
+d17 19
+d37 3
+d42 1
+a42 1
+#define REVISION	8
+a43 5
+#asm
+VERSION     equ 	34
+RTPRI	    equ 	0
+#endasm
+
+a104 9
+/* Some constants related to #defines */
+#asm
+MS_BPS		    equ 512
+MS_BPScode	    equ 2		    ; 2log(MSBPS/128)
+LOG2_MS_BPS	    equ 9
+MS_SPT		    equ 9
+MS_SPT_MAX	    equ 10
+#endasm
+
+d147 2
+a148 3
+extern DEV *MakeLibrary();
+extern struct Task *FindTask();
+extern struct Task *CreateTask();
+d154 1
+a154 1
+extern char EndCode;
+d160 42
+a201 51
+extern DEV *CInit();
+extern void DevOpen();
+extern long DevClose(), DevExpunge();
+extern void DevBeginIO(), TermIO();
+extern long DevAbortIO();
+
+extern void WakePort();
+extern void UnitTask();
+
+extern int DevInit();
+extern UNIT *UnitInit();
+extern void DiskChangeHandler();
+
+extern void TrackdiskGateway();
+extern void CMD_Invalid();
+extern void CMD_Reset();
+extern void CMD_Read();
+extern void CMD_Write();
+extern void CMD_Update();
+extern void CMD_Clear();
+extern void CMD_Stop();
+extern void CMD_Start();
+extern void CMD_Flush();
+extern void TD_Seek();
+extern void TD_Format();
+extern void TD_Changenum();
+extern void TD_Addchangeint();
+extern void TD_Remchangeint();
+
+extern struct DiskResource *OpenResource();
+extern struct MsgPort *DeviceProc();
+extern struct MsgPort *CreatePort();
+extern struct IOExtTD *CreateExtIO();
+extern void    *GetUnit(), *GetMsg();
+extern long	Wait();
+extern void    *AllocMem(), FreeMem();
+extern byte    *index(), *rindex();
+
+extern int	ReadTrack();
+extern void	InitDecoding();
+extern int	TDSeek();
+extern long	MyDoIO();
+extern int	TDMotorOn();
+extern int	TDMotorOff();
+extern int	TDGetNumCyls();
+extern void    *GetDrive();
+extern void	FreeDrive();
+extern int	DevOpenUp();
+extern int	DevCloseDown();
+extern int	GetTrack();
+extern int	CheckRequest();
+d204 6
+a209 3
+extern int	InitWrite();
+extern void	FreeBuffer();
+extern void	EncodeTrack();
+@
+
+
+1.34
+log
+@Use TD_RAWWRITE under AmigaOS 2.0.
+@
+text
+@d2 1
+a2 1
+ *  $Id: device.h,v 1.30 90/06/04 23:19:28 Rhialto Rel $
+d4 3
+@
+
+
+1.30
+log
+@Release 1 Patch 3
+@
+text
+@d2 5
+a6 2
+ *  $Id: device.h,v 1.3 90/03/11 17:43:50 Rhialto Rel $
+ *  $Log$
+d25 1
+d51 1
+a51 1
+    short	    mu_CurrentTrack;	/* Position of the head, and */
+d78 4
+d188 1
+@
+
+
+1.3
+log
+@No change.
+@
+text
+@d2 2
+a3 2
+ *  $Id: device.h,v 1.2 90/01/27 20:39:10 Rhialto Rel $
+ *
+d11 1
+a11 1
+#define REVISION	5
+d88 1
+a88 1
+#define TASKSTACK   2048L
+@
+
+
+1.2
+log
+@Variable #sectors/track!
+@
+text
+@d2 1
+a2 1
+ *  $Id: device.h,v 1.1 89/12/17 20:08:06 Rhialto Exp Locker: Rhialto $
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d2 1
+a2 1
+ *  $Id$
+d11 1
+a11 1
+#define REVISION	4
+d23 2
+a24 2
+    byte	   *Rawbuffer;
+    byte	    MfmDecode[128];
+d45 15
+a59 13
+    short	    CurrentTrack;      /* Position of the head, and */
+    short	    CurrentSide;       /* what's in the track buffer */
+    short	    TrackChanged;
+    struct DiskResourceUnit DRUnit;
+    struct MsgPort  DiskReplyPort;
+    struct IOExtTD *DiskIOReq;
+    struct IOStdReq *DiskChangeReq;
+    struct Interrupt DiskChangeInt;
+    struct MinList  ChangeIntList;
+    short	    NumCyls;
+    byte	    TrackBuffer[MS_SPT_MAX * MS_BPS];	/* Must be word aligned */
+    word	    CrcBuffer[MS_SPT_MAX];
+    char	    SectorStatus[MS_SPT_MAX];
+d74 1
+a74 1
+/* Some constants related to #defines and structure offsets */
+d76 3
+a78 3
+MSBPS		    equ 512
+MSBPScode	    equ 2		    ; 2log(MSBPS/128)
+LOG2_MSBPS	    equ 9
+d80 1
+a80 1
+MS_SPT_MAX	    equ 9
+a192 1
+extern int	TrackChanged;
+@

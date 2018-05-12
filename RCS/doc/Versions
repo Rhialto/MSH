@@ -1,0 +1,56 @@
+*******************************************************************************
+    MSH is (C) Copyright 1989-1991 by Olaf Seibert. All rights reserved.
+    Freely distributable, except that it may not be distributed for profit
+    without permission from the author. Hereby, Fred Fish explicitly gets
+    permission to include MSH in his library of freely distributable Amiga
+    software.
+*******************************************************************************
+Reminder:
+    If you like the program, feel free to send me some $$, or even $$$ if
+    you feel like it. Please don't send any non-(Dutch or Euro)-cheques,
+    since they cost a lot of money (nlg 12.50; more than US$ 7) to cash.
+    All shareware resellers (and especially those in Germany) are reminded
+    that they are NOT allowed to make any profit off my work. Resellers are
+    considered to make an illegal profit if they charge more for a disk
+    than Fred Fish does. Those resellers do NOT have a licence to use or
+    copy MSH. Also, if you distribute MSH:, you must distribute it in its
+    entirety: you are not allowed to leave parts out.
+
+Preferred options on checkin:
+ci -f (force) -u<VERSION> -n<SYMBOLIC NAME> -s<STATE>
+
+1.5	release 1
+1.30	release 1 patch 3
+1.31	release 1 patch 3a
+1.32	prepare for syslog
+
+From here on everything may be #ifndeffed NONCOMM
+
+1.33	MSH: fix directory extension bug
+	[directories die langer gemaakt worden werden niet gewist]
+1.34	device: use TD_RAWWRITE when appropriate
+	[als je 2.04 hebt]
+1.35	MSH: improved caching by separate sorted list
+1.40	Offered to MAXON for commercial distribution (MAXON1)
+1.41	Fixed bug in MSSetProtect that changed everything into plain files
+	[protect msh:dir maakte van msh:dir een file]
+1.42	Cache bug and DICE conversion
+1.43	Fix bug with assigns (hanlock.c); Change to newer syslog stuff.
+	[assign x: msh:file werkte alsof het assign x: msh: was]
+1.44	Fix bug that sectors numbered 0 crashed the device
+	[komt normaal niet voor - behalve bij een bepaalde sampler]
+1.45	Add in-situ character conversions; ::-confirmation requesters
+	[konversie van letters met umlaut en ß]
+1.46	Freeze for MAXON (MAXON2)
+1.47	Device: only set WORDSYNC on read, reload Custom in intr code
+1.48	messyfmt: ASK, QUICK, BOOT; hanconv: swap pc/st condes for s.
+	[messyfmt wordt vriendelijker in het gebruik]
+1.49	messyfmt: now suggests a reasonable FAT size
+1.50	date.c: new function for date-to-days conversion
+1.51	hanmain.c: removed InitCacheList() from MSDiskInserted();
+	Moved prototypes around (makeproto introduced);
+	Add const and __shared qualifiers for pure code;
+	No more DosType=1 but Interleave=65536;
+	Fixed superfluous uninhibits (Workbench caused problems);
+	Device: changed cyl+side units into track units.
+	(MAXON3)

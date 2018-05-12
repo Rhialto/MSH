@@ -1,0 +1,2839 @@
+head	1.56;
+access;
+symbols
+	SHAREWARE2:1.56
+	MAXON5:1.55
+	MAXON4:1.53
+	MAXON3:1.51
+	MAXON2:1.46
+	MAXON1:1.40
+	Patch3a:1.31
+	Patch3:1.30
+	Patch1:1.4
+	Rel1:1.3;
+locks;
+comment	@ * @;
+
+
+1.56
+date	96.12.22.00.22.33;	author Rhialto;	state Rel;
+branches;
+next	1.55;
+
+1.55
+date	93.12.30.23.02.45;	author Rhialto;	state Rel;
+branches;
+next	1.54;
+
+1.54
+date	93.06.24.05.12.49;	author Rhialto;	state Exp;
+branches;
+next	1.53;
+
+1.53
+date	92.10.25.02.23.50;	author Rhialto;	state Rel;
+branches;
+next	1.51;
+
+1.51
+date	92.04.17.15.34.59;	author Rhialto;	state Rel;
+branches;
+next	1.46;
+
+1.46
+date	91.10.06.18.26.16;	author Rhialto;	state Rel;
+branches;
+next	1.43;
+
+1.43
+date	91.09.28.01.35.36;	author Rhialto;	state Exp;
+branches;
+next	1.42;
+
+1.42
+date	91.06.13.23.46.21;	author Rhialto;	state Exp;
+branches;
+next	1.40;
+
+1.40
+date	91.03.03.17.45.09;	author Rhialto;	state Rel;
+branches;
+next	1.32;
+
+1.32
+date	90.11.23.23.53.22;	author Rhialto;	state Exp;
+branches;
+next	1.31;
+
+1.31
+date	90.11.10.02.42.38;	author Rhialto;	state Exp;
+branches;
+next	1.30;
+
+1.30
+date	90.06.04.23.15.58;	author Rhialto;	state Rel;
+branches;
+next	1.4;
+
+1.4
+date	90.03.11.17.45.27;	author Rhialto;	state Rel;
+branches;
+next	1.3;
+
+1.3
+date	90.02.03.17.02.05;	author Rhialto;	state Rel;
+branches;
+next	1.2;
+
+1.2
+date	89.12.17.23.06.54;	author Rhialto;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	89.12.17.19.53.24;	author Rhialto;	state Exp;
+branches;
+next	;
+
+
+desc
+@Translate DOS packets into our own function calls.
+@
+
+
+1.56
+log
+@Better (but not perfect) device list deadlock handling.
+Add some Guru Book packets.
+Pretend success on ACTION_SET_COMMENT.
+Support for proper taskwait hook.
+@
+text
+@/*-
+ * $Id: pack.c,v 1.55 1993/12/30 23:02:45 Rhialto Rel $
+ * $Log: pack.c,v $
+ * Revision 1.55  1993/12/30  23:02:45	Rhialto
+ * Add code to reflect changing disk capacity to Mount info.
+ * Don't fail Info() if there is no disk in drive.
+ * SameLock() was wrong because TADM was wrong.
+ * Add Format() packet.
+ * Use 2.0+ calls for manipulating the device list, if possible.
+ * New LONGNAMES filesystem, changes throughout the handler.
+ * Optional (compile-time) broadcast IECLASS_DISKINSERTED messages.
+ * Freeze for MAXON5.
+ *
+ * Revision 1.54  1993/06/24  05:12:49	Rhialto
+ * DICE 2.07.54R.
+ *
+ * Revision 1.53  92/10/25  02:23:50  Rhialto
+ * Add 2.0 stuff.
+ *
+ * Revision 1.51  92/04/17  15:34:59  Rhialto
+ * Freeze for MAXON. DosType->Interleave; extra uninhibits fixed.
+ *
+ * Revision 1.46  91/10/06  18:26:16  Rhialto
+ *
+ * Freeze for MAXON
+ *
+ * Revision 1.43  91/09/28  01:35:36  Rhialto
+ * Changed to newer syslog stuff.
+ *
+ * Revision 1.42  91/06/13  23:46:21  Rhialto
+ * DICE conversion
+ *
+ * Revision 1.40  91/03/03  17:45:09  Rhialto
+ * Freeze for MAXON
+ *
+ * Revision 1.32  90/11/23  23:53:22  Rhialto
+ * Prepare for syslog
+ *
+ * Revision 1.31  90/11/10  02:42:38  Rhialto
+ * Patch 3a.
+ *
+ * Revision 1.30  90/06/04  23:15:58  Rhialto
+ * Release 1 Patch 3
+ *
+ *  Originally:
+ *
+ *	DOSDEVICE.C	    V1.10   2 November 1987
+ *
+ *	EXAMPLE DOS DEVICE DRIVER FOR AZTEC.C	PUBLIC DOMAIN.
+ *
+ *	By Matthew Dillon.
+ *
+ *  This has been stripped and refilled with messydos code
+ *  by Olaf Seibert.
+ *
+ *  This code is (C) Copyright 1989-1992 by Olaf Seibert. All rights reserved.
+ *  May not be used or copied without a licence.
+ *
+ *  This file forms the interface between the actual handler code and all
+ *  AmigaDOS requirements. It shields it from ugly stuff like BPTRs, BSTRs,
+ *  FileLocks, FileHandles and VolumeNodes (in the form of DeviceLists).
+ *  Also, most protection against non-inserted disks is done here.
+-*/
+
+#include "han.h"
+#include "dos.h"
+#include <string.h>
+
+#if HDEBUG
+#   include "syslog.h"
+#else
+#   define	debug(x)
+#endif
+
+#define MSFL(something)     ((struct MSFileLock *)(something))
+#define MSFH(something)     ((struct MSFileHandle *)(something))
+
+Prototype struct MsgPort *DosPort;
+Prototype struct DeviceNode *DevNode;
+Prototype struct DeviceList *VolNode;
+Prototype short     DiskChanged;
+Prototype long	    UnitNr;
+Prototype char	   *DevName;
+Prototype ulong     DevFlags;
+Prototype long	    Interleave;
+Prototype struct DosEnvec *Environ;
+Prototype struct DosPacket *DosPacket;
+Prototype short     Inhibited;
+
+Prototype struct DeviceList *NewVolNode(char *name, struct DateStamp *date);
+Prototype int	    MayFreeVolNode(struct DeviceList *volnode);
+Prototype void	    FreeVolNode(struct DeviceList *volnode);
+Prototype void	    FreeVolNodeDeferred(void);
+Prototype struct FileLock *NewFileLock(struct MSFileLock *msfl, struct FileLock *fl);
+Prototype long	    FreeFileLock(struct FileLock *lock);
+Prototype long	    DiskRemoved(void);
+Prototype void	    DiskInserted(struct DeviceList *volnode);
+Prototype void	    CheckDriveType(void);
+Prototype struct DeviceList *WhichDiskInserted(void);
+Prototype void	    DiskChange(void);
+Prototype int	    CheckRead(struct FileLock *lock);
+Prototype int	    CheckWrite(struct FileLock *lock);
+
+__stkargs /*__geta4*/ void ChangeIntHand(void);
+__stkargs void ChangeIntHand0(void);
+char *rega4(void);
+Local void NewVolNodeName(void);
+Local BPTR MakeFileLock(struct MSFileLock *msfl, struct FileLock *fl, long mode);
+
+/*
+ * Since this code might be called several times in a row without being
+ * unloaded, you CANNOT ASSUME GLOBALS HAVE BEEN ZERO'D!!  This also goes
+ * for any global/static assignments that might be changed by running the
+ * code.
+ */
+
+struct MsgPort	*DosPort;	/* Our DOS port... */
+struct DeviceNode *DevNode;	/* Our DOS node.. created by DOS for us */
+struct DeviceList *VolNode;	/* Device List structure for our volume
+				 * node */
+struct DeviceList *MustFreeVolNode; /* Deferred free. Just place for one. */
+
+struct DosLibrary *DOSBase;	/* DOS library base */
+long		PortMask;	/* The signal mask for our DosPort */
+long		WaitMask;	/* The signal mask to wait for */
+short		DiskChanged;	/* Set by disk change interrupt */
+short		Inhibited;	/* Are we inhibited (ACTION_INHIBIT)? */
+long		UnitNr; 	/* From */
+char	       *DevName;	/*   the */
+ulong		DevFlags;	/*     mountlist */
+long		Interleave;
+struct DosEnvec *Environ;
+struct DosPacket *DosPacket;	/* For the SystemRequest pr_WindowPtr */
+long		OpenCount;	/* How many open files/locks/other
+				 * references there are */
+short		WriteProtect;	/* Are we software-writeprotected? */
+
+struct Interrupt ChangeInt = {
+    { 0 },			/* is_Node */
+    0,				/* is_Data */
+    ChangeIntHand0		/* is_Code */
+};
+
+/*
+ * Don't call the entry point main().  This way, if you make a mistake
+ * with the compile options you'll get a link error.
+ */
+
+void
+messydoshandler(void)
+{
+    struct DosPacket *packet;
+#if ! TASKWAIT
+    struct Message *msg;
+#endif
+    struct Process *myproc;
+    short	    done;
+    struct FileSysStartupMsg *fssm;
+
+    /*
+     * Initialize all global variables.  SysBase MUST be initialized
+     * before we can make Exec calls.  AbsExecBase is a library symbol
+     * referencing absolute memory location 4.
+     */
+
+    DOSBase = (struct DosLibrary *)OpenLibrary("dos.library", 0L);
+
+#if HDEBUG
+    /*
+     * Initialize debugging code as soon as possible. Only SysBase required.
+     */
+
+    initsyslog();
+#endif				/* HDEBUG */
+
+    myproc = (struct Process *)FindTask(NULL);
+    DosPort = &myproc->pr_MsgPort;
+
+#if TASKWAIT
+    packet = taskwait(myproc);
+#else
+    WaitPort(DosPort);	    /* Get Startup Packet  */
+    msg = GetMsg(DosPort);
+    packet = (struct DosPacket *) msg->mn_Node.ln_Name;
+#endif
+
+    DevNode = BTOC(PArg3);
+    {
+	ulong Reserved;
+
+	DevName = "messydisk.device";
+	UnitNr = 0;
+	DevFlags = 0;
+
+	MaxCache = 5;
+	BufMemType = MEMF_PUBLIC;
+	DefaultDisk.nsides = MS_NSIDES;
+	DefaultDisk.spt = MS_SPT;
+	DefaultDisk.bps = MS_BPS;
+	Partition.offset = 0;
+	Reserved = 0;
+	Interleave = 0;
+
+	if (fssm = (struct FileSysStartupMsg *)BTOC(DevNode->dn_Startup)) {
+				    /* Same as BTOC(packet->dp_Arg2) */
+	    UnitNr = fssm->fssm_Unit;
+	    if (fssm->fssm_Device)
+		DevName = (char *)BTOC(fssm->fssm_Device)+1;
+	    DevFlags = fssm->fssm_Flags;
+
+	    if (Environ = (void *)BTOC(fssm->fssm_Environ)) {
+		debug(("Environ size %ld\n", Environ->de_TableSize));
+
+		if (Environ->de_TableSize >= DE_NUMBUFFERS) {
+		    MaxCache = Environ->de_NumBuffers;
+
+		    DefaultDisk.nsides = Environ->de_Surfaces;
+		    DefaultDisk.spt = Environ->de_BlocksPerTrack;
+		    DefaultDisk.bps = Environ->de_SizeBlock * 4;
+		    debug(("DefaultDisk.bps %ld\n", (long)DefaultDisk.bps));
+
+		    Partition.offset = Environ->de_LowCyl;
+		    Reserved = Environ->de_Reserved;
+
+		    /* Compatibility with old DosType = 1 */
+		    Interleave = Environ->de_DosType;
+		    if (Interleave == 1) {
+			Interleave = NICE_TO_DFx;
+		    } else {
+			Interleave = Environ->de_Interleave;
+		    }
+#define get(xx,yy)  if (Environ->de_TableSize >= yy) xx = ((ULONG*)Environ)[yy];
+		    get(BufMemType, DE_MEMBUFTYPE);
+		} else
+		    Environ = NULL;
+#undef get
+	    }
+	}
+	Disk = DefaultDisk;
+
+	Partition.offset *= Disk.bps * Disk.spt * Disk.nsides;
+	Partition.offset += Disk.bps * Reserved;
+
+	/* These values are used only for floppies (i.e. DRIVE*) */
+	if (Disk.spt <= MS_SPT_MAX_DD) {
+	    Partition.spt_dd = Disk.spt;
+	    Partition.spt_hd = Disk.spt * 2;
+	} else {
+	    Partition.spt_hd = Disk.spt;
+	    Partition.spt_dd = Disk.spt / 2;
+	}
+
+	debug(("offset %x, spt_dd %d, spt_hd %d\n",
+	       Partition.offset, Partition.spt_dd, Partition.spt_hd));
+    }
+
+    if (DOSBase && HanOpenUp()) {
+	/*
+	 * Loading DevNode->dn_Task causes DOS *NOT* to startup a new
+	 * instance of the device driver for every reference.	E.G. if
+	 * you were writing a CON: device you would want this field to be
+	 * NULL.
+	 */
+
+	DevNode->dn_Task = DosPort;
+
+	PRes1 = DOSTRUE;
+	PRes2 = 0;
+    } else {		    /* couldn't open dos.library  */
+	PRes1 = DOSFALSE;
+	PRes2 = ERROR_DEVICE_NOT_MOUNTED;   /* no better message available */
+	returnpacket(packet);
+	goto exit;		/* exit process    */
+    }
+    debug(("Returning startup packet %lx\n", packet));
+    returnpacket(packet);
+
+    /* Initialize some more global variables	*/
+
+    PortMask = 1L << DosPort->mp_SigBit;
+    VolNode = NULL;
+    WaitMask = PortMask | (1L << DiskReplyPort->mp_SigBit);
+    ChangeInt.is_Data = rega4();	/* for PURE code */
+    TDAddChangeInt(&ChangeInt);
+    OpenCount = 0;
+    Inhibited = 0;
+
+    /* Get the first real packet       */
+    debug(("Awaiting first real dos packet\n"));
+#if TASKWAIT
+    packet = taskwait(myproc);
+    debug(("got it: %lx\n", packet));
+#else
+    WaitPort(DosPort);
+    msg = GetMsg(DosPort);
+    debug(("got it: %lx\n", msg));
+#endif
+    done = -1;
+    DiskInserted(WhichDiskInserted());
+
+    goto entry;
+
+    /*
+     * Here begins the endless loop, waiting for requests over our message
+     * port and executing them.  Since requests are sent over the message
+     * port in our device and volume nodes, we must not use our Process
+     * message port for this: this precludes being able to call DOS
+     * functions ourselves.
+     */
+
+top:
+    for (done = -1; done < 0;) {
+	Wait(WaitMask);
+	if (DiskChanged)
+	    DiskChange();
+#if TASKWAIT
+	while (packetsqueued()) {	/* } */
+#else
+	while (msg = GetMsg(DosPort)) {
+#endif
+	    byte	    buf[256];	/* Max length of BCPL strings is
+					 * 255 + 1 for \0. */
+#if TASKWAIT
+	    packet = taskwait(myproc);
+#endif
+    entry:
+	    if (MustFreeVolNode)
+		FreeVolNodeDeferred();
+	    if (DiskChanged)
+		DiskChange();
+
+#if ! TASKWAIT
+	    packet = (PACKET *) msg->mn_Node.ln_Name;
+#endif
+	    PRes1 = DOSFALSE;
+	    PRes2 = 0;
+	    error = 0;
+	    debug(("Packet: %4ld %08lx %08lx %08lx %s\n",
+		     PType, PArg1, PArg2, PArg3, typetostr(PType)));
+
+	    DosPacket = packet; 	/* For the System Requesters */
+	    switch (PType) {
+	    case ACTION_DIE:		/* attempt to die?  */
+		done = (PArg1 == MSH_MAGIC) ? PArg2 : 0;   /* Argh! Hack! */
+		break;
+	    case ACTION_CURRENT_VOLUME: /* fharg1,Magic,Count -> VolNode,UnitNr,Private */
+		if (PArg2 == MSH_MAGIC) {
+		    PArg2 = (long)PrivateInfo();
+		    if (PArg3 > 0) {
+			OpenCount++;
+		    } else if (PArg3 < 0) {
+			OpenCount--;
+		    }
+		}
+		PRes1 = (long) CTOB(VolNode);
+		PRes2 = UnitNr;
+		break;
+	    case ACTION_LOCATE_OBJECT:	/* Lock,Name,Mode	Lock	     */
+		{
+		    struct FileLock *lock;
+		    struct MSFileLock *msfl;
+		    long	    lockmode;
+
+		    lock = BTOC(PArg1);
+		    if (CheckRead(lock))
+			break;
+		    btos((byte *)PArg2, buf);
+		    if ((lockmode = PArg3) != EXCLUSIVE_LOCK)
+			lockmode = SHARED_LOCK;
+		    msfl = MSLock(MSFL(lock ? lock->fl_Key : 0),
+				  buf,
+				  lockmode);
+		    PRes1 = MakeFileLock(msfl, lock, lockmode);
+		}
+		break;
+	    case ACTION_RENAME_DISK:	/* BSTR:NewName 	   Bool      */
+		if (CheckWrite(NULL))
+		    break;
+		btos((byte *)PArg1, buf);
+		buf[31] = '\0';
+		if (PRes1 = MSRelabel(buf))
+		    NewVolNodeName();
+		break;
+	    case ACTION_FREE_LOCK:	/* Lock 		   Bool      */
+		{
+		    struct FileLock *lock;
+		    struct MSFileLock *msfl;
+
+		    PRes1 = DOSTRUE;
+		    lock = BTOC(PArg1);
+		    if (lock == NULL)
+			break;
+
+		    msfl = MSFL(lock->fl_Key);
+		    FreeFileLock(lock); /* may remove last lock on volume */
+		    MSUnLock(msfl);	/* may call MayFreeVolNode */
+		}
+		break;
+	    case ACTION_DELETE_OBJECT:	/* Lock,Name		Bool	     */
+		{
+		    struct FileLock *lock;
+
+		    lock = BTOC(PArg1);
+		    if (CheckWrite(lock))
+			break;
+		    btos((byte *)PArg2, buf);
+		    PRes1 = MSDeleteFile(MSFL(lock ? lock->fl_Key : 0),
+					 buf);
+		}
+		break;
+	    case ACTION_RENAME_OBJECT:	/* SLock,SName,DLock,DName   Bool    */
+		{
+		    struct FileLock *slock, *dlock;
+		    char	     buf2[256];
+
+		    slock = BTOC(PArg1);
+		    dlock = BTOC(PArg3);
+		    if (CheckWrite(slock) || CheckWrite(dlock))
+			break;
+		    btos((byte *)PArg2, buf);
+		    btos((byte *)PArg4, buf2);
+		    PRes1 = MSRename(MSFL(slock ? slock->fl_Key : 0),
+				     buf,
+				     MSFL(dlock ? dlock->fl_Key : 0),
+				     buf2);
+		}
+		break;
+	    case ACTION_MORECACHE:	/* #BufsToAdd		bool,numbufs */
+		if ((MaxCache += (short) PArg1) <= 0) {
+		    MaxCache = 1;
+		}
+		PRes1 = MaxCache;   /* observed behaviour in std filesystem */
+		PRes2 = MaxCache;   /* documented behaviour in manual */
+		debug(("Now %ld cache sectors\n", (long)MaxCache));
+		break;
+	    case ACTION_COPY_DIR:	/* Lock 		   Lock      */
+		{
+		    struct FileLock *lock;
+		    struct MSFileLock *msfl;
+
+		    lock = BTOC(PArg1);
+
+		    msfl = MSDupLock(MSFL(lock ? lock->fl_Key : 0));
+
+		    PRes1 = MakeFileLock(msfl, lock,
+					 lock ? lock->fl_Access : SHARED_LOCK);
+		}
+		break;
+	    case ACTION_SET_PROTECT:	/* -,Lock,Name,Mask	   Bool      */
+		{
+		    struct FileLock *lock;
+
+		    lock = BTOC(PArg2);
+		    if (CheckWrite(lock))
+			break;
+		    btos((byte *)PArg3, buf);
+		    PRes1 = MSSetProtect(MSFL(lock ? lock->fl_Key : 0),
+					buf, PArg4);
+		}
+		break;
+	    case ACTION_CREATE_DIR:	/* Lock,Name		Lock	     */
+		{
+		    struct FileLock *lock;
+		    struct MSFileLock *msfl;
+
+		    lock = BTOC(PArg1);
+		    if (CheckWrite(lock))
+			break;
+		    btos((byte *)PArg2, buf);
+
+		    msfl = MSCreateDir(MSFL(lock ? lock->fl_Key : 0),
+				       buf);
+
+		    PRes1 = MakeFileLock(msfl, lock, SHARED_LOCK);
+		}
+		break;
+	    case ACTION_EXAMINE_OBJECT: /* Lock,Fib	       Bool	     */
+		{
+		    struct FileLock *lock;
+
+		    lock = BTOC(PArg1);
+		    /*
+		    if (CheckRead(lock))
+			break;
+		    */
+		    PRes1 = MSExamine(MSFL(lock ? lock->fl_Key : 0),
+				      BTOC(PArg2));
+		}
+		break;
+	    case ACTION_EXAMINE_NEXT:	/* Lock,Fib	       Bool	     */
+		{
+		    struct FileLock *lock;
+
+		    lock = BTOC(PArg1);
+		    if (CheckRead(lock))
+			break;
+		    PRes1 = MSExNext(MSFL(lock ? lock->fl_Key : 0),
+				     BTOC(PArg2));
+		}
+		break;
+	    case ACTION_DISK_INFO:	/* InfoData	       Bool:TRUE     */
+		PRes1 = MSDiskInfo(BTOC(PArg1));
+		break;
+	    case ACTION_INFO:	/* Lock,InfoData	       Bool:TRUE     */
+		if (CheckRead(BTOC(PArg1)))
+		    break;
+		PRes1 = MSDiskInfo(BTOC(PArg2));
+		break;
+	    case ACTION_FLUSH:		/* writeout bufs, disk motor off     */
+		MSUpdate(1);
+		break;
+	    case ACTION_SET_COMMENT:	/* -,Lock,Name,Comment	   Bool      */
+		/* pretend to succeed so that COPY CLONE does not give up */
+		PRes1 = DOSTRUE;
+		break;
+	    case ACTION_PARENT: /* Lock 		       ParentLock    */
+		{
+		    struct FileLock *lock;
+		    struct MSFileLock *msfl;
+
+		    lock = BTOC(PArg1);
+
+		    msfl = MSParentDir(MSFL(lock ? lock->fl_Key : 0));
+
+		    PRes1 = MakeFileLock(msfl, lock, SHARED_LOCK);
+		}
+		break;
+	    case ACTION_INHIBIT:	/* Bool 		   Bool      */
+		if (PArg1) {
+		    ++Inhibited;
+		    if (Inhibited == 1)
+			DiskRemoved();
+		    IDDiskType = 'BUSY';/* GURU book p. 443 */
+		} else {
+		    --Inhibited;
+		    if (Inhibited < 0) {
+			Inhibited = 0;	/* Do nothing if already uninhibited */
+		    } else if (Inhibited == 0) {
+			DiskChange();
+		    }
+		}
+		PRes1 = DOSTRUE;
+		error = 0;
+		break;
+	    case ACTION_SET_DATE: /* -,Lock,Name,CPTRDateStamp	   Bool      */
+		{
+		    struct FileLock *lock;
+
+		    lock = BTOC(PArg2);
+		    if (CheckWrite(lock))
+			break;
+		    btos((byte *)PArg3, buf);
+		    PRes1 = MSSetDate(MSFL(lock ? lock->fl_Key : 0),
+				      buf,
+				      (struct DateStamp *)PArg4);
+		}
+		break;
+#ifdef ACTION_SAME_LOCK
+	    case ACTION_SAME_LOCK:  /* Lock1,Lock2		   Result    */
+		{
+		    struct FileLock *fl1, *fl2;
+
+		    fl1 = BTOC(PArg1);
+		    fl2 = BTOC(PArg2);
+		    if (fl1->fl_Volume == fl2->fl_Volume) {
+			PRes1 = MSSameLock(MSFL(fl1->fl_Key),
+					   MSFL(fl2->fl_Key));
+		    } else {
+			PRes1 = DOSFALSE;
+			error = ERROR_DEVICE_NOT_MOUNTED;
+		    }
+		}
+		break;
+#endif
+	    case ACTION_READ:	/* FHArg1,CPTRBuffer,Length	  ActLength  */
+		if (CheckLock(MSFH(PArg1)->msfh_FileLock) ||
+		    CheckRead(NULL)) {
+		    PRes1 = -1;
+		} else
+		    PRes1 = MSRead(MSFH(PArg1), (byte *)PArg2, PArg3);
+		break;
+	    case ACTION_WRITE:	/* FHArg1,CPTRBuffer,Length	  ActLength  */
+		if (CheckLock(MSFH(PArg1)->msfh_FileLock) ||
+		    CheckWrite(NULL)) {
+		    PRes1 = -1;
+		} else
+		    PRes1 = MSWrite(MSFH(PArg1), (byte *)PArg2, PArg3);
+		break;
+	    case ACTION_FINDUPDATE:	/* FileHandle,Lock,Name    Bool      */
+	    case ACTION_FINDINPUT:	/* FileHandle,Lock,Name    Bool      */
+		goto open_notnew;
+	    case ACTION_FINDOUTPUT:	/* FileHandle,Lock,Name    Bool      */
+		{
+		    struct MSFileHandle *msfh;
+		    struct FileHandle *fh;
+		    struct FileLock *lock;
+
+		    if (CheckWrite(BTOC(PArg2)))
+			break;
+
+		open_notnew:
+		    fh = BTOC(PArg1);
+		    lock = BTOC(PArg2);
+		    if (CheckRead(lock))
+			break;
+		    btos((byte *)PArg3, buf);
+		    debug(("'%s' ", buf));
+		    msfh = MSOpen(MSFL(lock ? lock->fl_Key : 0),
+				  buf,
+				  PType);
+		    if (msfh) {
+			fh->fh_Arg1 = (long) msfh;
+			PRes1 = DOSTRUE;
+			OpenCount++;
+		    }
+		}
+		break;
+	    case ACTION_END:	/* FHArg1			Bool:Success */
+		PRes1 = MSClose(MSFH(PArg1));
+		OpenCount--;
+		break;
+	    case ACTION_SEEK:	/* FHArg1,Position,Mode 	 OldPosition */
+		if (CheckLock(MSFH(PArg1)->msfh_FileLock) ||
+		    CheckRead(NULL)) {
+		    PRes1 = -1;
+		} else
+		    PRes1 = MSSeek(MSFH(PArg1), PArg2, PArg3);
+		break;
+	    case ACTION_FORMAT: /* vol,type			Bool:success */
+		btos((byte *)PArg1, buf);
+		PRes1 = MSFormat(buf, PArg2);
+		break;
+#ifdef ACTION_SET_FILE_SIZE	/* FHArg1, off, whence		Bool:success */
+	    case ACTION_SET_FILE_SIZE:
+		PRes1 = MSSetFileSize(MSFH(PArg1), PArg2, PArg3);
+		break;
+#endif
+#ifdef ACTION_WRITE_PROTECT	/* Bool:protect, passkey	Bool:success */
+	    case ACTION_WRITE_PROTECT:
+		{
+		    static long     Passkey;
+
+		    if (PArg1) {
+			if (Passkey == 0) {
+			    WriteProtect = 1;
+			    Passkey = PArg2;
+			    PRes1 = DOSTRUE;
+			}
+		    } else {
+			if (Passkey == 0 || PArg2 == Passkey) {
+			    WriteProtect = 0;
+			    Passkey = 0;
+			    PRes1 = DOSTRUE;
+			}
+		    }
+		}
+		break;
+#endif
+#ifdef ACTION_FH_FROM_LOCK	/* FH,Lock			    BOOL     */
+	    case ACTION_FH_FROM_LOCK:
+		{
+		    struct MSFileHandle *msfh;
+		    struct FileHandle *fh;
+		    struct FileLock *lock;
+
+		    fh = BTOC(PArg1);
+		    lock = BTOC(PArg2);
+		    if (CheckRead(lock))
+			break;
+		    msfh = MSOpenFromLock(MSFL(lock ? lock->fl_Key : 0));
+		    if (msfh) {
+			fh->fh_Arg1 = (long) msfh;
+			PRes1 = DOSTRUE;
+			OpenCount++;
+			/* Discard the lock */
+			FreeFileLock(lock);
+		    }
+		}
+		break;
+#endif
+#ifdef ACTION_IS_FILESYSTEM
+	    case ACTION_IS_FILESYSTEM:	/* -			   Bool:TRUE */
+		PRes1 = DOSTRUE;
+		break;
+#endif
+#ifdef ACTION_CHANGE_MODE
+	    case ACTION_CHANGE_MODE:
+		switch (PArg1) {
+		case CHANGE_FH:
+		    PRes1 = MSChangeModeFH(MSFH(((struct FileHandle *)
+				BTOC(PArg2))->fh_Arg1), PArg3);
+		    break;
+		case CHANGE_LOCK:
+		    PRes1 = MSChangeModeLock(MSFL(((struct FileLock *)
+				BTOC(PArg2))->fl_Key), PArg3);
+		    break;
+		}
+		break;
+#endif
+#ifdef ACTION_COPY_DIR_FH
+	    case ACTION_COPY_DIR_FH:	/* fh_Arg1		   Lock      */
+	    case ACTION_PARENT_FH:
+		{
+		    struct MSFileLock *msfl;
+
+		    if (PType == ACTION_PARENT_FH)
+			msfl = MSParentOfFH(MSFH(PArg1));
+		    else
+			msfl = MSDupLockFromFH(MSFH(PArg1));
+		    /*
+		    msfl = ((PType == ACTION_PARENT_FH) ?
+			    MSParentOfFH : MSDupLockFromFH) (MSFH(PArg1));
+		    */
+
+		    /* User has inserted disk by now, so we can use VolNode */
+		    PRes1 = MakeFileLock(msfl, NULL, SHARED_LOCK);
+		}
+		break;
+#endif
+#ifdef ACTION_EXAMINE_FH
+	    case ACTION_EXAMINE_FH:	 /* fh_Arg1,Fib 		Bool	  */
+		PRes1 = MSExamineFH(MSFH(PArg1), BTOC(PArg2));
+		break;
+#endif
+	    /* These packets by suggestion of the Amiga Guru Book: */
+#if defined(ACTION_SERIALIZE_DISK)
+	    case ACTION_SERIALIZE_DISK:
+		PRes1 = MSSerializeDisk();
+		break;
+#endif
+#if defined(ACTION_GET_DISK_FSSM)
+	    case ACTION_GET_DISK_FSSM:
+		PRes1 = (ULONG)fssm;
+		OpenCount++;
+		break;
+	    case ACTION_FREE_DISK_FSSM:
+		PRes1 = DOSTRUE;
+		OpenCount--;
+		break;
+#endif
+		/*
+		 * A few other packet types which we do not support
+		 */
+/*	    case ACTION_WAIT_CHAR:     / * Timeout, ticks	   Bool      */
+/*	    case ACTION_RAWMODE:       / * Bool(-1:RAW 0:CON)	   OldState  */
+	    default:
+		PRes1 = DOSFALSE;
+		error = ERROR_ACTION_NOT_KNOWN;
+		break;
+	    } /* end switch */
+	    if (packet) {
+		if (error)
+		    PRes2 = error;
+		debug(("RES=%06lx, ERR=%ld\n", PRes1, error));
+		returnpacket(packet);
+		DosPacket = NULL;
+	    }
+#if HDEBUG
+	    else {
+		debug(("NO REPLY\n"));
+	    }
+#endif
+	} /* end while (GetMsg()) */
+
+	/*
+	 *  Now check for an other cause of events: timer IO.
+	 *  Unfortunately we cannot be sure that we always get a signal
+	 *  when the timeout has elapsed, since the same message port is
+	 *  used for other IO.
+	 */
+	if (CheckIO(&TimeIOReq->tr_node)) {   /* Timer finished? */
+	    debug(("TimeIOReq is finished\n"));
+	    MSUpdate(0);	/* Also may switch off motor */
+	}
+    } /* end for (;done) */
+
+#if HDEBUG
+    debug(("Can we remove ourselves? "));
+#endif				/* HDEBUG */
+    Forbid();
+    if (OpenCount || packetsqueued()) {
+	Permit();
+	debug((" ..  not yet!\n"));
+	goto top;		/* sorry... can't exit     */
+    }
+    debug((" .. yes!\n"));
+
+    /*
+     * Causes a new process to be created on next reference.
+     */
+
+    DevNode->dn_Task = NULL;
+    TDRemChangeInt();
+    DiskRemoved();
+    HanCloseDown();
+    debug(("HanCloseDown returned. uninitsyslog in 2 seconds:\n"));
+
+    /*
+     * Remove debug, closedown, fall of the end of the world.
+     */
+exit:
+#if HDEBUG
+    Delay(100L);		/* This is dangerous! */
+    uninitsyslog();
+#endif				/* HDEBUG */
+
+    if (done & 2)
+	UnLoadSeg(DevNode->dn_SegList); /* This is real fun. We are still */
+    if (done & (2 | 1))
+	DevNode->dn_SegList = 0;	/* Forbid()den, fortunately */
+
+    CloseLibrary((struct Library *)DOSBase);
+
+    /* Fall off the end of the world. Implicit Permit(). */
+}
+
+/*
+ * ChangeIntHand must be __geta4 if it is called directly through the
+ * ChangeInt.is_Code pointer, but then we can't be pure.
+ * If ChangeIntHand0 is called, __geta4 is done there via is_Data.
+ */
+
+__stkargs /*__geta4*/ void
+ChangeIntHand(void)
+{
+    DiskChanged = 1;
+    Signal(DosPort->mp_SigTask, PortMask);
+}
+
+/*
+ *  Make a new struct FileLock, for DOS use. It is put on a singly linked
+ *  list, which is attached to the same VolumeNode the old lock was on.
+ *
+ *  Also note that we must ALWAYS be prepared to UnLock() or DupLock()
+ *  any FileLocks we ever made, even if the volume in question has been
+ *  removed and/or inserted into another drive with another FileSystem
+ *  handler!
+ *
+ * DOS makes certain assumptions about LOCKS.	A lock must minimally be a
+ * FileLock structure, with additional private information after the
+ * FileLock structure.	The longword before the beginning of the structure
+ * must contain the length of structure + 4.
+ *
+ * NOTE!!!!! The workbench does not follow the rules and assumes it can copy
+ * lock structures.  This means that if you want to be workbench
+ * compatible, your lock structures must be EXACTLY sizeof(struct
+ * FileLock). Also, it sometimes uses uninitialized values for the lock mode...
+ */
+
+struct FileLock *
+NewFileLock(msfl, fl)
+struct MSFileLock *msfl;
+struct FileLock *fl;
+{
+    struct FileLock *newlock;
+    struct DeviceList *volnode = NULL;
+
+    if (fl) {
+	volnode = BTOC(fl->fl_Volume);
+    }
+    if (volnode == NULL) {
+	volnode = VolNode;
+	debug(("volnode 0->%lx\n", volnode));
+    }
+#if HDEBUG
+    if (volnode != VolNode) {
+	debug(("volnode != VolNode %lx != %lx\n",
+	    volnode, VolNode));
+    }
+    if (volnode->dl_Task != DosPort) {
+	debug(("volnode->dl_Task != DosPort %lx != %lx\n",
+	    volnode->dl_Task, DosPort));
+    }
+#endif
+
+    if (newlock = dosalloc((ulong)sizeof (*newlock))) {
+	newlock->fl_Key = (ulong) msfl;
+	newlock->fl_Task = DosPort;
+	newlock->fl_Volume = (BPTR) CTOB(volnode);
+	Forbid();
+	newlock->fl_Link = volnode->dl_LockList;
+	volnode->dl_LockList = (BPTR) CTOB(newlock);
+	Permit();
+    } else
+	error = ERROR_NO_FREE_STORE;
+
+    return newlock;
+}
+
+/*
+ *  This should be called before MSUnLock(), so that it may call
+ *  MayFreeVolNode() which then calls FreeVolNode(). A bit tricky,
+ *  I'm sorry for that.
+ */
+
+long
+FreeFileLock(lock)
+struct FileLock *lock;
+{
+    struct FileLock *fl;
+    struct FileLock **flp;
+    struct DeviceList	     *volnode;
+
+    volnode = (struct DeviceList *)BTOC(lock->fl_Volume);
+    flp = (struct FileLock **) &volnode->dl_LockList;
+    for (fl = BTOC(*flp); fl && fl != lock; fl = BTOC(fl->fl_Link))
+	flp = (struct FileLock **)&fl->fl_Link;
+
+    if (fl == lock) {
+	*(BPTR *)flp = fl->fl_Link;
+	dosfree((ulong *)fl);
+	OpenCount--;
+	return DOSTRUE;
+    } else {
+	debug(("Huh?? Could not find filelock!\n"));
+	return DOSFALSE;
+    }
+}
+
+/*
+ * MakeFileLock allocates and initializes a new FileLock, using info
+ * from an existing FileLock. It always consumes the MSFileLock, even
+ * in case of failure.
+ */
+
+BPTR
+MakeFileLock(msfl, fl, mode)
+struct MSFileLock *msfl;
+struct FileLock *fl;
+long		mode;
+{
+    struct FileLock *newlock;
+
+    newlock = NULL;
+    if (msfl) {
+	if (newlock = NewFileLock(msfl, fl)) {
+	    newlock->fl_Access = mode;
+	    OpenCount++;
+	} else
+	    MSUnLock(msfl);
+    }
+
+    return CTOB(newlock);
+}
+
+BOOL
+AddVolNode(struct DeviceList *volnode)
+{
+    long	    success = DOSFALSE;
+
+    if (DOSBase->dl_lib.lib_Version >= 37) {
+	struct DosList *dl;
+
+	dl = AttemptLockDosList(LDF_VOLUMES | LDF_WRITE);
+	if ((ULONG)dl & ~1) {
+	    success = AddDosEntry((struct DosList *)volnode);
+	    UnLockDosList(LDF_VOLUMES | LDF_WRITE);
+	}
+    } else {
+	struct DosInfo *di;
+
+	di = BTOC(((struct RootNode *) DOSBase->dl_Root)->rn_Info);
+	Forbid();
+	volnode->dl_Next = di->di_DevInfo;
+	di->di_DevInfo = (long) CTOB(volnode);
+	Permit();
+	success = DOSTRUE;
+    }
+    return success;
+}
+
+/*
+ * Create Volume node and add to the device list.   This will
+ * cause the WORKBENCH to recognize us as a disk.   If we
+ * don't create a Volume node, Wb will not recognize us.
+ * However, we are a MESSYDOS: disk, Volume node or not.
+ */
+
+struct DeviceList	 *
+NewVolNode(name, date)
+char *name;
+struct DateStamp *date;
+{
+    struct DeviceList *volnode;
+    char	   *volname;	    /* This is my volume name */
+
+    if (volnode = dosalloc((ulong)sizeof (struct DeviceList))) {
+	if (volname = dosalloc(32L)) {
+	    volname[0] = strlen(name);
+	    strcpy(volname + 1, name);	    /* Make sure \0 terminated */
+
+	    volnode->dl_Type = DLT_VOLUME;
+	    volnode->dl_Task = DosPort;
+	    volnode->dl_DiskType = IDDiskType;
+	    volnode->dl_Name = (BSTR)CTOB(volname);
+	    volnode->dl_VolumeDate = *date;
+	    volnode->dl_MSFileLockList = (ULONG)NULL;
+
+	    if (AddDosEntry((struct DosList *)volnode)== DOSFALSE)
+		goto error;
+	} else {
+	error:
+	    dosfree((ulong *)volnode);
+	    volnode = NULL;
+	}
+    } else {
+	error = ERROR_NO_FREE_STORE;
+    }
+
+    return volnode;
+}
+
+/*
+ *  Get the current VolNode a new name from the volume label.
+ */
+
+void
+NewVolNodeName()
+{
+    if (VolNode) {
+	char *volname = BTOC(VolNode->dl_Name);
+
+	strncpy(volname + 1, Disk.vollabel.de_Msd.msd_Name, L_8+L_3);
+	ZapSpaces(volname + 1, volname + 1 + L_8+L_3);
+	volname[0] = strlen(volname+1);
+    }
+}
+
+/*
+ * Remove Volume entry.  Since DOS uses singly linked lists, we must
+ * (ugg) search it manually to find the link before our Volume entry.
+ */
+
+void
+FreeVolNode(volnode)
+struct DeviceList *volnode;
+{
+    int deallocate = 0;
+
+    debug(("FreeVolNode %08lx\n", volnode));
+
+    if (volnode == NULL)
+	return;
+
+    if (DOSBase->dl_lib.lib_Version >= 37) {
+	struct DosList *dl;
+
+	dl = AttemptLockDosList(LDF_VOLUMES | LDF_WRITE);
+	/*
+	 * Maybe the device list is locked when we are called as a result
+	 * of a packet. Don't deadlock on that condition.
+	 * Additionally, a hack from the Guru Book p. 393.
+	 */
+	if ((ULONG)dl & ~1) {
+	    (void)RemDosEntry((struct DosList *)volnode);
+	    deallocate = 1;
+	    UnLockDosList(LDF_VOLUMES | LDF_WRITE);
+	} else {
+	    /*
+	     * Failed. Defer to later. If MustFreeVolNode was already set,
+	     * that volume is remembered even though it shouldn't.
+	     * I hope this is not very likely.
+	     */
+	    debug(("MustFreeVolNode %lx := %lx\n", MustFreeVolNode, volnode));
+	    MustFreeVolNode = volnode;
+	}
+    } else {
+	struct DosInfo *di = BTOC(((struct RootNode *) DOSBase->dl_Root)->rn_Info);
+	struct DeviceList *dl;
+	void  *dlp;
+
+	dlp = &di->di_DevInfo;
+	Forbid();
+	for (dl = BTOC(di->di_DevInfo); dl && dl != volnode; dl = BTOC(dl->dl_Next))
+	    dlp = &dl->dl_Next;
+	if (dl == volnode) {
+	    *(BPTR *) dlp = dl->dl_Next;
+	    deallocate = 1;
+	}
+#if HDEBUG
+	else {
+	    debug(("****PANIC: Unable to find volume node\n"));
+	}
+#endif				/* HDEBUG */
+	Permit();
+    }
+
+    if (deallocate) {
+	dosfree(BTOC(volnode->dl_Name));
+	dosfree((ulong *)volnode);
+    }
+
+    if (volnode == VolNode)
+	VolNode = NULL;
+}
+
+void
+FreeVolNodeDeferred(void)
+{
+    struct DeviceList *tmp = MustFreeVolNode;
+    MustFreeVolNode = NULL;
+    FreeVolNode(tmp);
+}
+
+/*
+ *  This is also called from the real handler when the last lock on a
+ *  volume is UnLock()ed, or the last file has been Close()d.
+ */
+
+int
+MayFreeVolNode(volnode)
+struct DeviceList *volnode;
+{
+    if (volnode->dl_LockList == NULL) {
+	FreeVolNode(volnode);
+	return TRUE;
+    }
+
+    return FALSE;
+}
+
+#if defined(PROMISE_NOT_TO_DIE)
+/*
+ * This function makes it possible to transfer locks from one handler to
+ * another, when the disk is being moved from one drive to another. The
+ * Amiga file system also does it. Try doing a "list df0:", pause it, put
+ * the disk in df1:, and continue. Unfortunately, passing FileLocks between
+ * handlers assumes that they will stick around forever. Therefore we make
+ * the user promise this by setting the PROMISE_NOT_TO_DIE flag.
+ */
+
+void RedirectLocks(struct DeviceList *volnode);
+void
+RedirectLocks(volnode)
+struct DeviceList *volnode;
+{
+    if (Interleave & PROMISE_NOT_TO_DIE) {
+	struct FileLock *fl;
+
+	fl = BTOC(volnode->dl_LockList);
+	while (fl) {
+	    /*
+	     * This is no good for their OpenCount...
+	     * they can never die again!
+	     * Alternatively, in DiskRemoved() the OpenCount could
+	     * be decremented for each lock (and dl_Task cleared?).
+	     */
+	    fl->fl_Task = volnode->dl_Task;
+	    OpenCount++;
+	    fl = BTOC(fl->fl_Link);
+	}
+    }
+}
+
+#endif
+
+/*
+ *  Our disk has been removed. Save the FileLocks in the dl_LockList,
+ *  and let the handler save its MSFileLocks in the dl_MSFileLockList field.
+ *  If it has nothing to save, forget about the volume, and return
+ *  DOSTRUE.
+ *  There is one subtlety that MSDiskRemoved must know about:
+ *  If it MSUnLock()s the last lock on the volume, the VolNode is
+ *  deleted via FreeLockList().. MayFreeVolNode().. FreeVolNode().
+ *  But then there is no place anymore to put NULL in, so that needs
+ *  to be done first.
+ */
+
+long
+DiskRemoved()
+{
+    debug(("DiskRemoved %08lx\n", VolNode));
+
+#if INPUTDEV
+    if (IDDiskType != ID_NO_DISK_PRESENT)
+	InputDiskRemoved();
+#endif
+
+    if (VolNode == NULL) {
+	IDDiskType = ID_NO_DISK_PRESENT;/* really business of MSDiskRemoved */
+	return DOSTRUE;
+    }
+
+    VolNode->dl_Task = NULL;
+    MSDiskRemoved((struct LockList **)&VolNode->dl_MSFileLockList);
+    if (VolNode == NULL) {  /* Could happen via MSDiskRemoved() */
+	return DOSTRUE;
+    }
+    VolNode = NULL;
+    return DOSFALSE;
+}
+
+/*
+ *  Reconstruct everything from a Volume node
+ */
+
+void
+DiskInserted(volnode)
+struct DeviceList *volnode;
+{
+    debug(("DiskInserted %08lx\n", volnode));
+
+    VolNode = volnode;
+
+    if (volnode) {
+	volnode->dl_Task = DosPort;
+#if defined(PROMISE_NOT_TO_DIE)
+	RedirectLocks(volnode);
+#endif
+	MSDiskInserted((struct LockList **)&volnode->dl_MSFileLockList, volnode);
+	volnode->dl_MSFileLockList = (BPTR)NULL;
+#if INPUTDEV
+	if (IDDiskType != ID_NO_DISK_PRESENT)
+	    InputDiskInserted();
+#endif
+    }
+}
+
+/*
+ * Test if we have a DD or HD floppy right now.
+ * If the TD_GETDRIVETYPE fails or produces weird values, do nothing.
+ * Otherwise, select the correct sectors/track value, originally
+ * derived from the mountlist.
+ */
+void
+CheckDriveType(void)
+{
+    struct IOExtTD *req = DiskIOReq;
+
+    debug(("CheckDriveType()\n"));
+    req->iotd_Req.io_Command = TD_GETDRIVETYPE;
+    /*
+     * If this fails or gives weird values, it probably is not
+     * a floppy drive, and we don't mess with the defaults.
+     */
+    if (MyDoIO(&req->iotd_Req) == 0) {
+	int		spt;
+
+	switch (req->iotd_Req.io_Actual) {
+	case DRIVE3_5:
+	case DRIVE5_25:
+	    debug(("DD floppy\n"));
+	    spt = Partition.spt_dd;
+	    break;
+	case DRIVE3_5_150RPM:
+	    debug(("HD floppy\n"));
+	    spt = Partition.spt_hd;
+	    break;
+	default:
+	    debug(("strange drive type: %d\n", req->iotd_Req.io_Actual));
+	    goto no_floppy;
+	}
+	DefaultDisk.spt = spt;
+	if (Environ)
+	    Environ->de_BlocksPerTrack = spt;
+	DefaultDisk.nsects = (Environ->de_HighCyl - Environ->de_LowCyl + 1) *
+			     DefaultDisk.nsides * spt;
+
+	/*
+	 * Suggest a minimum value for the number of FAT sectors.
+	 * Here we assume all sectors are to be used for clusters, which is not
+	 * really true, but simpler, and gives a conservative value. Besides,
+	 * the number of available sectors also depends on the FAT size, so
+	 * the whole calculation (if done correctly) would be recursive. In
+	 * practice, it may occasionally suggest one sector too much.
+	 */
+	{
+	    long	    nclusters;
+	    long	    nbytes;
+
+	    nclusters = MS_FIRSTCLUST + (DefaultDisk.nsects+DefaultDisk.spc-1)/
+					 DefaultDisk.spc;
+	    if (nclusters > 0xFF7) /* 16-bit FAT entries */
+		nbytes = nclusters * 2;
+	    else		  /* 12-bit FAT entries */
+		nbytes = (nclusters * 3 + 1) / 2;
+	    DefaultDisk.spf = (nbytes + DefaultDisk.bps - 1) / DefaultDisk.bps;
+	    /* Hack for floppies */
+	    if (DefaultDisk.spf < MS_SPF)
+		DefaultDisk.spf = MS_SPF;
+	}
+    }
+no_floppy:;
+}
+
+struct DeviceList *
+WhichDiskInserted()
+{
+    char name[34];
+    struct DateStamp date;
+    struct DeviceList *dl = NULL;
+
+    CheckDriveType();
+
+    if (!Inhibited && IdentifyDisk(name, &date) == 0) {
+	struct DosInfo *di = BTOC(((struct RootNode *) DOSBase->dl_Root)->rn_Info);
+	byte	       *nodename;
+	int		namelen = strlen(name);
+
+	for (dl = BTOC(di->di_DevInfo); dl; dl = BTOC(dl->dl_Next)) {
+	    nodename = BTOC(dl->dl_Name);
+	    if (nodename[0] != namelen || strncmp(nodename+1,name,namelen))
+		continue;
+	    if (dl->dl_VolumeDate == date)  /* Non-standard! Structure compare! */
+		break;
+	}
+
+	name[31] = '\0';
+	if (dl == NULL)
+	    dl = NewVolNode(name, &date);
+    }
+
+    debug(("WhichDiskInserted() done\n"));
+
+    return dl;
+}
+
+void
+DiskChange(void)
+{
+    debug(("DiskChange\n"));
+    DiskChanged = 0;
+    DiskRemoved();
+    DiskInserted(WhichDiskInserted());
+}
+
+int
+CheckRead(lock)
+struct FileLock *lock;
+{
+    if (lock && BTOC(lock->fl_Volume) != VolNode)
+	error = ERROR_DEVICE_NOT_MOUNTED;
+    else if (IDDiskType == ID_NO_DISK_PRESENT)
+	error = ERROR_NO_DISK;
+    else if (IDDiskType != ID_DOS_DISK)
+	error = ERROR_NOT_A_DOS_DISK;
+
+    return error;
+}
+
+int
+CheckWrite(lock)
+struct FileLock *lock;
+{
+    if (CheckRead(lock))
+	/* nothing */ ;
+    else if (IDDiskState == ID_VALIDATING)
+	error = ERROR_DISK_NOT_VALIDATED;
+    else if (IDDiskState != ID_VALIDATED || WriteProtect)
+	error = ERROR_DISK_WRITE_PROTECTED;
+
+    return error;
+}
+@
+
+
+1.55
+log
+@Add code to reflect changing disk capacity to Mount info.
+Don't fail Info() if there is no disk in drive.
+SameLock() was wrong because TADM was wrong.
+Add Format() packet.
+Use 2.0+ calls for manipulating the device list, if possible.
+New LONGNAMES filesystem, changes throughout the handler.
+Optional (compile-time) broadcast IECLASS_DISKINSERTED messages.
+Freeze for MAXON5.
+@
+text
+@d2 1
+a2 1
+ * $Id: pack.c,v 1.54 1993/06/24 05:12:49 Rhialto Exp $
+d4 10
+d69 1
+a69 1
+#ifdef HDEBUG
+d93 1
+d96 1
+a96 1
+Prototype int	    DiskRemoved(void);
+d121 1
+d134 2
+a135 1
+long		OpenCount;	/* How many open files/locks there are */
+d141 1
+a141 1
+    ChangeIntHand0,		/* is_Code */
+d152 2
+a153 1
+    register struct DosPacket *packet;
+d155 2
+d158 1
+d166 1
+a166 1
+    DOSBase = OpenLibrary("dos.library", 0L);
+d168 1
+a168 1
+#ifdef HDEBUG
+d176 2
+a177 1
+    DosPort = &((struct Process *)FindTask(NULL))->pr_MsgPort;
+d179 4
+a182 1
+    WaitPort(DosPort);      /* Get Startup Packet  */
+d185 1
+a188 1
+	struct FileSysStartupMsg *fssm;
+d275 1
+d283 1
+a283 1
+    ChangeInt.is_Data = rega4();        /* for PURE code */
+d289 5
+d296 2
+d316 3
+d320 1
+d323 3
+d327 2
+a328 1
+
+d331 2
+d334 1
+d346 1
+a346 1
+	    case ACTION_CURRENT_VOLUME: /* -,Magic,Count -> VolNode,UnitNr,Private */
+d396 1
+a396 1
+		    MSUnLock(msfl);     /* may call MayFreeVolNode */
+a504 1
+#if 0
+a506 1
+#endif
+d512 4
+a515 1
+/*	    case ACTION_SET_COMMENT:   / * -,Lock,Name,Comment	   Bool      */
+d530 2
+a531 1
+		    if (++Inhibited == 1)
+d533 1
+d535 4
+a538 2
+		    if (--Inhibited <= 0) {
+			Inhibited = 0;
+d543 1
+d589 2
+a590 2
+	    case ACTION_OPENRW: 	/* FileHandle,Lock,Name    Bool      */
+	    case ACTION_OPENOLD:	/* FileHandle,Lock,Name    Bool      */
+d592 1
+a592 1
+	    case ACTION_OPENNEW:	/* FileHandle,Lock,Name    Bool      */
+d618 1
+a618 1
+	    case ACTION_CLOSE:	/* FHArg1			Bool:Success */
+d633 1
+a633 1
+#ifdef ACTION_SET_FILE_SIZE
+d638 1
+a638 1
+#ifdef ACTION_WRITE_PROTECT
+d682 1
+a682 1
+	    case ACTION_IS_FILESYSTEM:
+d725 16
+d745 1
+a745 1
+/*	    case ACTION_RAWMODE:       / * Bool(-1:RAW 0:CON)      OldState  */
+d758 1
+a758 1
+#ifdef HDEBUG
+d760 1
+a760 1
+		debug(("NOREP\n"));
+d773 1
+a773 1
+	    MSUpdate(0);        /* Also may switch off motor */
+d777 1
+a777 1
+#ifdef HDEBUG
+d802 2
+a803 2
+#ifdef HDEBUG
+    Delay(100L);                /* This is dangerous! */
+d810 1
+a810 1
+	DevNode->dn_SegList = NULL;	/* Forbid()den, fortunately */
+d865 1
+a865 1
+#ifdef HDEBUG
+d900 2
+a901 2
+    register struct FileLock *fl;
+    register struct FileLock **flp;
+d946 26
+a983 1
+    struct DosInfo *di;
+a986 2
+    di = BTOC(((struct RootNode *) DOSBase->dl_Root)->rn_Info);
+
+d990 1
+a990 1
+	    strcpy(volname + 1, name);      /* Make sure \0 terminated */
+d995 1
+a995 1
+	    volnode->dl_Name = (BSTR *)CTOB(volname);
+d997 1
+a997 1
+	    volnode->dl_MSFileLockList = NULL;
+d999 2
+a1000 9
+	    if (DOSBase->dl_lib.lib_Version >= 37) {
+		if (AddDosEntry((struct DosList *)volnode) == DOSFALSE)
+		    goto error;
+	    } else {
+		Forbid();
+		volnode->dl_Next = di->di_DevInfo;
+		di->di_DevInfo = (long) CTOB(volnode);
+		Permit();
+	    }
+d1021 1
+a1021 1
+	register char *volname = BTOC(VolNode->dl_Name);
+a1023 1
+	volname[1+L_8+L_3] = '\0';      /* Make sure \0 terminated */
+d1038 2
+d1048 19
+a1066 3
+	dl = LockDosList(LDF_VOLUMES | LDF_WRITE);
+	(void)RemDosEntry((struct DosList *)volnode);
+	UnLockDosList(LDF_VOLUMES | LDF_WRITE);
+d1069 2
+a1070 2
+	register struct DeviceList *dl;
+	register void  *dlp;
+d1078 1
+d1080 1
+a1080 1
+#ifdef HDEBUG
+d1088 4
+a1091 2
+    dosfree(BTOC(volnode->dl_Name));
+    dosfree((ulong *)volnode);
+d1097 8
+d1116 1
+a1116 1
+	return 1;
+d1119 1
+a1119 1
+    return 0;
+d1122 1
+a1122 1
+#ifdef PROMISE_NOT_TO_DIE
+d1145 2
+d1169 1
+a1169 1
+int
+d1174 1
+a1174 1
+#ifdef INPUTDEV
+d1185 1
+a1185 1
+    MSDiskRemoved(&VolNode->dl_MSFileLockList);
+d1207 1
+a1207 1
+#ifdef PROMISE_NOT_TO_DIE
+d1210 6
+a1215 2
+	MSDiskInserted(&volnode->dl_MSFileLockList, volnode);
+	volnode->dl_MSFileLockList = NULL;
+a1216 4
+#ifdef INPUTDEV
+    if (IDDiskType != ID_NO_DISK_PRESENT)
+	InputDiskInserted();
+#endif
+d1230 1
+d1291 1
+a1291 1
+    register struct DeviceList *dl = NULL;
+d1312 2
+@
+
+
+1.54
+log
+@DICE 2.07.54R.
+@
+text
+@d2 5
+a6 2
+ * $Id: pack.c,v 1.53 92/10/25 02:23:50 Rhialto Rel $
+ * $Log:	pack.c,v $
+d76 1
+d78 1
+d87 1
+d89 1
+a96 1
+Local void DiskChange(void);
+d120 1
+a164 1
+
+a167 1
+	ulong *environ;
+d176 4
+a179 4
+	Disk.nsides = MS_NSIDES;
+	Disk.spt = MS_SPT;
+	Disk.bps = MS_BPS;
+	Disk.lowcyl = 0;
+d190 25
+a214 20
+	    if (environ = BTOC(fssm->fssm_Environ)) {
+		debug(("environ size %ld\n", environ[0]));
+#define get(xx,yy)  if (environ[DE_TABLESIZE] >= yy) xx = environ[yy];
+
+		get(MaxCache, DE_NUMBUFFERS);
+		get(BufMemType, DE_MEMBUFTYPE);
+		get(Disk.nsides, DE_NUMHEADS);
+		get(Disk.spt, DE_BLKSPERTRACK);
+		get(Disk.bps, DE_SIZEBLOCK);
+		Disk.bps *= 4;
+		debug(("Disk.bps %ld\n", (long)Disk.bps));
+		get(Disk.lowcyl, DE_LOWCYL);
+		get(Reserved, DE_RESERVEDBLKS);
+		/* Compatibility with old DosType = 1 */
+		get(Interleave, DE_DOSTYPE);
+		if (Interleave == 1) {
+		    Interleave = NICE_TO_DFx;
+		} else {
+		    get(Interleave, DE_INTERLEAVE) else Interleave = 0;
+		}
+d218 16
+a233 2
+	Disk.lowcyl *= (long)MS_BPS * Disk.spt * Disk.nsides;
+	Disk.lowcyl += (long)MS_BPS * Reserved;
+d260 3
+a269 3
+    WaitMask = PortMask | (1L << DiskReplyPort->mp_SigBit);
+    ChangeInt.is_Data = rega4();        /* for PURE code */
+    TDAddChangeInt(&ChangeInt);
+d290 1
+a291 1
+    entry:
+d465 1
+d468 1
+d519 1
+a519 1
+		    if (fl1->fl_Task == fl2->fl_Task) {
+d523 1
+a523 1
+			PRes1 = LOCK_DIFFERENT;
+d583 4
+d636 3
+a638 3
+		case ACTION_IS_FILESYSTEM:
+		    PRes1 = DOSTRUE;
+		    break;
+d641 9
+a649 11
+		case ACTION_CHANGE_MODE:
+		    switch (PArg1) {
+		    case CHANGE_FH:
+			PRes1 = MSChangeModeFH(MSFH(((struct FileHandle *)
+				    BTOC(PArg2))->fh_Arg1), PArg3);
+			break;
+		    case CHANGE_LOCK:
+			PRes1 = MSChangeModeLock(MSFL(((struct FileLock *)
+				    BTOC(PArg2))->fl_Key), PArg3);
+			break;
+		    }
+d651 2
+d685 1
+d690 1
+a690 2
+		if (error) {
+		    debug(("ERR=%ld\n", (long)error));
+d692 1
+a692 6
+		}
+#ifdef HDEBUG
+		else {
+		    debug(("RES=%06lx\n", PRes1));
+		}
+#endif
+a716 1
+    Delay(50L);                 /* I wanna even see the debug message! */
+d914 9
+a922 4
+	    Forbid();
+	    volnode->dl_Next = di->di_DevInfo;
+	    di->di_DevInfo = (long) CTOB(volnode);
+	    Permit();
+d924 1
+d945 3
+a947 3
+	strncpy(volname + 1, Disk.vollabel.de_Msd.msd_Name, 8+3);
+	volname[1+8+3] = '\0';      /* Make sure \0 terminated */
+	ZapSpaces(volname + 1, volname + 1 + 8+3);
+a960 4
+    struct DosInfo *di = BTOC(((struct RootNode *) DOSBase->dl_Root)->rn_Info);
+    register struct DeviceList *dl;
+    register void  *dlp;
+
+d966 18
+a983 9
+    dlp = &di->di_DevInfo;
+    Forbid();
+    for (dl = BTOC(di->di_DevInfo); dl && dl != volnode; dl = BTOC(dl->dl_Next))
+	dlp = &dl->dl_Next;
+    if (dl == volnode) {
+	*(BPTR *) dlp = dl->dl_Next;
+	dosfree(BTOC(dl->dl_Name));
+	dosfree((ulong *)dl);
+    }
+d985 5
+a989 2
+    else {
+	debug(("****PANIC: Unable to find volume node\n"));
+d991 3
+a993 2
+#endif				/* HDEBUG */
+    Permit();
+d1066 5
+d1105 70
+d1184 2
+d1208 1
+a1208 1
+DiskChange()
+@
+
+
+1.53
+log
+@Add 2.0 stuff.
+@
+text
+@d2 1
+a2 1
+ * $Id: pack.c,v 1.51 92/04/17 15:34:59 Rhialto Rel $
+d4 3
+a51 1
+#include <functions.h>
+d54 1
+a55 1
+#include <string.h>
+a141 1
+    /* SysBase = AbsExecBase; */
+a295 1
+		    register struct FileLock *newlock;
+d364 1
+a364 1
+	    case ACTION_MORECACHE:	/* #BufsToAdd		   Bool      */
+d367 3
+a369 3
+		} else
+		    PRes1 = DOSTRUE;
+		PRes2 = MaxCache;
+d448 1
+a448 1
+/*	    case ACTION_SET_COMMENT:	/* -,Lock,Name,Comment	   Bool      */
+d652 2
+a653 2
+/*	    case ACTION_WAIT_CHAR:	/* Timeout, ticks	   Bool      */
+/*	    case ACTION_RAWMODE:	/* Bool(-1:RAW 0:CON)      OldState  */
+d686 1
+a686 3
+	    if (DelayState != DELAY_OFF) {
+		MSUpdate(0);    /* Also may switch off motor */
+	    }
+d726 1
+a726 1
+    CloseLibrary(DOSBase);
+@
+
+
+1.51
+log
+@Freeze for MAXON. DosType->Interleave; extra uninhibits fixed.
+@
+text
+@d2 1
+a2 1
+ * $Id: pack.c,v 1.46 91/10/06 18:26:16 Rhialto Rel $
+d4 3
+d40 1
+a40 1
+ *  This code is (C) Copyright 1989,1990 by Olaf Seibert. All rights reserved.
+a42 3
+ *  Please note that we are NOT pure, so if you wish to mount
+ *  multiple MSDOS units, you must use different copies of this driver.
+ *
+a48 1
+#include <amiga.h>
+a49 1
+#include <string.h>
+d53 1
+d119 1
+a119 1
+    ChangeIntHand0,		 /* is_Code */
+d273 1
+a273 1
+	    debug(("Packet: %3ld %08lx %08lx %08lx %10s\n",
+d279 1
+a279 1
+		done = (PArg1 == 'Msh\0') ? PArg2 : 0;   /* Argh! Hack! */
+d281 9
+a289 1
+	    case ACTION_CURRENT_VOLUME: /* -		      VolNode,UnitNr */
+d306 1
+a306 1
+		    msfl = MSLock(MSFL(lock ? lock->fl_Key : NULL),
+d343 1
+a343 1
+		    PRes1 = MSDeleteFile(MSFL(lock ? lock->fl_Key : NULL),
+d358 1
+a358 1
+		    PRes1 = MSRename(MSFL(slock ? slock->fl_Key : NULL),
+d360 1
+a360 1
+				     MSFL(dlock ? dlock->fl_Key : NULL),
+d369 1
+d379 1
+a379 1
+		    msfl = MSDupLock(MSFL(lock ? lock->fl_Key : NULL));
+d393 1
+a393 1
+		    PRes1 = MSSetProtect(MSFL(lock ? lock->fl_Key : NULL),
+d407 1
+a407 1
+		    msfl = MSCreateDir(MSFL(lock ? lock->fl_Key : NULL),
+d422 1
+a422 1
+		    PRes1 = MSExamine(MSFL(lock ? lock->fl_Key : NULL),
+d433 2
+a434 1
+		    PRes1 = MSExNext(MSFL(lock ? lock->fl_Key : NULL), BTOC(PArg2));
+d456 1
+a456 1
+		    msfl = MSParentDir(MSFL(lock ? lock->fl_Key : NULL));
+d481 1
+a481 1
+		    PRes1 = MSSetDate(MSFL(lock ? lock->fl_Key : NULL),
+d536 1
+a536 1
+		    msfh = MSOpen(MSFL(lock ? lock->fl_Key : NULL),
+d559 1
+a559 3
+		PRes1 = MSSetFileSize(
+			    MSFH(((struct FileHandle *)BTOC(PArg1))->fh_Arg1),
+			    PArg2, PArg3);
+d594 1
+a594 1
+		    msfh = MSOpenFromLock(MSFL(lock ? lock->fl_Key : NULL));
+d614 2
+a615 1
+			PRes1 = MSChangeModeFH(MSFH(((struct FileHandle *)BTOC(PArg2))->fh_Arg1), PArg3);
+d618 2
+a619 1
+			PRes1 = MSChangeModeLock(MSFL(((struct FileLock *)BTOC(PArg2))->fh_Key), PArg3);
+d625 1
+a625 1
+	    case ACTION_COPY_DIR_FH:	/* FH			   Lock      */
+a627 1
+		    struct FileHandle *fh;
+a629 2
+		    fh = BTOC(PArg1);
+		    /*
+d631 1
+a631 1
+			msfl = MSParentOfFH(MSFH(fh->fh_Arg1));
+d633 4
+a636 1
+			msfl = MSDupLockFromFH(MSFH(fh->fh_Arg1));
+a637 2
+		    msfl = ((PType == ACTION_PARENT_FH) ?
+			    MSParentOfFH : MSDupLockFromFH) (MSFH(fh->fh_Arg1));
+d639 2
+a640 1
+		    PRes1 = MakeFileLock(msfl, lock, SHARED_LOCK);
+d645 2
+a646 7
+	    case ACTION_EXAMINE_FH:	 /* FH,Fib		   Bool      */
+		{
+		    struct FileHandle *fh;
+
+		    fh = BTOC(PArg1);
+		    PRes1 = MSExamineFH(MSFH(fh->fh_Arg1), BTOC(PArg2));
+		}
+@
+
+
+1.46
+log
+@
+Freeze for MAXON
+@
+text
+@d2 1
+a2 1
+ * $Id: pack.c,v 1.43 91/09/28 01:35:36 Rhialto Exp $
+d4 4
+d64 28
+d99 3
+a101 3
+PORT	       *DosPort;	/* Our DOS port... */
+DEVNODE        *DevNode;	/* Our DOS node.. created by DOS for us */
+DEVLIST        *VolNode;	/* Device List structure for our volume
+d104 1
+a104 2
+/* void 	  *SysBase;	/* EXEC library base */
+DOSLIB	       *DOSBase;	/* DOS library base */
+d112 2
+a113 2
+long		DosType;
+PACKET	       *DosPacket;	/* For the SystemRequest pr_WindowPtr */
+a116 6
+
+__stkargs __geta4 void ChangeIntHand(void);
+void NewVolNodeName(void);
+void DiskChange(void);
+BPTR MakeFileLock(struct MSFileLock *msfl, struct FileLock *fl, long mode);
+
+d120 1
+a120 1
+    ChangeIntHand,		/* is_Code */
+d131 3
+a133 3
+    register PACKET *packet;
+    MSG 	   *msg;
+    byte	    notdone;
+d156 1
+a156 1
+    packet = (PACKET *) msg->mn_Node.ln_Name;
+d176 1
+d198 7
+a204 1
+		get(DosType, DE_DOSTYPE);
+d242 1
+a242 1
+    notdone = 1;
+d244 1
+d259 1
+a259 1
+    for (notdone = 1; notdone;) {
+d280 1
+a280 1
+		notdone = 0;		/* try to die	 */
+a325 1
+		    OpenCount--;
+d457 2
+a458 1
+		    if (--Inhibited == 0)
+d460 1
+d537 2
+a538 3
+	    case ACTION_CLOSE:	/* FHArg1			   Bool:TRUE */
+		MSClose(MSFH(PArg1));
+		PRes1 = DOSTRUE;
+a593 1
+			OpenCount--;
+d687 1
+a687 1
+    } /* end for (;notdone) */
+d720 4
+a723 4
+#if 1
+    UnLoadSeg(DevNode->dn_SegList);     /* This is real fun. We are still */
+    DevNode->dn_SegList = NULL; 	/* Forbid()den, fortunately */
+#endif
+d730 7
+a736 1
+__stkargs __geta4 void
+d769 1
+a769 1
+    DEVLIST *volnode = NULL;
+d815 1
+a815 1
+    DEVLIST	   *volnode;
+d817 1
+a817 1
+    volnode = (DEVLIST *)BTOC(lock->fl_Volume);
+d825 1
+d866 1
+a866 1
+DEVLIST        *
+d871 2
+a872 2
+    DOSINFO	   *di;
+    register DEVLIST *volnode;
+d875 1
+a875 1
+    di = BTOC(((ROOTNODE *) DOSBase->dl_Root)->rn_Info);
+d877 1
+a877 1
+    if (volnode = dosalloc((ulong)sizeof (DEVLIST))) {
+d928 1
+a928 1
+DEVLIST        *volnode;
+d930 2
+a931 2
+    DOSINFO	   *di = BTOC(((ROOTNODE *) DOSBase->dl_Root)->rn_Info);
+    register DEVLIST *dl;
+d966 1
+a966 1
+DEVLIST *volnode;
+d976 33
+d1046 1
+a1046 1
+register DEVLIST	*volnode;
+d1054 3
+d1062 1
+a1062 1
+DEVLIST *
+d1067 1
+a1067 1
+    register DEVLIST *dl = NULL;
+d1070 1
+a1070 1
+	DOSINFO        *di = BTOC(((ROOTNODE *) DOSBase->dl_Root)->rn_Info);
+d1117 2
+a1118 6
+    if (lock && BTOC(lock->fl_Volume) != VolNode)
+	error = ERROR_DEVICE_NOT_MOUNTED;
+    else if (IDDiskType == ID_NO_DISK_PRESENT)
+	error = ERROR_NO_DISK;
+    else if (IDDiskType != ID_DOS_DISK)
+	error = ERROR_NOT_A_DOS_DISK;
+@
+
+
+1.43
+log
+@Changed to newer syslog stuff.
+@
+text
+@d2 1
+a2 1
+ * $Id: pack.c,v 1.42 91/06/13 23:46:21 Rhialto Exp $
+d4 3
+d57 2
+a58 1
+#define MSFL(something)     (struct MSFileLock *)(something)
+d83 3
+d90 1
+a108 1
+    long	    OpenCount;	    /* How many open files/locks there are */
+d269 1
+a269 8
+		    if (msfl) {
+			if (newlock = NewFileLock(msfl, lock)) {
+			    newlock->fl_Access = lockmode;
+			    PRes1 = (long) CTOB(newlock);
+			    OpenCount++;
+			} else
+			    MSUnLock(msfl);
+		    }
+a333 1
+		    register struct FileLock *newlock;
+d341 2
+a342 9
+		    if (msfl) {
+			if (newlock = NewFileLock(msfl, lock)) {
+			    newlock->fl_Access =
+				lock ? lock->fl_Access : SHARED_LOCK;
+			    PRes1 = (long) CTOB(newlock);
+			    OpenCount++;
+			} else
+			    MSUnLock(msfl);
+		    }
+a358 1
+		    register struct FileLock *newlock;
+d370 1
+a370 8
+		    if (msfl) {
+			if (newlock = NewFileLock(msfl, lock)) {
+			    newlock->fl_Access = SHARED_LOCK;
+			    PRes1 = (long) CTOB(newlock);
+			    OpenCount++;
+			} else
+			    MSUnLock(msfl);
+		    }
+d378 1
+d381 1
+a409 1
+		    register struct FileLock *newlock;
+a411 1
+		    long mode;
+d417 1
+a417 8
+		    if (msfl) {
+			if (newlock = NewFileLock(msfl, lock)) {
+			    newlock->fl_Access = SHARED_LOCK;
+			    PRes1 = (long) CTOB(newlock);
+			    OpenCount++;
+			} else
+			    MSUnLock(msfl);
+		    }
+d421 7
+a427 7
+		if (Inhibited = PArg1) {
+		    DiskRemoved();
+		} else	 /* Fall through to ACTION_DISK_CHANGE: */
+		    goto disk_change;
+	    case ACTION_DISK_CHANGE:	/* ?			   ?	     */
+	    disk_change:
+		DiskChange();
+d443 17
+d461 2
+a462 1
+		if (CheckRead(NULL)) {
+d465 1
+a465 2
+		    PRes1 = MSRead((struct MSFileHandle *)PArg1,
+				   (byte *)PArg2, PArg3);
+d468 2
+a469 1
+		if (CheckWrite(NULL)) {
+d472 1
+a472 2
+		    PRes1 = MSWrite((struct MSFileHandle *)PArg1,
+				    (byte *)PArg2, PArg3);
+d503 2
+a504 2
+	    case ACTION_CLOSE:	/* FHArg1			  Bool:TRUE  */
+		MSClose((struct MSFileHandle *)PArg1);
+d509 2
+a510 1
+		if (CheckRead(NULL)) {
+d513 89
+a601 1
+		    PRes1 = MSSeek((struct MSFileHandle *)PArg1, PArg2, PArg3);
+d603 11
+d795 26
+d1050 1
+a1050 1
+    else if (IDDiskState != ID_VALIDATED)
+@
+
+
+1.42
+log
+@DICE conversion
+@
+text
+@d2 1
+a2 1
+ * $Id: pack.c,v 1.40 91/03/03 17:45:09 Rhialto Rel $
+d4 3
+d49 1
+a49 4
+#   define	debug(x)  syslog x
+    void initsyslog(void);
+    void syslog(char *, ...);
+    void uninitsyslog(void);
+d637 1
+a637 1
+    DEVLIST *volnode;
+d641 2
+a642 1
+    } else {
+d644 10
+d655 1
+@
+
+
+1.40
+log
+@Freeze for MAXON
+@
+text
+@d2 1
+a2 1
+ * $Id: pack.c,v 1.32 90/11/23 23:53:22 Rhialto Exp $
+d4 3
+d9 1
+a9 1
+ * 
+d39 4
+a43 1
+#include "han.h"
+d47 3
+d54 2
+d68 1
+a68 1
+void	       *SysBase;	/* EXEC library base */
+d80 3
+a82 2
+void ChangeIntHand(), DiskChange();
+void NewVolNodeName();
+d96 1
+a96 1
+messydoshandler()
+d109 1
+a109 1
+    SysBase = AbsExecBase;
+d256 1
+a256 1
+		    btos(PArg2, buf);
+d259 1
+a259 1
+		    msfl = MSLock(lock ? lock->fl_Key : NULL,
+d275 1
+a275 1
+		btos(PArg1, buf);
+d290 1
+a290 1
+		    msfl = (struct MSFileLock *)lock->fl_Key;
+d303 2
+a304 2
+		    btos(PArg2, buf);
+		    PRes1 = MSDeleteFile(lock ? lock->fl_Key : NULL,
+d317 3
+a319 3
+		    btos(PArg2, buf);
+		    btos(PArg4, buf2);
+		    PRes1 = MSRename(slock ? slock->fl_Key : NULL,
+d321 1
+a321 1
+				     dlock ? dlock->fl_Key : NULL,
+d340 1
+a340 1
+		    msfl = MSDupLock(lock ? lock->fl_Key : NULL);
+d360 3
+a362 2
+		    btos(PArg3, buf);
+		    PRes1 = MSSetProtect(lock ? lock->fl_Key : NULL, buf, PArg4);
+d374 1
+a374 1
+		    btos(PArg2, buf);
+d376 2
+a377 1
+		    msfl = MSCreateDir(lock ? lock->fl_Key : NULL, buf);
+d396 2
+a397 1
+		    PRes1 = MSExamine(lock ? lock->fl_Key : NULL, BTOC(PArg2));
+d407 1
+a407 1
+		    PRes1 = MSExNext(lock ? lock->fl_Key : NULL, BTOC(PArg2));
+d431 1
+a431 1
+		    msfl = MSParentDir(lock ? lock->fl_Key : NULL);
+d446 2
+a447 1
+		} else { /* Fall through to ACTION_DISK_CHANGE: */
+d449 2
+a450 2
+		    DiskChange();
+		}
+d460 2
+a461 2
+		    btos(PArg3, buf);
+		    PRes1 = MSSetDate(lock ? lock->fl_Key : NULL,
+d463 1
+a463 1
+				      PArg4);
+d470 2
+a471 1
+		    PRes1 = MSRead(PArg1, PArg2, PArg3);
+d477 2
+a478 1
+		    PRes1 = MSWrite(PArg1, PArg2, PArg3);
+d480 3
+a490 2
+	    case ACTION_OPENRW: 	/* FileHandle,Lock,Name    Bool      */
+	    case ACTION_OPENOLD:	/* FileHandle,Lock,Name    Bool      */
+d492 1
+d497 1
+a497 1
+		    btos(PArg3, buf);
+d499 1
+a499 1
+		    msfh = MSOpen(lock ? lock->fl_Key : NULL,
+d510 1
+a510 1
+		MSClose(PArg1);
+d518 1
+a518 1
+		    PRes1 = MSSeek(PArg1, PArg2, PArg3);
+d555 1
+a555 1
+	if (CheckIO(TimeIOReq)) {   /* Timer finished? */
+d604 2
+a605 2
+void
+ChangeIntHand()
+a606 4
+/* INDENT OFF */
+#asm
+    move.l  a6,-(sp)
+#endasm
+a608 4
+#asm
+    move.l  (sp)+,a6
+#endasm
+/* INDENT ON */
+d680 1
+a680 1
+	dosfree(fl);
+d697 1
+a698 1
+char *name;
+d714 1
+a714 1
+	    volnode->dl_Name = CTOB(volname);
+d723 1
+a723 1
+	    dosfree(volnode);
+d775 1
+a775 1
+	dosfree(dl);
+@
+
+
+1.32
+log
+@Prepare for syslog
+@
+text
+@d2 1
+a2 1
+ * $Id: pack.c,v 1.31 90/11/10 02:42:38 Rhialto Exp $
+d4 3
+@
+
+
+1.31
+log
+@Patch 3a.
+@
+text
+@d2 1
+a2 1
+ * $Id: pack.c,v 1.30a $
+d4 3
+d37 1
+a37 1
+#   define	debug(x)  dbprintf x
+d55 1
+a55 1
+DOSLIB	       *DOSBase;	/* DOS library base for debug process */
+d99 1
+a99 2
+     * Initialize debugging code as soon as possible. Only SysBase and
+     * DOSBase are required.
+d102 1
+a102 1
+    dbinit();
+d147 1
+a147 1
+		debug(("Disk.bps %d\n", Disk.bps));
+d315 1
+a315 1
+		debug(("Now %d cache sectors\n", MaxCache));
+d508 1
+a508 1
+		    debug(("ERR=%d\n", error));
+d560 1
+a560 1
+    debug(("HanCloseDown returned. dbuninit in 2 seconds:\n"));
+d563 1
+a563 1
+     * Remove debug window, closedown, fall of the end of the world.
+d568 1
+a568 1
+    dbuninit();
+a907 134
+
+#ifdef HDEBUG
+		    /*	DEBUGGING			*/
+PORT *Dbport;	    /*	owned by the debug process	*/
+PORT *Dback;	    /*	owned by the DOS device driver	*/
+short DBEnable;
+
+/*
+ *  DEBUGGING CODE.	You cannot make DOS library calls that access other
+ *  devices from within a DOS device driver because they use the same
+ *  message port as the driver.  If you need to make such calls you must
+ *  create a port and construct the DOS messages yourself.  I do not
+ *  do this.  To get debugging info out another PROCESS is created to which
+ *  debugging messages can be sent.
+ */
+
+extern void debugproc();
+
+dbinit()
+{
+    TASK *task = FindTask(NULL);
+
+    Dback = CreatePort("MSH:Dback", -1L);
+    CreateProc("MSH_DB", (long)task->tc_Node.ln_Pri+1, CTOB(debugproc), 4096L);
+    WaitPort(Dback);                                /* handshake startup    */
+    GetMsg(Dback);                                  /* remove dummy msg     */
+    DBEnable = 1;
+    dbprintf("Debugger running V1.10\n");
+}
+
+dbuninit()
+{
+    MSG killmsg;
+
+    if (Dbport) {
+	killmsg.mn_Length = 0;	    /*	0 means die	    */
+	PutMsg(Dbport,  &killmsg);
+	WaitPort(Dback);            /*  He's dead jim!      */
+	GetMsg(Dback);
+	DeletePort(Dback);
+
+	/*
+	 *  Since the debug process is running at a greater priority, I
+	 *  am pretty sure that it is guarenteed to be completely removed
+	 *  before this task gets control again.  Still, it doesn't hurt...
+	 */
+
+	Delay(50L);                 /*  ensure he's dead    */
+    }
+}
+
+dbprintf(a,b,c,d,e,f,g,h,i,j)
+long a,b,c,d,e,f,g,h,i,j;
+{
+    struct {
+	MSG	msg;
+	char	buf[256];
+    } msgbuf;
+    register MSG *msg = &msgbuf.msg;
+    register long len;
+
+    if (Dbport && DBEnable) {
+	sprintf(msgbuf.buf,a,b,c,d,e,f,g,h,i,j);
+	len = strlen(msgbuf.buf)+1;
+	msg->mn_Length = len;	/*  Length NEVER 0  */
+	PutMsg(Dbport, msg);
+	WaitPort(Dback);
+	GetMsg(Dback);
+    }
+}
+
+/*
+ *  BTW, the DOS library used by debugmain() was actually opened by
+ *  the device driver.
+ */
+
+debugmain()
+{
+    register MSG *msg;
+    register long len;
+    register void *fh;
+    void *fh2;
+    MSG DummyMsg;
+
+    Dbport = CreatePort("MSH:Dbport", -1L);
+    fh = Open("CON:0/10/640/190/FileSystem debug", MODE_NEWFILE);
+    fh2 = Open("PAR:", MODE_OLDFILE);
+    PutMsg(Dback, &DummyMsg);
+    for (;;) {
+	WaitPort(Dbport);
+	msg = GetMsg(Dbport);
+	len = msg->mn_Length;
+	if (len == 0)
+	    break;
+	--len;			    /*	Fix length up	*/
+	if (DBEnable & 1)
+	    Write(fh, msg+1, len);
+	if (DBEnable & 2)
+	    Write(fh2, msg+1, len);
+	PutMsg(Dback, msg);
+    }
+    Close(fh);
+    Close(fh2);
+    DeletePort(Dbport);
+    PutMsg(Dback, msg);             /*  Kill handshake  */
+}
+
+/*
+ *  The assembly tag for the DOS process:  CNOP causes alignment problems
+ *  with the Aztec assembler for some reason.  I assume then, that the
+ *  alignment is unknown.  Since the BCPL conversion basically zero's the
+ *  lower two bits of the address the actual code may start anywhere
+ *  within 8 bytes of address (remember the first longword is a segment
+ *  pointer and skipped).  Sigh....  (see CreateProc() above).
+ */
+
+#asm
+	public	_debugproc
+	public	_debugmain
+
+	cseg
+_debugproc:
+	nop
+	nop
+	nop
+	nop
+	nop
+	movem.l D2-D7/A2-A6,-(sp)
+	jsr	_debugmain
+	movem.l (sp)+,D2-D7/A2-A6
+	rts
+#endasm
+
+#endif				/* HDEBUG */
+@
+
+
+1.30
+log
+@Release 1 Patch 3
+@
+text
+@d2 5
+a6 2
+ * $Id: pack.c,v 1.4 90/03/11 17:45:27 Rhialto Rel $
+ * $Log$
+d18 2
+a19 2
+ *  This code is (C) Copyright 1989 by Olaf Seibert. All rights reserved. May
+ *  not be used or copied without a licence.
+d64 1
+a64 1
+void NewVolNodeName(), NewVolNodeDate();
+a733 14
+ *  Get the current VolNode a new date, from the last root directory.
+ */
+
+void
+NewVolNodeDate()
+{
+    if (VolNode) {
+	ToDateStamp(&VolNode->dl_VolumeDate,
+		    Disk.vollabel.de_Msd.msd_Date,
+		    Disk.vollabel.de_Msd.msd_Time);
+    }
+}
+
+/*
+a814 1
+    NewVolNodeDate();       /* Fetch new date of root directory */
+@
+
+
+1.4
+log
+@Use Reserved from Mountlist
+@
+text
+@d2 2
+a3 12
+ * $Id: pack.c,v 1.3 90/02/03 17:02:05 Rhialto Rel $
+ * $Log:	pack.c,v $
+ * Revision 1.3  90/02/03  17:02:05  Rhialto
+ * Add error checking wrt dosalloc()
+ *
+ * Revision 1.2  89/12/17  23:06:54  Rhialto
+ * Add ACTION_SET_PROTECT
+ *
+ * Revision 1.1  89/12/17  19:53:24  Rhialto
+ * Initial revision
+ *
+ *
+d57 1
+d145 1
+d167 1
+a167 1
+	PRes2 = ERROR_NO_FREE_STORE;	/* no better message available */
+@
+
+
+1.3
+log
+@Add error checking wrt dosalloc()
+@
+text
+@d2 1
+a2 1
+ * $Id: pack.c,v 1.2 89/12/17 23:06:54 Rhialto Exp Locker: Rhialto $
+d4 3
+d40 1
+a40 1
+#ifdef DEBUG
+d100 1
+a100 1
+#ifdef DEBUG
+d107 1
+a107 1
+#endif				/* DEBUG */
+d120 1
+d132 1
+d143 1
+a143 1
+#define get(xx,yy)  if (environ[0] >= yy) xx = environ[yy];
+d153 1
+d158 1
+d514 1
+a514 1
+#ifdef DEBUG
+d522 1
+a522 1
+#ifdef DEBUG
+d543 1
+a543 1
+#ifdef DEBUG
+d546 1
+a546 1
+#endif				/* DEBUG */
+d569 1
+a569 1
+#ifdef DEBUG
+d572 1
+a572 1
+#endif				/* DEBUG */
+d779 1
+a779 1
+#ifdef DEBUG
+d783 1
+a783 1
+#endif				/* DEBUG */
+d927 1
+a927 1
+#ifdef DEBUG
+d1059 1
+a1059 1
+#endif				/* DEBUG */
+@
+
+
+1.2
+log
+@Add ACTION_SET_PROTECT
+@
+text
+@d2 1
+a2 1
+ * $Id: pack.c,v 1.1 89/12/17 19:53:24 Rhialto Exp Locker: Rhialto $
+d4 3
+a50 1
+PROC	       *DosProc;	/* Our Process */
+d106 1
+a106 2
+    DosProc = FindTask(NULL);
+    DosPort = &DosProc->pr_MsgPort;
+a111 6
+    /*
+     * Loading DevNode->dn_Task causes DOS *NOT* to startup a new
+     * instance of the device driver for every reference.   E.G. if
+     * you were writing a CON: device you would want this field to be
+     * NULL.
+     */
+d129 2
+a130 2
+	if (fssm = (struct FileSysStartupMsg *)BADDR(DevNode->dn_Startup)) {
+				    /* Same as BADDR(packet->dp_Arg2) */
+d156 4
+a159 2
+	 * Set dn_Task field which tells DOS not to startup a new
+	 * process on every reference.
+d232 1
+a232 1
+		    long lockmode;
+d243 7
+a249 4
+		    if (msfl && (newlock = NewFileLock(msfl, lock))) {
+			newlock->fl_Access = lockmode;
+			PRes1 = (long) CTOB(newlock);
+			OpenCount++;
+d323 8
+a330 4
+		    if (msfl && (newlock = NewFileLock(msfl, lock))) {
+			newlock->fl_Access = lock ? lock->fl_Access : SHARED_LOCK;
+			PRes1 = (long) CTOB(newlock);
+			OpenCount++;
+d358 7
+a364 4
+		    if (msfl && (newlock = NewFileLock(msfl, lock))) {
+			newlock->fl_Access = lock ? lock->fl_Access : SHARED_LOCK;
+			PRes1 = (long) CTOB(newlock);
+			OpenCount++;
+d412 6
+a417 4
+			newlock = NewFileLock(msfl, lock);
+			newlock->fl_Access = lock ? lock->fl_Access : SHARED_LOCK;
+			PRes1 = (long) CTOB(newlock);
+			OpenCount++;
+d626 10
+a635 8
+    newlock = dosalloc((ulong)sizeof (*newlock));
+    newlock->fl_Key = (ulong) msfl;
+    newlock->fl_Task = DosPort;
+    newlock->fl_Volume = (BPTR) CTOB(volnode);
+    Forbid();
+    newlock->fl_Link = volnode->dl_LockList;
+    volnode->dl_LockList = (BPTR) CTOB(newlock);
+    Permit();
+d681 2
+a682 2
+    DOSINFO	   *di = BTOC(((ROOTNODE *) DOSBase->dl_Root)->rn_Info);
+    register DEVLIST *volnode = dosalloc((ulong)sizeof (DEVLIST));
+d685 1
+a685 3
+    volname = dosalloc(32L);
+    volname[0] = strlen(name);
+    strcpy(volname + 1, name);      /* Make sure \0 terminated */
+d687 23
+a709 11
+    volnode->dl_Type = DLT_VOLUME;
+    volnode->dl_Task = DosPort;
+    volnode->dl_DiskType = IDDiskType;
+    volnode->dl_Name = CTOB(volname);
+    volnode->dl_VolumeDate = *date;
+    volnode->dl_MSFileLockList = NULL;
+
+    Forbid();
+    volnode->dl_Next = di->di_DevInfo;
+    di->di_DevInfo = (long) CTOB(volnode);
+    Permit();
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d2 4
+a5 2
+ * $Id$
+ * $Log$
+d7 1
+d331 9
+a339 2
+		/* if (CheckWrite(BTOC(PArg2)))
+		    break; */
+@

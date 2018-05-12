@@ -1,0 +1,791 @@
+head	1.56;
+access;
+symbols
+	SHAREWARE2:1.56
+	MAXON5:1.55
+	MAXON4:1.53
+	MAXON3:1.51
+	MAXON2:1.46
+	MAXON1:1.40
+	Patch3:1.30
+	Patch1:1.3
+	Rel1:1.2;
+locks;
+comment	@ * @;
+
+
+1.56
+date	96.12.22.00.22.33;	author Rhialto;	state Rel;
+branches;
+next	1.55;
+
+1.55
+date	93.12.30.23.02.45;	author Rhialto;	state Rel;
+branches;
+next	1.54;
+
+1.54
+date	93.06.24.05.12.49;	author Rhialto;	state Exp;
+branches;
+next	1.53;
+
+1.53
+date	92.10.25.02.24.40;	author Rhialto;	state Rel;
+branches;
+next	1.51;
+
+1.51
+date	92.04.17.15.36.18;	author Rhialto;	state Rel;
+branches;
+next	1.46;
+
+1.46
+date	91.10.06.18.25.58;	author Rhialto;	state Rel;
+branches;
+next	1.43;
+
+1.43
+date	91.09.28.01.43.35;	author Rhialto;	state Exp;
+branches;
+next	1.42;
+
+1.42
+date	91.06.13.23.55.51;	author Rhialto;	state Exp;
+branches;
+next	1.40;
+
+1.40
+date	91.03.03.17.46.02;	author Rhialto;	state Rel;
+branches;
+next	1.30;
+
+1.30
+date	90.06.04.23.16.41;	author Rhialto;	state Rel;
+branches;
+next	1.3;
+
+1.3
+date	90.03.11.17.44.51;	author Rhialto;	state Rel;
+branches;
+next	1.2;
+
+1.2
+date	90.02.03.17.01.19;	author Rhialto;	state Rel;
+branches;
+next	1.1;
+
+1.1
+date	89.12.17.19.57.50;	author Rhialto;	state Exp;
+branches;
+next	;
+
+
+desc
+@Some support routines mostly by Matt Dillon
+@
+
+
+1.56
+log
+@Added taskwait() and some packets to debug function.
+@
+text
+@/*-
+ * $Id: support.c,v 1.55 1993/12/30 23:02:45 Rhialto Rel $
+ * $Log: support.c,v $
+ * Revision 1.55  1993/12/30  23:02:45	Rhialto
+ * Add a few packet names.
+ *
+ * Revision 1.54  1993/06/24  05:12:49	Rhialto
+ * DICE 2.07.54R.
+ *
+ * Revision 1.53  92/10/25  02:24:40  Rhialto
+ * Add 2.0 stuff for debugging. Rearrange some #includes for precompilation.
+ *
+ * Revision 1.51  92/04/17  15:36:18  Rhialto
+ * Freeze for MAXON.
+ *
+ * Revision 1.46  91/10/06  18:25:58  Rhialto
+ *
+ * Freeze for MAXON
+ *
+ * Revision 1.43  91/09/28  01:43:35  Rhialto
+ * *** empty log message ***
+ *
+ * Revision 1.42  91/06/13  23:55:51  Rhialto
+ * DICE conversion
+ *
+ * Revision 1.40  91/03/03  17:46:02  Rhialto
+ * Freeze for MAXON
+ *
+ * Revision 1.30  90/06/04  23:16:41  Rhialto
+ * Release 1 Patch 3
+ *
+-*/
+
+#include "han.h"
+#include "dos.h"
+#include <stdlib.h>
+
+#if HDEBUG
+#   include "syslog.h"
+#else
+#   define	debug(x)
+#endif
+
+Prototype void returnpacket(struct DosPacket *packet);
+Prototype struct DosPacket *taskwait(struct Process *myproc);
+Prototype long packetsqueued(void);
+Prototype void *dosalloc(ulong bytes);
+Prototype void dosfree(ulong *ptr);
+Prototype void btos(byte *bstr, byte *buf);
+Prototype void *GetHead(struct MinList *list);
+Prototype void *GetTail(struct MinList *list);
+Prototype char *typetostr(long ty);
+
+/*
+ * PACKET ROUTINES.	Dos Packets are in a rather strange format as you
+ * can see by this and how the PACKET structure is extracted in the
+ * GetMsg() of the main routine.
+ */
+
+void
+returnpacket(packet)
+struct DosPacket *packet;
+{
+    struct Message *mess;
+    struct MsgPort *replyport;
+
+    replyport = packet->dp_Port;
+    mess = packet->dp_Link;
+    packet->dp_Port = DosPort;
+    mess->mn_Node.ln_Name = (char *) packet;
+    mess->mn_Node.ln_Succ = NULL;
+    mess->mn_Node.ln_Pred = NULL;
+    PutMsg(replyport, mess);
+}
+
+#if TASKWAIT
+
+/*
+ * taskwait() ... Waits for a message to arrive at your port and
+ *   extracts the packet address which is returned to you.
+ */
+
+typedef struct Message *(*funcptr)(__A0 void *);
+
+struct DosPacket *
+taskwait(myproc)
+struct Process *myproc;
+{
+    struct MsgPort *myport;
+    struct Message *mymess;
+
+    if (myproc->pr_PktWait) {
+	debug(("taskwait external...\n"));
+	/* As per AmigaDOS tech. ref. man (V1.1) page 265: */
+	/* ``In the same way as GetMsg, the function should */
+	/*   return a message when one is available.'' */
+	/* The same sentence is in TADM 3rd ed on page 385. */
+	mymess = (*(funcptr)myproc->pr_PktWait)(myproc);
+    } else {
+	debug(("taskwait...\n"));
+	myport = &myproc->pr_MsgPort;
+	WaitPort(myport);
+	mymess = (struct Message *)GetMsg(myport);
+    }
+    debug(("taskwait: done\n"));
+    return((struct DosPacket *)mymess->mn_Node.ln_Name);
+}
+
+#endif
+
+/*
+ * Are there any packets queued to our device?
+ */
+
+long
+packetsqueued()
+{
+    return ((void *) DosPort->mp_MsgList.lh_Head !=
+	    (void *) &DosPort->mp_MsgList.lh_Tail);	/* & inserted by OIS */
+}
+
+/*
+ * DOS MEMORY ROUTINES
+ */
+
+void	       *
+dosalloc(bytes)
+ulong	bytes;
+{
+    ulong *ptr;
+
+    bytes += sizeof (*ptr);
+    if (ptr = AllocMem(bytes, MEMF_PUBLIC | MEMF_CLEAR)) {
+	*ptr = bytes;
+	return (ptr + 1);
+    }
+
+    return NULL;
+}
+
+void
+dosfree(ptr)
+ulong *ptr;
+{
+    --ptr;
+    FreeMem(ptr, *ptr);
+}
+
+/*
+ * Convert a BSTR into a normal string.. copying the string into buf. I
+ * use normal strings for internal storage, and convert back and forth
+ * when required.
+ */
+
+void
+btos(bstr, buf)
+byte	       *bstr;
+byte	       *buf;
+{
+    bstr = BTOC(bstr);
+    if (*bstr)
+	CopyMem(bstr + 1, buf, (long)*bstr);
+    buf[*bstr] = 0;
+}
+
+/*
+ * Some EXEC list handling routines not found in the EXEC library.
+ */
+
+#ifdef notdef
+Prototype void * NextNode(struct MinNode *node);
+
+void	       *
+NextNode(node)
+struct MinNode *node;
+{
+    node = node->mln_Succ;
+    if (node->mln_Succ == NULL)
+	return (NULL);
+    return (node);
+}
+
+#endif
+
+void	       *
+GetHead(list)
+struct MinList *list;
+{
+    if ((void *) list->mlh_Head != (void *) &list->mlh_Tail)
+	return (list->mlh_Head);
+    return (NULL);
+}
+
+void	       *
+GetTail(list)
+struct MinList *list;
+{
+    if ((void *) list->mlh_Head != (void *) &list->mlh_Tail)
+	return (list->mlh_TailPred);
+    return (NULL);
+}
+
+#if HDEBUG
+char	       *
+typetostr(ty)
+long ty;
+{
+    switch (ty) {
+
+    /* 1.3 stuff: */
+
+    case ACTION_NIL:		    /* 0 */
+	return ("ACTION_NIL");
+    case ACTION_DIE:		    /* 5 */
+	return ("ACTION_DIE");
+    case ACTION_EVENT:		    /* 6 */
+	return ("ACTION_EVENT");
+    case ACTION_CURRENT_VOLUME:     /* 7 */
+	return ("ACTION_CURRENT_VOLUME");
+    case ACTION_LOCATE_OBJECT:	    /* 8 */
+	return ("ACTION_LOCATE_OBJECT");
+    case ACTION_RENAME_DISK:	    /* 9 */
+	return ("ACTION_RENAME DISK");
+    case ACTION_FREE_LOCK:	    /* 15 */
+	return ("ACTION_FREE_LOCK");
+    case ACTION_DELETE_OBJECT:	    /* 16 */
+	return ("ACTION_DELETE_OBJECT");
+    case ACTION_RENAME_OBJECT:	    /* 17 */
+	return ("ACTION_RENAME_OBJECT");
+    case ACTION_MORE_CACHE:	    /* 18 */
+	return ("ACTION_MORE_CACHE");
+    case ACTION_COPY_DIR:	    /* 19 */
+	return ("ACTION_COPY_DIR");
+    case ACTION_WAIT_CHAR:	    /* 20 */
+	return ("ACTION_WAIT_FOR_CHAR");
+    case ACTION_SET_PROTECT:	    /* 21 */
+	return ("ACTION_SET_PROTECT");
+    case ACTION_CREATE_DIR:	    /* 22 */
+	return ("ACTION_CREATEDIR");
+    case ACTION_EXAMINE_OBJECT:     /* 23 */
+	return ("ACTION_EXAMINE OBJ");
+    case ACTION_EXAMINE_NEXT:	    /* 24 */
+	return ("EXAMINE NEXT");
+    case ACTION_DISK_INFO:	    /* 25 */
+	return ("ACTION_DISK INFO");
+    case ACTION_INFO:		    /* 26 */
+	return ("ACTION_INFO");
+    case ACTION_FLUSH:		    /* 27 */
+	return ("ACTION_FLUSH");
+    case ACTION_SET_COMMENT:	    /* 28 */
+	return ("ACTION_SET_COMMENT");
+    case ACTION_PARENT: 	    /* 29 */
+	return ("ACTION_PARENT");
+    case ACTION_TIMER:		    /* 30 */
+	return ("ACTION_TIMER");
+    case ACTION_INHIBIT:	    /* 31 */
+	return ("ACTION_INHIBIT");
+    case ACTION_SET_DATE:	    /* 34 */
+	return ("ACTION_SET_DATE");
+    case ACTION_READ:		    /* 82 */
+	return ("ACTION_READ");
+    case ACTION_WRITE:		    /* 85 */
+	return ("ACTION_WRITE");
+    case ACTION_SCREEN_MODE:	    /* 994 */
+	return ("ACTION_SCREEN_MODE");
+    case ACTION_FINDUPDATE:	    /* 1004 */
+	return ("ACTION_FINDUPDATE");
+    case ACTION_FINDINPUT:	    /* 1005 */
+	return ("ACTION_FINDINPUT");
+    case ACTION_FINDOUTPUT:	    /* 1006 */
+	return ("ACTION_FINDOUTPUT");
+    case ACTION_END:		    /* 1007 */
+	return ("ACTION_END");
+    case ACTION_SEEK:		    /* 1008 */
+	return ("ACTION_SEEK");
+
+    /* 2.0 stuff: */
+
+    case ACTION_SAME_LOCK:	    /* 40 */
+	return "ACTION_SAME_LOCK";
+    case ACTION_CHANGE_SIGNAL:	    /* 995 */
+	return "ACTION_CHANGE_SIGNAL";
+    case ACTION_FORMAT: 	    /* 1020 */
+	return "ACTION_FORMAT";
+    case ACTION_MAKE_LINK:	    /* 1021 */
+	return "ACTION_MAKE_LINK";
+    case ACTION_SET_FILE_SIZE:	    /* 1022 */
+	return "ACTION_SET_FILE_SIZE";
+    case ACTION_WRITE_PROTECT:	    /* 1023 */
+	return "ACTION_WRITE_PROTECT";
+    case ACTION_READ_LINK:	    /* 1024 */
+	return "ACTION_READ_LINK";
+    case ACTION_FH_FROM_LOCK:	    /* 1026 */
+	return "ACTION_FH_FROM_LOCK";
+    case ACTION_IS_FILESYSTEM:	    /* 1027 */
+	return "ACTION_IS_FILESYSTEM";
+    case ACTION_CHANGE_MODE:	    /* 1028 */
+	return "ACTION_CHANGE_MODE";
+    case ACTION_COPY_DIR_FH:	    /* 1030 */
+	return "ACTION_COPY_DIR_FH";
+    case ACTION_PARENT_FH:	    /* 1031 */
+	return "ACTION_PARENT_FH";
+    case ACTION_EXAMINE_ALL:	    /* 1033 */
+	return "ACTION_EXAMINE_ALL";
+    case ACTION_EXAMINE_FH:	    /* 1034 */
+	return "ACTION_EXAMINE_FH";
+#if defined(ACTION_DIRECT_READ)
+    case ACTION_DIRECT_READ:	    /* 1900 CDTV */
+	return "ACTION_DIRECT_READ";
+#endif
+    case ACTION_LOCK_RECORD:	    /* 2008 */
+	return "ACTION_LOCK_RECORD";
+    case ACTION_FREE_RECORD:	    /* 2009 */
+	return "ACTION_FREE_RECORD";
+    case ACTION_ADD_NOTIFY:	    /* 4097 */
+	return "ACTION_ADD_NOTIFY";
+    case ACTION_REMOVE_NOTIFY:	    /* 4098 */
+	return "ACTION_REMOVE_NOTIFY";
+
+    /* 3.0 stuff: */
+
+    case ACTION_EXAMINE_ALL_END:    /* 1035 */
+	return "ACTION_EXAMINE_ALL_END";
+    case ACTION_SET_OWNER:	    /* 1036 */
+	return "ACTION_SET_OWNER";
+    case ACTION_SERIALIZE_DISK:     /* 4200 */
+	return "ACTION_SERIALIZE_DISK";
+    case ACTION_GET_DISK_FSSM:	    /* 4201 */
+	return "ACTION_GET_DISK_FSSM";
+    case ACTION_FREE_DISK_FSSM:     /* 4201 */
+	return "ACTION_FREE_DISK_FSSM";
+
+    default:
+	return ("---------UNKNOWN-------");
+    }
+}
+
+#endif				/* HDEBUG */
+@
+
+
+1.55
+log
+@Add a few packet names.
+@
+text
+@d2 1
+a2 1
+ * $Id: support.c,v 1.54 1993/06/24 05:12:49 Rhialto Exp $
+d4 3
+d36 7
+d45 2
+a46 1
+Prototype int packetsqueued(void);
+d62 1
+a62 1
+register struct DosPacket *packet;
+d64 2
+a65 2
+    register struct Message *mess;
+    register struct MsgPort *replyport;
+d76 35
+d115 1
+a115 1
+int
+d119 1
+a119 1
+	    (void *) &DosPort->mp_MsgList.lh_Tail);     /* & inserted by OIS */
+d128 1
+a128 1
+register ulong	bytes;
+d130 1
+a130 1
+    register ulong *ptr;
+d143 1
+a143 1
+register ulong *ptr;
+d187 1
+a187 1
+register struct MinList *list;
+d196 1
+a196 1
+register struct MinList *list;
+d203 1
+a203 1
+#ifdef HDEBUG
+d209 34
+a242 19
+    case ACTION_DIE:
+	return ("DIE");
+    case ACTION_CURRENT_VOLUME:
+	return ("CURRENT VOLUME");
+    case ACTION_OPENRW:
+	return ("OPEN-RW");
+    case ACTION_OPENOLD:
+	return ("OPEN-OLD");
+    case ACTION_OPENNEW:
+	return ("OPEN-NEW");
+    case ACTION_READ:
+	return ("READ");
+    case ACTION_WRITE:
+	return ("WRITE");
+    case ACTION_CLOSE:
+	return ("CLOSE");
+    case ACTION_SEEK:
+	return ("SEEK");
+    case ACTION_EXAMINE_NEXT:
+d244 32
+a275 38
+    case ACTION_EXAMINE_OBJECT:
+	return ("EXAMINE OBJ");
+    case ACTION_INFO:
+	return ("INFO");
+    case ACTION_DISK_INFO:
+	return ("DISK INFO");
+    case ACTION_PARENT:
+	return ("PARENTDIR");
+    case ACTION_DELETE_OBJECT:
+	return ("DELETE");
+    case ACTION_CREATE_DIR:
+	return ("CREATEDIR");
+    case ACTION_LOCATE_OBJECT:
+	return ("LOCK");
+    case ACTION_COPY_DIR:
+	return ("DUPLOCK");
+    case ACTION_FREE_LOCK:
+	return ("FREELOCK");
+    case ACTION_SET_PROTECT:
+	return ("SETPROTECT");
+    case ACTION_SET_COMMENT:
+	return ("SETCOMMENT");
+    case ACTION_RENAME_OBJECT:
+	return ("RENAME");
+    case ACTION_INHIBIT:
+	return ("INHIBIT");
+    case ACTION_RENAME_DISK:
+	return ("RENAME DISK");
+    case ACTION_MORECACHE:
+	return ("MORE CACHE");
+    case ACTION_WAIT_CHAR:
+	return ("WAIT FOR CHAR");
+    case ACTION_FLUSH:
+	return ("FLUSH");
+    case ACTION_RAWMODE:
+	return ("RAWMODE");
+    case ACTION_SET_DATE:
+	return ("SET_DATE");
+d279 9
+a287 1
+    case ACTION_SET_FILE_SIZE:
+d289 1
+a289 5
+    case ACTION_SAME_LOCK:
+	return "ACTION_SAME_LOCK";
+    case ACTION_CHANGE_SIGNAL:
+	return "ACTION_CHANGE_SIGNAL ???";
+    case ACTION_WRITE_PROTECT:
+d291 3
+a293 1
+    case ACTION_FH_FROM_LOCK:
+d295 1
+a295 1
+    case ACTION_IS_FILESYSTEM:
+d297 1
+a297 1
+    case ACTION_CHANGE_MODE:
+d299 1
+a299 1
+    case ACTION_COPY_DIR_FH:
+d301 5
+a305 1
+    case ACTION_EXAMINE_FH:
+d307 5
+a311 9
+    case ACTION_PARENT_FH:
+	return "ACTION_PARENT_FH";
+    case ACTION_FORMAT:
+	return "ACTION_FORMAT";
+    case ACTION_MAKE_LINK:
+	return "ACTION_MAKE_LINK";
+    case ACTION_READ_LINK:
+	return "ACTION_READ_LINK";
+    case ACTION_LOCK_RECORD:
+d313 1
+a313 1
+    case ACTION_FREE_RECORD:
+d315 1
+a315 3
+    case ACTION_EXAMINE_ALL:
+	return "ACTION_EXAMINE_ALL";
+    case ACTION_ADD_NOTIFY:
+d317 1
+a317 1
+    case ACTION_REMOVE_NOTIFY:
+d322 1
+a322 1
+    case ACTION_EXAMINE_ALL_END:
+d324 1
+a324 1
+    case ACTION_SET_OWNER:
+d326 1
+a326 1
+    case ACTION_SERIALIZE_DISK:
+d328 4
+@
+
+
+1.54
+log
+@DICE 2.07.54R.
+@
+text
+@d2 5
+a6 2
+ * $Id: support.c,v 1.53 92/10/25 02:24:40 Rhialto Rel $
+ * $Log:	support.c,v $
+d228 2
+d244 25
+@
+
+
+1.53
+log
+@Add 2.0 stuff for debugging. Rearrange some #includes for precompilation.
+@
+text
+@d2 1
+a2 1
+ * $Id: support.c,v 1.51 92/04/17 15:36:18 Rhialto Rel $
+d4 3
+a26 5
+
+#include <functions.h>
+
+typedef unsigned long		ulong;
+typedef unsigned char		byte;
+@
+
+
+1.51
+log
+@Freeze for MAXON.
+@
+text
+@d2 1
+a2 1
+ * $Id: support.c,v 1.46 91/10/06 18:25:58 Rhialto Rel $
+d4 3
+a24 1
+#include <amiga.h>
+d30 1
+a31 1
+#include "han.h"
+d220 22
+@
+
+
+1.46
+log
+@
+Freeze for MAXON
+@
+text
+@d2 1
+a2 1
+ * $Id: support.c,v 1.43 91/09/28 01:43:35 Rhialto Exp $
+d4 4
+d10 1
+a10 1
+ * 
+d29 1
+d31 8
+a38 1
+extern PORT    *DosPort;	/* Our DOS port... */
+d122 1
+d126 1
+a126 1
+register NODE		*node;
+d138 1
+a138 1
+register LIST		*list;
+d147 1
+a147 1
+register LIST		*list;
+@
+
+
+1.43
+log
+@*** empty log message ***
+@
+text
+@d2 1
+a2 1
+ * $Id: support.c,v 1.42 91/06/13 23:55:51 Rhialto Exp $
+d4 3
+@
+
+
+1.42
+log
+@DICE conversion
+@
+text
+@d2 1
+a2 1
+ * $Id: support.c,v 1.40 91/03/03 17:46:02 Rhialto Rel $
+d4 3
+d97 2
+a98 1
+    bmov(bstr + 1, buf, *bstr);
+@
+
+
+1.40
+log
+@Freeze for MAXON
+@
+text
+@d2 1
+a2 1
+ * $Id: support.c,v 1.30 90/06/04 23:16:41 Rhialto Rel $
+d4 3
+d12 6
+a21 3
+typedef unsigned long		ulong;
+typedef unsigned char		ubyte;
+
+d74 1
+d90 2
+a91 2
+ubyte	       *bstr;
+ubyte	       *buf;
+@
+
+
+1.30
+log
+@Release 1 Patch 3
+@
+text
+@d2 1
+a2 1
+ * $Id: support.c,v 1.3 90/03/11 17:44:51 Rhialto Rel $
+d4 3
+@
+
+
+1.3
+log
+@Patch1
+@
+text
+@d2 1
+a2 1
+ * $Id: support.c,v 1.2 90/02/03 17:01:19 Rhialto Rel $
+a3 6
+ * Revision 1.2  90/02/03  17:01:19  Rhialto
+ * Add error checking in dosalloc()
+ *
+ * Revision 1.1  89/12/17  19:57:50  Rhialto
+ * Initial revision
+ *
+@
+
+
+1.2
+log
+@Add error checking in dosalloc()
+@
+text
+@d2 1
+a2 1
+ * $Id: support.c,v 1.1 89/12/17 19:57:50 Rhialto Exp Locker: Rhialto $
+d4 3
+d130 1
+a130 1
+#ifdef DEBUG
+d199 1
+a199 1
+#endif				/* DEBUG */
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d2 5
+a6 2
+ * $Id$
+ * $Log$
+d60 6
+a65 3
+    ptr = AllocMem(bytes, MEMF_PUBLIC | MEMF_CLEAR);
+    *ptr = bytes;
+    return (ptr + 1);
+@

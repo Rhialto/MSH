@@ -1,0 +1,1841 @@
+head	1.56;
+access;
+symbols
+	SHAREWARE2:1.56
+	MAXON5:1.55
+	MAXON4:1.53
+	MAXON3:1.51
+	MAXON2:1.46
+	MAXON1:1.40
+	Patch3a:1.31
+	Patch3:1.30
+	Patch1:1.5
+	Rel1:1.4;
+locks;
+comment	@ * @;
+
+
+1.56
+date	96.12.22.00.22.33;	author Rhialto;	state Rel;
+branches;
+next	1.55;
+
+1.55
+date	93.12.30.23.28.00;	author Rhialto;	state Rel;
+branches;
+next	1.54;
+
+1.54
+date	93.06.24.05.12.49;	author Rhialto;	state Exp;
+branches;
+next	1.53;
+
+1.53
+date	92.10.25.02.28.50;	author Rhialto;	state Rel;
+branches;
+next	1.52;
+
+1.52
+date	92.09.06.01.52.30;	author Rhialto;	state Exp;
+branches;
+next	1.51;
+
+1.51
+date	92.04.17.15.37.41;	author Rhialto;	state Rel;
+branches;
+next	1.46;
+
+1.46
+date	91.10.06.18.26.37;	author Rhialto;	state Rel;
+branches;
+next	1.43;
+
+1.43
+date	91.09.28.01.41.06;	author Rhialto;	state Exp;
+branches;
+next	1.42;
+
+1.42
+date	91.06.13.23.55.16;	author Rhialto;	state Exp;
+branches;
+next	1.41;
+
+1.41
+date	91.06.13.23.37.53;	author Rhialto;	state Exp;
+branches;
+next	1.40;
+
+1.40
+date	91.03.03.17.53.35;	author Rhialto;	state Rel;
+branches;
+next	1.33;
+
+1.33
+date	91.01.24.00.08.27;	author Rhialto;	state Exp;
+branches;
+next	1.32;
+
+1.32
+date	90.11.23.23.54.18;	author Rhialto;	state Exp;
+branches;
+next	1.31;
+
+1.31
+date	90.11.10.02.48.38;	author Rhialto;	state Exp;
+branches;
+next	1.30;
+
+1.30
+date	90.06.04.23.17.18;	author Rhialto;	state Rel;
+branches;
+next	1.5;
+
+1.5
+date	90.03.11.17.46.19;	author Rhialto;	state Rel;
+branches;
+next	1.4;
+
+1.4
+date	90.01.27.20.22.17;	author Rhialto;	state Rel;
+branches;
+next	1.3;
+
+1.3
+date	90.01.23.00.36.57;	author Rhialto;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	89.12.17.23.05.33;	author Rhialto;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	89.12.17.20.03.01;	author Rhialto;	state Exp;
+branches;
+next	;
+
+
+desc
+@Lock-level functions
+@
+
+
+1.56
+log
+@File locks only updated on disk when last unlocked.
+@
+text
+@/*-
+ * $Id: hanlock.c,v 1.55 1993/12/30 23:28:00 Rhialto Rel $
+ * $Log: hanlock.c,v $
+ * Revision 1.55  1993/12/30  23:28:00	Rhialto
+ * Freeze for MAXON5.
+ * Lots of small changes for LONGNAMES option.
+ *
+ * Revision 1.54  1993/06/24  05:12:49	Rhialto
+ * DICE 2.07.54R.
+ *
+ * Revision 1.53  92/10/25  02:28:50  Rhialto
+ * No real change.
+ *
+ * Revision 1.52  92/09/06  01:52:30  Rhialto
+ * Handle /parentdir via MSParentDir().
+ *
+ * Revision 1.51  92/04/17  15:37:41  Rhialto
+ * Freeze for MAXON.
+ *
+ * Revision 1.46  91/10/06  18:26:37  Rhialto
+ *
+ * Freeze for MAXON
+ *
+ * Revision 1.43  91/09/28  01:41:06  Rhialto
+ * Changed to newer syslog stuff.
+ * Fix bug that assign always refers to the rootdir.
+ *
+ * Revision 1.42  91/06/13  23:55:16  Rhialto
+ * DICE conversion
+ *
+ * Revision 1.41  91/06/13  23:37:53  Rhialto
+ * Fix MSSetProtect (converted dirs into files) + DICE conversion
+ *
+ * Revision 1.40  91/03/03  17:53:35  Rhialto
+ * Freeze for MAXON
+ *
+ * Revision 1.33  91/01/24  00:08:27  Rhialto
+ * Fix directory-extension bug (only first sector of new cluster
+ * was zeroed)
+ *
+ * Revision 1.32  90/11/23  23:54:18  Rhialto
+ * Prepare for syslog
+ *
+ * Revision 1.31  90/11/10  02:48:38  Rhialto
+ * Patch 3a. Introduce disk volume date. Update modification time of
+ * directories.
+ *
+ * Revision 1.30  90/06/04  23:17:18  Rhialto
+ * Release 1 Patch 3
+ *
+ * HANLOCK.C
+ *
+ * The code for the messydos file system handler
+ *
+ * The Lock department. Takes care of operations on locks, and consequently,
+ * on directories.
+ *
+ * This code is (C) Copyright 1989-1993 by Olaf Seibert. All rights reserved.
+ * May not be used or copied without a licence.
+-*/
+
+#include "han.h"
+#include "dos.h"
+#include <string.h>
+
+#if HDEBUG
+#   include "syslog.h"
+#else
+#   define	debug(x)
+#endif
+
+Prototype int CompareNames(struct MsDirEntry *dir, byte *name);
+Prototype void NextDirEntry(word *sector, word *offset);
+Prototype struct DirEntry *FindNext(struct DirEntry *previous, int createit);
+Prototype void PrintDirEntry(struct DirEntry *de);
+Prototype struct MSFileLock *MakeLock(struct MSFileLock *parentdir, struct DirEntry *dir, ulong mode);
+Prototype struct MSFileLock *MSLock(struct MSFileLock *parentdir, byte *name, ulong mode);
+Prototype struct MSFileLock *MSDupLock(struct MSFileLock *fl);
+Prototype struct MSFileLock *MSParentDir(struct MSFileLock *fl);
+Prototype long MSUnLock(struct MSFileLock *fl);
+Prototype void ExamineDirEntry(struct MsDirEntry *msd, struct FileInfoBlock *fib);
+Prototype long MSExamine(struct MSFileLock *fl, struct FileInfoBlock *fib);
+Prototype long MSExNext(struct MSFileLock *fl, struct FileInfoBlock *fib);
+Prototype long MSSetProtect(struct MSFileLock *parentdir, char *name, long mask);
+Prototype int CheckLock(struct MSFileLock *lock);
+Prototype void WriteDirtyFileLock(struct MSFileLock *fl);
+Prototype void WriteFileLock(struct MSFileLock *fl);
+Prototype void DirtyFileLock(struct MSFileLock *fl);
+Prototype void UpdateFileLock(struct MSFileLock *fl);
+Prototype struct LockList *NewLockList(void *cookie);
+Prototype void FreeLockList(struct LockList *ll);
+
+Prototype struct LockList *LockList;
+Prototype struct MSFileLock *RootLock;
+Prototype struct MSFileLock *EmptyFileLock;
+Prototype const struct DirEntry FakeRootDirEntry;
+Prototype const byte DotDot[1 + L_8 + L_3];
+
+struct LockList *LockList;	/* List of all locked files we have. Note
+				 * this is not the same as all locks we
+				 * have */
+struct MSFileLock *RootLock;	/* Lock on root directory */
+struct MSFileLock *EmptyFileLock;	/* 2nd result of MSLock() */
+
+#if LONGNAMES
+const struct DirEntry FakeRootDirEntry = {
+    {				/* de_Msd */
+	0,			/* msd_Time */
+	DATE_MIN,		/* msd_Date, 1/1/80 */
+	0,			/* msd_Cluster */
+	0,			/* msd_Filesize */
+	ATTR_VOLUMELABEL,	/* msd_Attributes */
+	"Unnamed              " /* msd_Name */
+    },
+    ROOT_SEC,			/* de_Sector */
+    -2				/* de_Offset */
+};
+#else
+const struct DirEntry FakeRootDirEntry = {
+    {				/* de_Msd */
+	"Unnamed ",             /* msd_Name */
+	"   ",                  /* msd_Ext */
+	ATTR_VOLUMELABEL,	/* msd_Attributes */
+	0,			/* msd_CreationTime */
+	DATE_MIN,		/* msd_CreationDate, 1/1/80 */
+	{0},			/* msd_Pad1 */
+	0,			/* msd_Time */
+	DATE_MIN,		/* msd_Date, 1/1/80 */
+	0,			/* msd_Cluster */
+	0			/* msd_Filesize */
+    },
+    ROOT_SEC,			/* de_Sector */
+    -2				/* de_Offset */
+};
+#endif
+const byte DotDot[1 + L_8 + L_3] = "..          ";
+
+/*
+ * This routine compares a name in a directory entry with a given name
+ */
+
+int
+CompareNames(dir, name)
+struct MsDirEntry *dir;
+byte  *name;
+{
+    if (dir->msd_Name[0] & DIR_DELETED_MASK)
+	return CMP_FREE_SLOT;
+
+    if (dir->msd_Name[0] == 0)
+	return CMP_END_OF_DIR;	/* end of directory */
+
+    if (dir->msd_Attributes & ATTR_VOLUMELABEL)
+	return CMP_NOT_EQUAL;
+
+    if (strncmp(dir->msd_Name, name, L_8 + L_3))
+	return CMP_NOT_EQUAL;
+
+    if (dir->msd_Attributes & ATTR_DIRECTORY)
+	return CMP_OK_DIR;
+
+    return CMP_OK_FILE;
+}
+
+void
+NextDirEntry(sector, offset)
+word  *sector;
+word  *offset;
+{
+    if ((*offset += MS_DIRENTSIZE) >= Disk.bps) {
+	*offset = 0;
+	if (*sector >= Disk.datablock) {
+	    /* Must be subdirectory */
+	    *sector = NextClusteredSector(*sector);
+	    debug(("NextClusteredSector: %ld\n", (long)*sector));
+	} else {
+	    if (++*sector >= Disk.datablock) {
+		*sector = SEC_EOF;
+	    }
+	}
+    }
+    /* else no more work needed */
+}
+
+/*
+ * Get the directory entry following the given one. If requested, we make
+ * the directory longer.
+ */
+
+struct DirEntry *
+FindNext(previous, createit)
+struct DirEntry *previous;
+int		createit;
+{
+    byte	   *sector;
+    word	    prevsec = previous->de_Sector;
+
+    NextDirEntry(&previous->de_Sector, &previous->de_Offset);
+
+    if (previous->de_Sector == SEC_EOF) {
+	error = ERROR_OBJECT_NOT_FOUND;
+#if ! READONLY
+	if (createit) {
+	    int 	    clearblocks;
+
+	    if (prevsec < Disk.datablock - 1) { /* Should not be necessary */
+		previous->de_Sector = prevsec + 1;
+		clearblocks = 1;	/* Clear just one root dir block */
+	    } else if (prevsec >= Disk.datablock) {
+		previous->de_Sector = FindFreeSector(prevsec);
+		clearblocks = Disk.spc; /* Clear the entire (implied) cluster */
+	    }
+	    if (previous->de_Sector != SEC_EOF) {
+		for (prevsec = previous->de_Sector; clearblocks; clearblocks--) {
+		    sector = EmptySec(prevsec);
+		    setmem(sector, (int) Disk.bps, 0);
+		    MarkSecDirty(sector);
+		    FreeSec(sector);
+		    prevsec++;
+		}
+
+		/*
+		 * Just return a clear directory entry
+		 */
+		setmem(&previous->de_Msd, sizeof (previous->de_Msd), 0);
+
+		return previous;
+	    }
+	}
+#endif
+    } else if (sector = ReadSec(previous->de_Sector)) {
+	CopyMem(sector + previous->de_Offset, (char *)&previous->de_Msd,
+		(long) MS_DIRENTSIZE);
+	OtherEndianMsd(&previous->de_Msd);
+	FreeSec(sector);
+
+	return previous;
+    }
+    return NULL;
+}
+
+#if HDEBUG
+
+void PrintDirEntry(struct DirEntry *de);
+
+void
+PrintDirEntry(de)
+struct DirEntry *de;
+{
+    debug(("%ld,%ld ", (long)de->de_Sector, (long)de->de_Offset));
+#if LONGNAMES
+    debug(("%.21s attr:%lx time:%lx date:%lx start:%lx size:%lx\n",
+	   de->de_Msd.msd_Name,
+	   (long)de->de_Msd.msd_Attributes,
+	   (long)de->de_Msd.msd_Time,
+	   (long)de->de_Msd.msd_Date,
+	   (long)de->de_Msd.msd_Cluster,
+	   (long)de->de_Msd.msd_Filesize
+	   ));
+#else
+    debug(("%.8s.%.3s attr:%lx time:%lx date:%lx start:%lx size:%lx\n",
+	   de->de_Msd.msd_Name,
+	   de->de_Msd.msd_Ext,
+	   (long)de->de_Msd.msd_Attributes,
+	   (long)de->de_Msd.msd_Time,
+	   (long)de->de_Msd.msd_Date,
+	   (long)de->de_Msd.msd_Cluster,
+	   (long)de->de_Msd.msd_Filesize
+	   ));
+#endif
+}
+
+#endif
+
+/*
+ * MakeLock makes a struct MSFileLock from a directory entry and the
+ * parent directory MSFileLock pointer. It looks if it already has a Lock
+ * on it. In that case, it simply increments its reference count, when
+ * possible.
+ */
+
+struct MSFileLock *
+MakeLock(parentdir, dir, mode)
+struct MSFileLock *parentdir;
+struct DirEntry *dir;
+ulong		mode;
+{
+    struct MSFileLock *fl;
+    struct MSFileLock *nextfl;
+
+    if (mode != EXCLUSIVE_LOCK || (dir->de_Msd.msd_Attributes & ATTR_DIR))
+	mode = SHARED_LOCK;
+
+#if HDEBUG
+    debug(("MakeLock: "));
+    PrintDirEntry(dir);
+#endif
+
+    /*
+     * Look through our list to see if we already have it. The criteria
+     * for this are: 1. the directory entries are the same or 2. they have
+     * the same first cluster and are both directories (which can have
+     * multiple directory entries). Sigh.
+     */
+
+    for (fl = (struct MSFileLock *) LockList->ll_List.mlh_Head;
+	 nextfl = (struct MSFileLock *) fl->msfl_Node.mln_Succ;
+	 fl = nextfl) {
+#if HDEBUG
+	debug(("> "));
+	PrintDirEntry((struct DirEntry *)&fl->msfl_Msd);
+#endif
+	if ((fl->msfl_DirSector == dir->de_Sector &&
+	     fl->msfl_DirOffset == dir->de_Offset) ||
+	    (fl->msfl_Msd.msd_Cluster == dir->de_Msd.msd_Cluster &&
+	     (dir->de_Msd.msd_Attributes & ATTR_DIR) &&
+	     (fl->msfl_Msd.msd_Attributes & ATTR_DIR))
+	    ) {
+	    /* Found existing lock on file */
+	    if (fl->msfl_Refcount < 0 || mode == EXCLUSIVE_LOCK) {
+		error = ERROR_OBJECT_IN_USE;
+		return NULL;
+	    }
+	    fl->msfl_Refcount++;
+	    return fl;
+	}
+    }
+
+    fl = AllocMem((long) sizeof (*fl), MEMF_PUBLIC);
+    if (fl == NULL) {
+	error = ERROR_NO_FREE_STORE;
+	return NULL;
+    }
+    fl->msfl_Parent = (parentdir != NULL) ? MSDupLock(parentdir) :
+					    (struct MSFileLock *) NULL;
+
+    fl->msfl_Refcount = (mode == EXCLUSIVE_LOCK) ? -1 : 1;
+    fl->msfl_DirSector = dir->de_Sector;
+    fl->msfl_DirOffset = dir->de_Offset;
+    fl->msfl_Msd = dir->de_Msd;
+
+    AddHead((struct List *)&LockList->ll_List, (struct Node *)fl);
+
+    return fl;
+}
+
+/*
+ * This routine Locks a file. It first searches it in the directory, then
+ * lets the rest of the work be done by MakeLock(). If it encounters an
+ * empty slot in the directory, it remembers where, in case we need it. If
+ * you clear the MODE_CREATEFILE bit in the mode parameter, we fabricate a
+ * new MSFileLock from the empty directory entry. It then becomes the
+ * caller's responsibility to MSUnLock() it eventually.
+ */
+
+struct MSFileLock *
+MSLock(parentdir, name, mode)
+struct MSFileLock *parentdir;
+byte	       *name;
+ulong		mode;
+{
+    byte	   *sector;
+    struct MSFileLock *newlock;
+    struct DirEntry *de;
+    struct DirEntry sde;
+    byte	   *nextpart;
+    byte	    component[L_8 + L_3];	/* Note: not null-terminated */
+    int 	    createit = 0;
+    word	    freesec;
+    word	    freeoffset;
+
+    de = &sde;
+    newlock = NULL;
+
+    /*
+     * See if we have an absolute path name (starting at the root).
+     */
+    {
+	byte  *colon;
+
+	if (colon = strchr(name, ':')) {
+	    debug(("name == %lx \"%s\"\n", name, name));
+	    name = colon + 1;
+	    /*
+	     * MSH::Command or ::Command?
+	     */
+	    if (name[0] == ':') {
+		HandleCommand(name);
+		error = ERROR_OBJECT_NOT_FOUND;
+
+		return NULL;
+	    }
+	}
+    }
+
+
+    /*
+     * Get a copy of the parent dir lock, so we can walk it over the
+     * directory tree.
+     */
+#if HDEBUG
+    if (!parentdir)
+	debug(("Parentdir == NULL\n"));
+#endif
+    parentdir = MSDupLock(parentdir);
+
+    /*
+     * Start with the directory entry of the parent dir.
+     */
+
+newdir0:
+    sde.de_Msd = parentdir->msfl_Msd;
+    sde.de_Sector = parentdir->msfl_DirSector;
+    sde.de_Offset = parentdir->msfl_DirOffset;
+#if HDEBUG
+    debug(("pdir %08lx: ", parentdir));
+    PrintDirEntry((struct DirEntry *)&parentdir->msfl_Msd);
+#endif
+
+newdir:
+    if (name[0] == '/') {       /* Parentdir */
+	name++;
+	if (newlock = MSParentDir(parentdir)) {
+	    MSUnLock(parentdir);
+	    parentdir = newlock;
+	    goto newdir0;
+	}
+	error = ERROR_OBJECT_NOT_FOUND;
+	goto some_error;
+    } else if (name[0] == '\0') {
+	/*
+	 * Are we at the end of the name? Then we are finished now. This
+	 * works because sde contains the directory entry of parentdir.
+	 */
+	goto exit;
+    } else {			/* Filename or directory part */
+	nextpart = ToMSName(component, name);
+	debug(("Component: '%.11s'\n", component));
+	if (nextpart[0] != '/') {
+	    nextpart = NULL;
+#if ! READONLY
+	    /*
+	     * See if we are requested to get an empty spot in the directory
+	     * if the given name does not exist already. The value of mode is
+	     * not important until we actually create the filelock.
+	     */
+	    if (!(mode & MODE_CREATEFILE)) {
+		mode ^= MODE_CREATEFILE;
+		createit = 1;
+	    }
+#endif
+	} else
+	    nextpart++; 	/* Skip over '/' */
+    }
+
+    freesec = SEC_EOF;		/* Means none found yet */
+
+
+    /*
+     * If there is more name, we enter the directory, and here we get the
+     * first entry.
+     */
+
+    sde.de_Sector = DirClusterToSector(sde.de_Msd.msd_Cluster);
+    sde.de_Offset = 0;
+
+    if ((sector = ReadSec(sde.de_Sector)) == NULL)
+	goto some_error;
+
+    CopyMem(sector, (char *)&sde.de_Msd, (long) sizeof (struct MsDirEntry));
+    OtherEndianMsd(&sde.de_Msd);
+    FreeSec(sector);
+
+    while (de) {
+	switch (CompareNames(&sde.de_Msd, component)) {
+	case CMP_FREE_SLOT:
+	    if (freesec == SEC_EOF) {
+		freesec = sde.de_Sector;
+		freeoffset = sde.de_Offset;
+	    }
+	    /* Fall through */
+	case CMP_NOT_EQUAL:
+	    de = FindNext(&sde, createit);	/* Try next directory
+						 * entry */
+	    continue;
+	case CMP_OK_DIR:
+	    if (name = nextpart) {
+		/*
+		 * We want to keep locks on all directories between each
+		 * bottom directory and file lock, so we can easily find
+		 * the parent of a lock. There just seems to be a problem
+		 * here when we enter the 'subdirectories' . or .. , but
+		 * that in not so: MakeLock will detect that it has
+		 * already a lock on those, and NOT make :one/two the
+		 * parent of :one/two/.. .
+		 */
+		newlock = MakeLock(parentdir, de, SHARED_LOCK);
+		MSUnLock(parentdir);
+		parentdir = newlock;
+		goto newdir;
+	    }
+	    goto exit;
+	case CMP_OK_FILE:
+	    if (nextpart) {
+		error = ERROR_OBJECT_WRONG_TYPE;
+		de = NULL;
+	    }
+	    goto exit;
+	case CMP_END_OF_DIR:	/* means we will never find it */
+	    error = ERROR_OBJECT_NOT_FOUND;
+	    if (freesec == SEC_EOF) {
+		freesec = sde.de_Sector;
+		freeoffset = sde.de_Offset;
+	    }
+	    de = NULL;
+	    goto exit;
+	}
+    }
+
+exit:
+    if (de) {
+	newlock = MakeLock(parentdir, &sde, mode);
+    } else {
+	newlock = NULL;
+#if ! READONLY
+	if (createit && 	/* Do we want to make it? */
+	    error == ERROR_OBJECT_NOT_FOUND &&	/* does it not exist yet? */
+	    nextpart == NULL) { /* do we have the last part of the name */
+	    if (freesec != SEC_EOF) {	/* is there any room? */
+		if (IDDiskState == ID_VALIDATED) {
+		    error = 0;
+		    setmem(&sde.de_Msd, sizeof (sde.de_Msd), 0);
+		    sde.de_Sector = freesec;
+		    sde.de_Offset = freeoffset;
+		    /* ToMSName(sde.de_Msd.msd_Name, name); */
+		    strncpy(sde.de_Msd.msd_Name, component, L_8 + L_3);
+		    EmptyFileLock = MakeLock(parentdir, &sde, mode);
+		    WriteFileLock(EmptyFileLock);
+		} else
+		    error = ERROR_DISK_WRITE_PROTECTED;
+	    } else
+		error = ERROR_DISK_FULL;
+	}
+#endif
+    }
+
+some_error:
+    MSUnLock(parentdir);
+
+    return newlock;
+}
+
+/*
+ * This routine DupLocks a file. This simply means incrementing the
+ * reference count, if it was not an exclusive Lock.
+ */
+
+struct MSFileLock *
+MSDupLock(fl)
+struct MSFileLock *fl;
+{
+    if (fl == NULL)
+	fl = RootLock;
+    if (fl->msfl_Refcount <= 0) {
+	error = ERROR_OBJECT_IN_USE;
+	return NULL;
+    } else {
+	fl->msfl_Refcount++;
+    }
+
+    return fl;
+}
+
+/*
+ * This routine DupLocks the parent of a lock, if there is one.
+ */
+
+struct MSFileLock *
+MSParentDir(fl)
+struct MSFileLock *fl;
+{
+    if (fl == NULL) {
+	error = ERROR_OBJECT_NOT_FOUND;
+    } else if (fl == RootLock) {
+	/* Do nothing: return NULL */
+    } else if (fl->msfl_Parent)
+	return MSDupLock(fl->msfl_Parent);
+
+    return NULL;
+}
+
+/*
+ * This routine UnLocks a file.
+ */
+
+long
+MSUnLock(fl)
+struct MSFileLock *fl;
+{
+#if HDEBUG
+    debug(("MSUnLock %08lx: ", fl));
+    PrintDirEntry((struct DirEntry *)&fl->msfl_Msd);
+#endif
+
+    if (fl) {
+	if (--fl->msfl_Refcount <= 0) {
+	    struct LockList *list;
+
+	    if (fl->msfl_Flags & MSFL_DIRTY) {
+		WriteFileLock(fl);
+	    }
+
+	    list = (struct LockList *) fl->msfl_Node.mln_Pred;
+	    Remove((struct Node *)fl);
+	    debug(("Remove()d %08lx\n", fl));
+
+	    /*
+	     * We may need to get rid of the LockList if it is empty. This
+	     * is the current LockList iff we are called from
+	     * MSDiskRemoved(). Please note that we are not even sure that
+	     * 'list' really is the list header, therefore the careful
+	     * test if fl refers to a volume label (root lock) which is
+	     * finally UnLock()ed. Because of the recursion, we only try to
+	     * free the LockList iff there is no parent anymore, since
+	     * otherwise list may be invalid by the time we use it.
+	     */
+	    if (fl->msfl_Parent) {
+		MSUnLock(fl->msfl_Parent);
+	    } else {
+		if ((fl->msfl_Msd.msd_Attributes & ATTR_VOLUMELABEL) &&
+		    ((void *) list->ll_List.mlh_Head ==
+		     (void *) &list->ll_List.mlh_Tail)
+		    ) {
+		    FreeLockList(list);
+		}
+	    }
+	    FreeMem(fl, (long) sizeof (*fl));
+	}
+    }
+    return DOSTRUE;
+}
+
+/*
+ * This is (among other things) the inverse of ToMSName().
+ */
+
+void
+ExamineDirEntry(msd, fib)
+struct MsDirEntry *msd;
+struct FileInfoBlock *fib;
+{
+#if HDEBUG
+    debug(("+ "));
+    PrintDirEntry((struct DirEntry *)msd);
+#endif
+    /*
+     * Special treatment when we examine the root directory
+     */
+    if (msd->msd_Attributes & ATTR_VOLUMELABEL) {
+	strncpy(&fib->fib_FileName[1], msd->msd_Name, L_8 + L_3);
+	(void) ZapSpaces(&fib->fib_FileName[2], &fib->fib_FileName[1 + L_8 + L_3]);
+    } else {
+#if LONGNAMES
+	strncpy(&fib->fib_FileName[1], msd->msd_Name, L_8);
+	(void) ZapSpaces(&fib->fib_FileName[2], &fib->fib_FileName[1 + L_8]);
+#else
+	byte  *end,
+		       *dot;
+
+	strncpy(&fib->fib_FileName[1], msd->msd_Name, L_8);
+	/* Keep at least one character, even a space, before the dot */
+	dot = ZapSpaces(&fib->fib_FileName[2], &fib->fib_FileName[1 + L_8]);
+	if (strncmp(msd->msd_Ext, "INF", L_3) == 0) {
+	    strcpy(dot, ".info");
+	} else {
+	    dot[0] = ' ';
+	    strncpy(dot + 1, msd->msd_Ext, L_3);
+	    end = ZapSpaces(dot, dot + 1 + L_3);
+	    if (end > dot)
+		dot[0] = '.';
+	}
+#endif
+    }
+    fib->fib_FileName[0] = strlen(&fib->fib_FileName[1]);
+
+    fib->fib_EntryType =
+    fib->fib_DirEntryType =
+	(msd->msd_Attributes & ATTR_DIR) ? FILE_DIR : FILE_FILE;
+    fib->fib_Protection = 0;
+    if (!(msd->msd_Attributes & ATTR_ARCHIVED))
+	fib->fib_Protection |= FIBF_ARCHIVE;
+    if (msd->msd_Attributes & ATTR_READONLY)
+	fib->fib_Protection |= (FIBF_WRITE | FIBF_DELETE);
+    if (msd->msd_Attributes & (ATTR_HIDDEN|ATTR_SYSTEM))
+	fib->fib_Protection |= FIBF_HIDDEN;
+    fib->fib_Size = msd->msd_Filesize;
+    fib->fib_NumBlocks = (msd->msd_Filesize + Disk.bps - 1) / Disk.bps;
+    ToDateStamp(&fib->fib_Date, msd->msd_Date, msd->msd_Time);
+    fib->fib_Comment[0] = 0;
+}
+
+/*
+ * We remember what we should do when we call ExNext with a lock on
+ * a directory (enter or step over it) by a flag in fib_EntryType.
+ * Unfortunately, the Commodore (1.3) List and Dir commands expect
+ * that fib_EntryType contains the information that the documentation
+ * (libraries/dos.h) specifies to be in fib_DirEntryType. Therefore
+ * we use the low bit in fib_DiskKey instead. Yech.
+ */
+
+long
+MSExamine(fl, fib)
+struct MSFileLock *fl;
+struct FileInfoBlock *fib;
+{
+    if (fl == NULL)
+	fl = RootLock;
+
+    fib->fib_DiskKey = ((ulong) fl->msfl_DirSector << 16) |
+		       fl->msfl_DirOffset +
+		       1;	/* No ExNext called yet */
+    ExamineDirEntry(&fl->msfl_Msd, fib);
+
+    return DOSTRUE;
+}
+
+long
+MSExNext(fl, fib)
+struct MSFileLock *fl;
+struct FileInfoBlock *fib;
+{
+    word	    sector = fib->fib_DiskKey >> 16;
+    word	    offset = (word) fib->fib_DiskKey;
+    byte	   *buf;
+
+    if (fl == NULL)
+	fl = RootLock;
+
+    if (offset & 1) {
+	if (fl->msfl_Msd.msd_Attributes & ATTR_DIR) {
+	    /* Enter subdirectory */
+	    sector = DirClusterToSector(fl->msfl_Msd.msd_Cluster);
+	    offset = 0;
+	} else {
+	    offset--;		/* Remember, it was odd */
+	    NextDirEntry(&sector, &offset);
+	}
+    } else {
+skip:
+	NextDirEntry(&sector, &offset);
+    }
+
+    if (sector != SEC_EOF) {
+	struct MsDirEntry msd;
+
+	if (buf = ReadSec(sector)) {
+	    msd = *(struct MsDirEntry *) (buf + offset);
+	    FreeSec(buf);
+	    if (msd.msd_Name[0] == '\0') {
+		goto end;
+	    }
+	    if (msd.msd_Name[0] & DIR_DELETED_MASK ||
+		msd.msd_Name[0] == '.' ||       /* Hide "." and ".." */
+		(msd.msd_Attributes & ATTR_VOLUMELABEL)) {
+		goto skip;
+	    }
+	    OtherEndianMsd(&msd);	/* Get correct endianness */
+	    fib->fib_DiskKey = ((ulong) sector << 16) | offset;
+	    ExamineDirEntry(&msd, fib);
+
+	    return DOSTRUE;
+	}
+    }
+end:
+    error = ERROR_NO_MORE_ENTRIES;
+    return DOSFALSE;
+}
+
+/*
+ * Convert AmigaDOS protection bits to messy attribute bits.
+ */
+
+long
+MSSetProtect(parentdir, name, mask)
+struct MSFileLock *parentdir;
+char	   *name;
+long	   mask;
+{
+    struct MSFileLock *lock;
+
+    if (parentdir == NULL)
+	parentdir = RootLock;
+
+    lock = MSLock(parentdir, name, EXCLUSIVE_LOCK);
+    if (lock) {
+	/* Leave other bits as they are */
+	lock->msfl_Msd.msd_Attributes &=
+	    ~(ATTR_READONLY | ATTR_HIDDEN | ATTR_ARCHIVED);
+	/* write or delete protected -> READONLY */
+	if (mask & (FIBF_WRITE|FIBF_DELETE))
+	    lock->msfl_Msd.msd_Attributes |= ATTR_READONLY;
+	/* hidden -> hidden */
+	if (mask & FIBF_HIDDEN)
+	    lock->msfl_Msd.msd_Attributes |= ATTR_HIDDEN;
+	/* archive=0 (default) -> archived=1 (default) */
+	if (!(mask & FIBF_ARCHIVE))
+	    lock->msfl_Msd.msd_Attributes |= ATTR_ARCHIVED;
+	WriteFileLock(lock);
+	MSUnLock(lock);
+	return DOSTRUE;
+    }
+
+    return DOSFALSE;
+}
+
+int
+CheckLock(lock)
+struct MSFileLock *lock;
+{
+    struct MSFileLock *parent;
+
+    if (lock) {
+	while (parent = lock->msfl_Parent)
+	    lock = parent;
+	if (lock != RootLock)
+	    error = ERROR_DEVICE_NOT_MOUNTED;
+    }
+    return error;
+}
+
+#if ! READONLY
+
+void
+WriteDirtyFileLock(fl)
+struct MSFileLock *fl;
+{
+    debug(("WriteDirtyFileLock %08lx\n", fl));
+
+    if (fl && (fl->msfl_Flags & MSFL_DIRTY)) {
+	WriteFileLock(fl);
+    }
+}
+
+void
+WriteFileLock(fl)
+struct MSFileLock *fl;
+{
+    debug(("WriteFileLock %08lx\n", fl));
+
+    if (fl && (short) fl->msfl_DirOffset >= 0) {
+	byte  *block = ReadSec(fl->msfl_DirSector);
+
+	if (block) {
+	    CopyMem((char *)&fl->msfl_Msd, (char *)block + fl->msfl_DirOffset,
+		    (long) sizeof (fl->msfl_Msd));
+	    OtherEndianMsd((struct MsDirEntry *)(block + fl->msfl_DirOffset));
+	    MarkSecDirty(block);
+	    FreeSec(block);
+	    fl->msfl_Flags &= ~MSFL_DIRTY;
+	}
+    }
+}
+
+void
+UpdateFileLock(fl)
+struct MSFileLock *fl;
+{
+    debug(("UpdateFileLock %08lx\n", fl));
+
+    if (fl) {
+	struct DateStamp dateStamp;
+
+	DateStamp(&dateStamp);
+	ToMSDate(&fl->msfl_Msd.msd_Date, &fl->msfl_Msd.msd_Time, &dateStamp);
+	/*WriteFileLock(fl);*/
+	fl->msfl_Flags |= MSFL_DIRTY;
+    }
+}
+
+void
+DirtyFileLock(fl)
+struct MSFileLock *fl;
+{
+    debug(("DirtyFileLock %08lx\n", fl));
+
+    if (fl) {
+	fl->msfl_Flags |= MSFL_DIRTY;
+    }
+}
+
+
+#endif
+
+struct LockList *
+NewLockList(cookie)
+void	       *cookie;
+{
+    struct LockList *ll;
+
+    if (ll = AllocMem((long) sizeof (*ll), MEMF_PUBLIC)) {
+	NewList((struct List *)&ll->ll_List);
+	ll->ll_Cookie = cookie;
+    } else
+	error = ERROR_NO_FREE_STORE;
+
+    return ll;
+}
+
+void
+FreeLockList(ll)
+struct LockList *ll;
+{
+    debug(("FreeLockList %08lx\n", ll));
+
+    if (ll) {
+	MayFreeVolNode(ll->ll_Cookie);	/* not too happy about this */
+	FreeMem(ll, (long) sizeof (*ll));
+	if (ll == LockList)	/* locks on current volume */
+	    LockList = NULL;
+    }
+}
+@
+
+
+1.55
+log
+@Freeze for MAXON5.
+Lots of small changes for LONGNAMES option.
+@
+text
+@d2 1
+a2 1
+ * $Id: hanlock.c,v 1.54 1993/06/24 05:12:49 Rhialto Exp $
+d4 4
+d66 1
+a66 1
+#ifdef HDEBUG
+d80 1
+a80 1
+Prototype int MSUnLock(struct MSFileLock *fl);
+d82 2
+a83 2
+Prototype int MSExamine(struct MSFileLock *fl, struct FileInfoBlock *fib);
+Prototype int MSExNext(struct MSFileLock *fl, struct FileInfoBlock *fib);
+d86 1
+d88 1
+d111 1
+a111 1
+	0			/* msd_Filesize */
+d113 1
+a113 1
+	"Unnamed              ",/* msd_Name */
+d144 2
+a145 2
+register struct MsDirEntry *dir;
+register byte  *name;
+d167 2
+a168 2
+register word  *sector;
+register word  *offset;
+d192 1
+a192 1
+register struct DirEntry *previous;
+d202 1
+a202 1
+#ifndef READONLY
+d242 1
+a242 1
+#ifdef HDEBUG
+d288 1
+a288 1
+    register struct MSFileLock *fl;
+d294 1
+a294 1
+#ifdef HDEBUG
+d309 1
+a309 1
+#ifdef HDEBUG
+d364 1
+a364 1
+    register struct DirEntry *de;
+d379 1
+a379 1
+	register byte  *colon;
+d401 1
+a401 1
+#ifdef HDEBUG
+d415 1
+a415 1
+#ifdef HDEBUG
+d441 1
+a441 1
+#ifndef READONLY
+d483 1
+a483 1
+	    de = FindNext(&sde, createit);      /* Try next directory
+d525 2
+a526 2
+#ifndef READONLY
+	if (createit &&         /* Do we want to make it? */
+d529 1
+a529 1
+	    if (freesec != SEC_EOF) {   /* is there any room? */
+d580 1
+a580 1
+register struct MSFileLock *fl;
+d596 1
+a596 1
+int
+d600 1
+a600 1
+#ifdef HDEBUG
+a605 3
+	if (fl->msfl_Flags & MSFL_DIRTY) {
+	    WriteFileLock(fl);
+	}
+d609 4
+d650 1
+a650 1
+register struct FileInfoBlock *fib;
+d652 1
+a652 1
+#ifdef HDEBUG
+d665 1
+a665 1
+	fib->fib_FileName[1 + L_8] = 0;
+d667 1
+a667 1
+	register byte  *end,
+d673 1
+a673 1
+	if (strncmp(msd->msd_Ext, "INF", 3) == 0) {
+d677 2
+a678 3
+	    strncpy(dot + 1, msd->msd_Ext, 3);
+	    dot[4] = '\0';
+	    end = ZapSpaces(dot, dot + 4);
+d711 1
+a711 1
+int
+d714 1
+a714 1
+register struct FileInfoBlock *fib;
+d727 1
+a727 1
+int
+d730 1
+a730 1
+register struct FileInfoBlock *fib;
+d767 1
+a767 1
+	    OtherEndianMsd(&msd);       /* Get correct endianness */
+d785 1
+a785 1
+register struct MSFileLock *parentdir;
+d789 1
+a789 1
+    register struct MSFileLock *lock;
+d805 1
+a805 1
+	/* archived=0 (default) -> archived=1 (default) */
+d810 1
+a810 1
+	return TRUE;
+d813 1
+a813 1
+    return FALSE;
+d818 1
+a818 1
+register struct MSFileLock *lock;
+d820 1
+a820 1
+    register struct MSFileLock *parent;
+d831 12
+a842 1
+#ifndef READONLY
+d846 1
+a846 1
+register struct MSFileLock *fl;
+d851 1
+a851 1
+	register byte  *block = ReadSec(fl->msfl_DirSector);
+d866 1
+a866 1
+register struct MSFileLock *fl;
+d880 12
+d916 1
+a916 1
+	MayFreeVolNode(ll->ll_Cookie);  /* not too happy about this */
+d918 1
+a918 1
+	if (ll == LockList)     /* locks on current volume */
+@
+
+
+1.54
+log
+@DICE 2.07.54R.
+@
+text
+@d2 5
+a6 2
+ * $Id: hanlock.c,v 1.53 92/10/25 02:28:50 Rhialto Rel $
+ * $Log:	hanlock.c,v $
+a57 1
+#include <string.h>
+d60 1
+d91 1
+a91 1
+Prototype const byte DotDot[1 + 8 + 3];
+d99 14
+d129 2
+a130 1
+const byte DotDot[1 + 8 + 3] = "..          ";
+d150 1
+a150 1
+    if (strncmp(dir->msd_Name, name, 8 + 3))
+d245 10
+d264 1
+d361 1
+a361 1
+    byte	    component[8 + 3];	/* Note: not null-terminated */
+d530 1
+a530 1
+		    strncpy(sde.de_Msd.msd_Name, component, 8 + 3);
+d653 2
+a654 2
+	strncpy(&fib->fib_FileName[1], msd->msd_Name, 8 + 3);
+	(void) ZapSpaces(&fib->fib_FileName[2], &fib->fib_FileName[1 + 8 + 3]);
+d656 4
+d663 1
+a663 1
+	strncpy(&fib->fib_FileName[1], msd->msd_Name, 8);
+d665 1
+a665 1
+	dot = ZapSpaces(&fib->fib_FileName[2], &fib->fib_FileName[1 + 8]);
+d676 1
+@
+
+
+1.53
+log
+@No real change.
+@
+text
+@d2 1
+a2 1
+ * $Id: hanlock.c,v 1.52 92/09/06 01:52:30 Rhialto Exp $
+d4 3
+d39 1
+a39 1
+ * directories. *.INF -> *.info.
+d51 1
+a51 1
+ * This code is (C) Copyright 1989-1992 by Olaf Seibert. All rights reserved.
+a54 1
+#include <functions.h>
+d207 1
+a207 1
+    } else if (sector = GetSec(previous->de_Sector)) {
+d432 1
+a432 1
+    if ((sector = GetSec(sde.de_Sector)) == NULL)
+d571 3
+d716 1
+a716 1
+	if (buf = GetSec(sector)) {
+d800 1
+a800 1
+	register byte  *block = GetSec(fl->msfl_DirSector);
+d808 1
+d824 2
+a825 1
+	WriteFileLock(fl);
+@
+
+
+1.52
+log
+@Handle /parentdir via MSParentDir().
+@
+text
+@d2 1
+a2 1
+ * $Id: hanlock.c,v 1.52 92/09/06 01:51:25 Rhialto Exp $
+d4 3
+a51 1
+#include <amiga.h>
+@
+
+
+1.51
+log
+@Freeze for MAXON.
+@
+text
+@d2 1
+a2 1
+ * $Id: hanlock.c,v 1.46 91/10/06 18:26:37 Rhialto Rel $
+d4 3
+d329 1
+a329 1
+    int 	    createit;
+d372 1
+d382 10
+a391 7
+    freesec = SEC_EOF;		/* Means none found yet */
+
+    nextpart = ToMSName(component, name);
+    debug(("Component: '%.11s'\n", component));
+    if (nextpart[0] != '/') {
+	nextpart = NULL;
+#ifndef READONLY
+d393 2
+a394 3
+	 * See if we are requested to get an empty spot in the directory
+	 * if the given name does not exist already. The value of mode is
+	 * not important until we actually create the filelock.
+d396 17
+a412 3
+	if (!(mode & MODE_CREATEFILE)) {
+	    mode ^= MODE_CREATEFILE;
+	    createit = 1;
+d414 2
+a415 4
+	    createit = 0;
+#endif
+    } else
+	nextpart++;
+d417 1
+a417 4
+    /*
+     * Are we at the end of the name? Then we are finished now. This works
+     * because sde contains the directory entry of parentdir.
+     */
+a418 2
+    if (name[0] == '\0')
+	goto exit;
+d798 1
+a798 1
+	    OtherEndianMsd((struct MSDirEntry *)(block + fl->msfl_DirOffset));
+@
+
+
+1.46
+log
+@
+Freeze for MAXON
+@
+text
+@d2 1
+a2 1
+ * $Id: hanlock.c,v 1.43 91/09/28 01:41:06 Rhialto Exp $
+d4 4
+d11 1
+a11 1
+ * 
+d42 2
+a43 2
+ * This code is (C) Copyright 1989 by Olaf Seibert. All rights reserved. May
+ * not be used or copied without a licence.
+d58 25
+d89 1
+a89 1
+struct DirEntry FakeRootDirEntry = {
+d105 1
+a105 1
+byte		DotDot[1 + 8 + 3] = "..          ";
+@
+
+
+1.43
+log
+@Changed to newer syslog stuff.
+Fix bug that assign always refers to the rootdir.
+@
+text
+@d2 1
+a2 1
+ * $Id: hanlock.c,v 1.42 91/06/13 23:55:16 Rhialto Exp $
+d4 4
+@
+
+
+1.42
+log
+@DICE conversion
+@
+text
+@d2 1
+a2 1
+ * $Id: hanlock.c,v 1.41 91/06/13 23:37:53 Rhialto Exp $
+d4 3
+d9 1
+a9 1
+ * 
+d45 1
+a45 4
+#   define	debug(x)  syslog x
+    void initsyslog(void);
+    void syslog(char *, ...);
+    void uninitsyslog(void);
+d307 1
+a308 1
+	    parentdir = RootLock;
+d326 4
+@
+
+
+1.41
+log
+@Fix MSSetProtect (converted dirs into files) + DICE conversion
+@
+text
+@d2 1
+a2 1
+ * $Id: hanlock.c,v 1.40 91/03/03 17:53:35 Rhialto Rel $
+d4 3
+@
+
+
+1.40
+log
+@Freeze for MAXON
+@
+text
+@d2 1
+a2 1
+ * $Id: hanlock.c,v 1.33 91/01/24 00:08:27 Rhialto Exp $
+d4 3
+d10 1
+a10 1
+ * 
+d32 4
+a36 1
+#include "han.h"
+d40 3
+d165 1
+a165 1
+	CopyMem(sector + previous->de_Offset, &previous->de_Msd,
+d177 2
+d233 1
+a233 1
+	PrintDirEntry(&fl->msfl_Msd);
+d256 2
+a257 1
+    fl->msfl_Parent = parentdir ? MSDupLock(parentdir) : NULL;
+d264 1
+a264 1
+    AddHead(&LockList->ll_List, fl);
+d303 1
+a303 1
+	if (colon = index(name, ':')) {
+d334 1
+a334 1
+    PrintDirEntry(&parentdir->msfl_Msd);
+d341 1
+a341 1
+    debug(("Component: '%11s'\n", component));
+d376 1
+a376 1
+	goto error;
+d378 1
+a378 1
+    CopyMem(sector, &sde.de_Msd, (long) sizeof (struct MsDirEntry));
+d455 1
+a455 1
+error:
+d490 1
+a490 1
+    if (fl == NULL || fl == RootLock) {
+d492 2
+d510 1
+a510 1
+    PrintDirEntry(&fl->msfl_Msd);
+d518 1
+a518 1
+	    Remove(fl);
+d558 1
+a558 1
+    PrintDirEntry(msd);
+d696 3
+a698 2
+	/* Leave SYSTEM bit as-is */
+	lock->msfl_Msd.msd_Attributes &= ATTR_SYSTEM;
+d701 1
+a701 1
+	    lock->msfl_Msd.msd_Attributes |= (ATTR_READONLY);
+d704 1
+a704 1
+	    lock->msfl_Msd.msd_Attributes |= (ATTR_HIDDEN);
+d707 1
+a707 1
+	    lock->msfl_Msd.msd_Attributes |= (ATTR_ARCHIVED);
+d739 1
+a739 1
+    if (fl && (int) fl->msfl_DirOffset >= 0) {
+d743 1
+a743 1
+	    CopyMem(&fl->msfl_Msd, block + fl->msfl_DirOffset,
+d745 1
+a745 1
+	    OtherEndianMsd(block + fl->msfl_DirOffset);
+d776 1
+a776 1
+	NewList(&ll->ll_List);
+@
+
+
+1.33
+log
+@Fix directory-extension bug (only first sector of new cluster
+was zeroed)
+@
+text
+@d2 1
+a2 1
+ * $Id: hanlock.c,v 1.32 90/11/23 23:54:18 Rhialto Exp $
+d4 4
+@
+
+
+1.32
+log
+@Prepare for syslog
+@
+text
+@d2 1
+a2 1
+ * $Id: hanlock.c,v 1.31 90/11/10 02:48:38 Rhialto Exp $
+d4 3
+d124 2
+d128 1
+d131 1
+d134 11
+a144 4
+		sector = EmptySec(previous->de_Sector);
+		setmem(sector, (int) Disk.bps, 0);
+		MarkSecDirty(sector);
+		FreeSec(sector);
+@
+
+
+1.31
+log
+@Patch 3a. Introduce disk volume date. Update modification time of
+directories. *.INF -> *.info.
+@
+text
+@d2 1
+a2 1
+ * $Id: hanlock.c,v 1.30a $
+d4 4
+d26 1
+a26 1
+#   define	debug(x)  dbprintf x
+d92 1
+a92 1
+	    debug(("NextClusteredSector: %d\n", *sector));
+d154 2
+a155 2
+    debug(("%d,%d ", de->de_Sector, de->de_Offset));
+    debug(("%.8s.%.3s attr:%x time:%x date:%x start:%x size:%lx\n",
+d158 5
+a162 5
+	   de->de_Msd.msd_Attributes,
+	   de->de_Msd.msd_Time,
+	   de->de_Msd.msd_Date,
+	   de->de_Msd.msd_Cluster,
+	   de->de_Msd.msd_Filesize
+@
+
+
+1.30
+log
+@Release 1 Patch 3
+@
+text
+@d2 1
+a2 1
+ * $Id: hanlock.c,v 1.5 90/03/11 17:46:19 Rhialto Rel $
+d4 3
+d38 2
+d47 1
+a47 1
+    0				/* de_Offset */
+d527 1
+a527 1
+    if (fib->fib_DiskKey == (long)ROOT_SEC << 16) {
+d537 10
+a546 6
+	dot[0] = ' ';
+	strncpy(dot + 1, msd->msd_Ext, 3);
+	dot[4] = '\0';
+	end = ZapSpaces(dot, dot + 4);
+	if (end > dot)
+	    dot[0] = '.';
+d702 1
+a702 1
+    if (fl) {
+d719 1
+a719 1
+    struct DateStamp dateStamp;
+d721 2
+a722 1
+    debug(("UpdateFileLock %08lx\n", fl));
+d724 4
+a727 3
+    DateStamp(&dateStamp);
+    ToMSDate(&fl->msfl_Msd.msd_Date, &fl->msfl_Msd.msd_Time, &dateStamp);
+    WriteFileLock(fl);
+@
+
+
+1.5
+log
+@Examine on RootLock fixed
+@
+text
+@d2 1
+a2 1
+ * $Id: hanlock.c,v 1.4 90/01/27 20:22:17 Rhialto Rel $
+a3 11
+ * Revision 1.4  90/01/27  20:22:17  Rhialto
+ * Added extra check when freeing MSFileLocks.
+ *
+ * Revision 1.3  90/01/23  00:36:57  Rhialto
+ * Add an #ifndef READONLY.
+ *
+ * Revision 1.2  89/12/17  23:05:33  Rhialto
+ * Add MSSetProtect
+ *
+ * Revision 1.1  89/12/17  20:03:01  Rhialto
+ *
+d562 2
+a563 2
+ * (libraries/dos.h) specifies to be in fib_DirEntrType. Therefore
+ * we use the low bit in fib_DirEntryType instead.
+d574 3
+a576 1
+    fib->fib_DiskKey = ((ulong) fl->msfl_DirSector << 16) | fl->msfl_DirOffset;
+a577 1
+    /* No ExNext called yet */
+d594 1
+a594 1
+    if (!(fib->fib_DirEntryType & 1)) {
+d599 2
+a600 1
+	} else
+d602 1
+d613 1
+a614 1
+		FreeSec(buf);
+a619 1
+		FreeSec(buf);
+a624 2
+	    fib->fib_DirEntryType++;	/* Make it odd */
+	    FreeSec(buf);
+@
+
+
+1.4
+log
+@Added extra check when freeing MSFileLocks.
+@
+text
+@d2 1
+a2 1
+ * $Id: hanlock.c,v 1.3 90/01/23 00:36:57 Rhialto Exp Locker: Rhialto $
+d4 3
+d26 1
+a27 1
+#include "dos.h"
+d29 1
+a29 1
+#ifdef DEBUG
+d48 1
+a48 1
+	0x21,			/* msd_Date, 1/1/80 */
+d52 1
+a52 1
+    -1, 			/* de_Sector */
+a65 10
+#ifdef DEBUG
+    if (name[0] == '\\') {
+	extern short	DBEnable;
+
+	DBEnable = name[1] & 0x0F;
+
+	return CMP_END_OF_DIR;
+    }
+#endif
+
+d150 1
+a150 1
+#ifdef DEBUG
+d189 1
+a189 1
+#ifdef DEBUG
+d204 1
+a204 1
+#ifdef DEBUG
+a271 1
+
+d278 9
+d290 1
+d304 1
+a304 1
+#ifdef DEBUG
+d478 1
+a478 1
+#ifdef DEBUG
+d526 1
+a526 4
+    register byte  *end,
+		   *dot;
+
+#ifdef DEBUG
+d530 20
+a549 9
+    strncpy(&fib->fib_FileName[1], msd->msd_Name, 8);
+    /* Keep at least one character, even a space, before the dot */
+    dot = ZapSpaces(&fib->fib_FileName[2], &fib->fib_FileName[1 + 8]);
+    dot[0] = ' ';
+    strncpy(dot + 1, msd->msd_Ext, 3);
+    dot[4] = '\0';
+    end = ZapSpaces(dot, dot + 4);
+    if (end > dot)
+	dot[0] = '.';
+d552 1
+d568 9
+a585 1
+    fib->fib_EntryType = 0;	/* No ExNext called yet */
+d587 1
+d604 1
+a604 2
+    if (fib->fib_EntryType == 0) {
+	fib->fib_EntryType = 1;
+d617 1
+a617 1
+	register struct MsDirEntry *msd;
+d620 2
+a621 2
+	    msd = (struct MsDirEntry *) (buf + offset);
+	    if (msd->msd_Name[0] == '\0') {
+d625 3
+a627 3
+	    if (msd->msd_Name[0] & DIR_DELETED_MASK ||
+		msd->msd_Name[0] == '.' ||      /* Hide "." and ".." */
+		(msd->msd_Attributes & ATTR_VOLUMELABEL)) {
+d631 1
+a631 1
+	    OtherEndianMsd(msd);/* Get correct endianness */
+d633 2
+a634 2
+	    ExamineDirEntry(msd, fib);
+	    OtherEndianMsd(msd);/* Get wrong endianness */
+@
+
+
+1.3
+log
+@Add an #ifndef READONLY.
+@
+text
+@d2 1
+a2 1
+ * $Id: hanlock.c,v 1.2 89/12/17 23:05:33 Rhialto Exp Locker: Rhialto $
+d4 3
+a487 1
+	    MSUnLock(fl->msfl_Parent);
+d495 3
+a497 1
+	     * finally UnLock()ed.
+d499 9
+a507 6
+
+	    if ((fl->msfl_Msd.msd_Attributes & ATTR_VOLUMELABEL) &&
+		((void *) list->ll_List.mlh_Head ==
+		 (void *) &list->ll_List.mlh_Tail)
+		) {
+		FreeLockList(list);
+a509 1
+
+@
+
+
+1.2
+log
+@Add MSSetProtect
+@
+text
+@d2 1
+a2 1
+ * $Id: hanlock.c,v 1.1 89/12/17 20:03:01 Rhialto Exp Locker: Rhialto $
+d4 3
+d311 1
+d322 1
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d2 3
+a4 2
+ * $Id$
+ * $Log$
+d534 6
+d613 36
+@

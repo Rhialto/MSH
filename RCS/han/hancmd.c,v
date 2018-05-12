@@ -1,0 +1,452 @@
+head	1.56;
+access;
+symbols
+	SHAREWARE2:1.56
+	MAXON5:1.55
+	MAXON4:1.53
+	MAXON3:1.51
+	MAXON2:1.46
+	MAXON1:1.40
+	Patch3:1.30
+	Patch1:1.1;
+locks;
+comment	@ * @;
+
+
+1.56
+date	96.12.22.00.22.33;	author Rhialto;	state Rel;
+branches;
+next	1.55;
+
+1.55
+date	93.12.30.23.28.00;	author Rhialto;	state Rel;
+branches;
+next	1.54;
+
+1.54
+date	93.06.24.05.12.49;	author Rhialto;	state Exp;
+branches;
+next	1.53;
+
+1.53
+date	92.10.25.02.42.51;	author Rhialto;	state Rel;
+branches;
+next	1.51;
+
+1.51
+date	92.04.17.15.38.30;	author Rhialto;	state Rel;
+branches;
+next	1.46;
+
+1.46
+date	91.10.06.18.25.10;	author Rhialto;	state Rel;
+branches;
+next	1.45;
+
+1.45
+date	91.10.04.00.12.32;	author Rhialto;	state Exp;
+branches;
+next	1.43;
+
+1.43
+date	91.09.28.01.33.22;	author Rhialto;	state Exp;
+branches;
+next	1.42;
+
+1.42
+date	91.06.13.23.44.47;	author Rhialto;	state Exp;
+branches;
+next	1.40;
+
+1.40
+date	91.03.03.17.55.08;	author Rhialto;	state Rel;
+branches;
+next	1.32;
+
+1.32
+date	90.11.23.23.50.53;	author Rhialto;	state Exp;
+branches;
+next	1.30;
+
+1.30
+date	90.06.04.23.18.03;	author Rhialto;	state Rel;
+branches;
+next	1.1;
+
+1.1
+date	90.03.11.18.10.50;	author Rhialto;	state Rel;
+branches;
+next	;
+
+
+desc
+@Handle MSH:: file names.
+@
+
+
+1.56
+log
+@Cosmetics only.
+@
+text
+@/*-
+ * $Id: hancmd.c,v 1.55 1993/12/30 23:28:00 Rhialto Rel $
+ * $Log: hancmd.c,v $
+ * Revision 1.55  1993/12/30  23:28:00	Rhialto
+ * Freeze for MAXON5.
+ *
+ * Revision 1.54  1993/06/24  05:12:49	Rhialto
+ * DICE 2.07.54R.
+ *
+ * Revision 1.53  92/10/25  02:42:51  Rhialto
+ * Add default conversion. Make ::M+ work as advertised.
+ *
+ * Revision 1.51  92/04/17  15:38:30  Rhialto
+ * Freeze for MAXON3.
+ *
+ * Revision 1.46  91/10/06  18:25:10  Rhialto
+ *
+ * Freeze for MAXON
+ *
+ * Revision 1.45  91/10/04  00:12:32  Rhialto
+ * Add confirmation requesters and a switch for them
+ *
+ * Revision 1.43  91/09/28  01:33:22  Rhialto
+ * DICE conversion.
+ *
+ * Revision 1.42  91/06/13  23:44:47  Rhialto
+ * DICE conversion
+ *
+ * Revision 1.40  91/03/03  17:55:08  Rhialto
+ * Freeze for MAXON
+ *
+ * Revision 1.32  90/11/23  23:50:53  Rhialto
+ * Prepare for syslog
+ *
+ * Revision 1.30  90/06/04  23:18:03  Rhialto
+ * Release 1 Patch 3
+ *
+ * HANCMD.C
+ *
+ * The code for the messydos file system handler
+ *
+ * Special commands through MSH::something file names.
+ *
+ * This code is (C) Copyright 1990-1993 by Olaf Seibert. All rights reserved.
+ * May not be used or copied without a licence.
+-*/
+
+#include <stdlib.h>
+#include "han.h"
+#if CONVERSIONS
+#include "hanconv.h"
+#endif /* CONVERSIONS */
+
+#if HDEBUG
+#   include "syslog.h"
+#else
+#   define	debug(x)
+#endif
+
+Prototype void HandleCommand(char *cmd);
+Local void	ltoa(unsigned long l, char *a);
+
+Local int	DoMessages = 1;
+
+static void
+ltoa(l, a)
+unsigned long	l;
+char	       *a;
+{
+    if (l > 999) {
+	a[0] = '*';
+	a[1] = '*';
+	a[2] = '*';
+    } else {
+	a[0] = '0' + l / 100;
+	l %= 100;
+	a[1] = '0' + l / 10;
+	l %= 10;
+	a[2] = '0' + l;
+    }
+}
+
+void
+HandleCommand(cmd)
+char	       *cmd;
+{
+    if (cmd[1] == 'B') {
+	CheckBootBlock = atoi(&cmd[2]);
+	if (DoMessages) {
+	    static char msg[] = "BootBlk: 000";
+
+	    ltoa(CheckBootBlock, msg + 9);
+	    DisplayMessage(msg);
+	}
+#if CONVERSIONS
+    } else if (cmd[1] == 'C') {
+	DefaultConversion = cmd[2] & 31;
+	if (DefaultConversion >= ConvFence)
+	    DefaultConversion = ConvNone;
+	if (DoMessages) {
+	    static char msg[] = "Conversion: x";
+
+	    msg[12] = '@@' + DefaultConversion;
+	    DisplayMessage(msg);
+	}
+#endif /* CONVERSIONS */
+    } else if (cmd[1] == 'F') {
+	if (cmd[2] == '+') {
+	    DiskIOReq->iotd_Req.io_Flags |= IOMDF_40TRACKS;
+	    if (DoMessages) {
+		DisplayMessage("40 track mode");
+	    }
+	} else if (cmd[2] == '-') {
+	    DiskIOReq->iotd_Req.io_Flags &= ~IOMDF_40TRACKS;
+	    if (DoMessages) {
+		DisplayMessage("80 track mode");
+	    }
+	} else {
+	    DiskIOReq->iotd_Req.io_Flags = atoi(&cmd[2]);
+	    if (DoMessages) {
+		static char msg[] = "io_Flags: 000";
+
+		ltoa(DiskIOReq->iotd_Req.io_Flags, msg + 10);
+		DisplayMessage(msg);
+	    }
+	}
+    } else if (cmd[1] == 'M') {
+	DoMessages = (cmd[2] == '+')? 1 : atoi(&cmd[2]);
+    }
+}
+@
+
+
+1.55
+log
+@Freeze for MAXON5.
+@
+text
+@d2 1
+a2 1
+ * $Id: hancmd.c,v 1.54 1993/06/24 05:12:49 Rhialto Exp $
+d4 4
+a7 1
+ * Revision 1.54  1993/06/24  05:12:49  Rhialto
+d50 1
+a50 1
+#ifdef CONVERSIONS
+d54 1
+a54 1
+#ifdef HDEBUG
+d95 1
+a95 1
+#ifdef CONVERSIONS
+@
+
+
+1.54
+log
+@DICE 2.07.54R.
+@
+text
+@d2 5
+a6 2
+ * $Id: hancmd.c,v 1.53 92/10/25 02:42:51 Rhialto Rel $
+ * $Log:	hancmd.c,v $
+@
+
+
+1.53
+log
+@Add default conversion. Make ::M+ work as advertised.
+@
+text
+@d2 1
+a2 1
+ * $Id: hancmd.c,v 1.51 92/04/17 15:38:30 Rhialto Rel $
+d4 3
+d38 1
+a38 1
+ * This code is (C) Copyright 1990-1992 by Olaf Seibert. All rights reserved.
+a41 1
+#include <functions.h>
+@
+
+
+1.51
+log
+@Freeze for MAXON3.
+@
+text
+@d2 1
+a2 1
+ * $Id: hancmd.c,v 1.46 91/10/06 18:25:10 Rhialto Rel $
+d4 3
+d35 1
+a35 1
+ * This code is (C) Copyright 1990,1991 by Olaf Seibert. All rights reserved.
+a38 1
+#include <amiga.h>
+d42 3
+a78 4
+#ifdef HDEBUG
+    if (cmd[1] == 'D') {
+    } else
+#endif
+d87 12
+d120 1
+a120 1
+	DoMessages = atoi(&cmd[2]);
+a122 1
+
+@
+
+
+1.46
+log
+@
+Freeze for MAXON
+@
+text
+@d2 1
+a2 1
+ * $Id: hancmd.c,v 1.45 91/10/04 00:12:32 Rhialto Exp $
+d4 4
+d10 1
+a10 1
+ * 
+d47 2
+a48 2
+extern int	CheckBootBlock;
+static void	ltoa(unsigned long l, char *a);
+d50 1
+a50 1
+int		DoMessages = 1;
+@
+
+
+1.45
+log
+@Add confirmation requesters and a switch for them
+@
+text
+@d2 1
+a2 1
+ * $Id: hancmd.c,v 1.43 91/09/28 01:33:22 Rhialto Exp $
+d4 3
+@
+
+
+1.43
+log
+@DICE conversion.
+@
+text
+@d2 1
+a2 1
+ * $Id: hancmd.c,v 1.42 91/06/13 23:44:47 Rhialto Exp $
+d4 3
+d25 2
+a26 2
+ * This code is (C) Copyright 1990 by Olaf Seibert. All rights reserved. May
+ * not be used or copied without a licence.
+d41 21
+d65 1
+a65 1
+register char  *cmd;
+d73 6
+d80 1
+a80 1
+	if (cmd[2] == '+')
+d82 4
+a85 1
+	else if (cmd[2] == '-')
+d87 4
+a90 1
+	else
+d92 9
+@
+
+
+1.42
+log
+@DICE conversion
+@
+text
+@d2 1
+a2 1
+ * $Id: hancmd.c,v 1.40 91/03/03 17:55:08 Rhialto Rel $
+d4 3
+d32 1
+a32 4
+#   define	debug(x)  syslog x
+    void initsyslog(void);
+    void syslog(char *, ...);
+    void uninitsyslog(void);
+@
+
+
+1.40
+log
+@Freeze for MAXON
+@
+text
+@d2 1
+a2 1
+ * $Id: hancmd.c,v 1.32 90/11/23 23:50:53 Rhialto Exp $
+d4 3
+d9 1
+a9 1
+ * 
+d23 3
+d30 3
+@
+
+
+1.32
+log
+@Prepare for syslog
+@
+text
+@d2 1
+a2 1
+ * $Id: hancmd.c,v 1.30 90/06/04 23:18:03 Rhialto Rel $
+d4 3
+@
+
+
+1.30
+log
+@Release 1 Patch 3
+@
+text
+@d2 1
+a2 1
+ * $Id: hancmd.c,v 1.1 90/03/11 18:10:50 Rhialto Rel $
+d4 3
+d20 1
+a20 1
+#   define	debug(x)  dbprintf x
+a32 3
+	extern short	DBEnable;
+
+	DBEnable = name[2] & 0x0F;
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d2 2
+a3 3
+ * $Id$
+ * $Log$
+ *
+d22 2
+d35 3
+a37 1
+    if (cmd[1] == 'F') {
+@

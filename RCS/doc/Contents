@@ -1,0 +1,11 @@
+Msh		An Amiga file system handler that handles MSDOS formatted
+		diskettes.  Version "1.30" (Release 1 patch 3).  You can
+		use files on such disks in almost exactly the same way as
+		you use files on native AmigaDOS disks.  This is a fully
+		functional, read/write version, that supports 8, 9, or 10
+		sector disks of 80 tracks, and should also work on 40 track
+		drives and hard disks with 12 or 16 bit FAT of any
+		dimension the FAT allows.  Update to version "1.5" (Release
+		1) on disk 327.  Includes source.
+		Author:  Olaf Seibert
+

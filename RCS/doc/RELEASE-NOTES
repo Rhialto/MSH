@@ -1,0 +1,141 @@
+
+	M E S S Y D O S   F I L E   S Y S T E M   H A N D L E R
+	-------------------------------------------------------
+	by Olaf 'Rhialto' Seibert                   06-Oct-1991
+
+*******************************************************************************
+    MSH is (C) Copyright 1989-1991 by Olaf Seibert. All rights reserved.
+*******************************************************************************
+
+====06-Oct-1991=====This is offered to MAXON for commercial distribution=======
+1.46
+Features added:
+    - Character conversions for PC files (NAME;A) and ST files (NAME;B)
+    - Requesters added for confirmation of MSH::F actions
+    - MSH:M+/- added to switch the requesters on and off
+
+Bugs fixed:
+    - Tracks with sectors numbered 0 crashed the device
+    - Assigns did always refer to the rootdir
+
+====27-Jun-1991=====This is offered to MAXON for commercial distribution=======
+
+Changes:
+    - The compiler used is now DICE, by Matt Dillon. This results in a
+      smaller executable.
+
+Features added:
+    - Now accepts Atari ST bootblocks, and can use default values in case
+      of nonsensical bootblocks.
+
+====03-Mar-1991=====This is offered to MAXON for commercial distribution=======
+
+Features added:
+    - Dates of directories are updated when files or directories are
+      created, renamed or deleted.
+    - .INF -> .info, for Workbench users.
+    - Creation date added in volume label. The normal date is the
+      modification date.
+    - device: checks for 2.0 and then uses TD_RAWWRITE
+    - When using really large caches searching it is speeded up
+
+Bugs fixed:
+    - MSH: extending subdirectories forgot to clear the blocks first.
+
+====05-Jun-1990=====From patch #3==============================================
+
+Bug fixed:
+    - device: The IBM disk format seems to have an index mark $5224/$5552
+      before the first sector, even though the machines I tested it with
+      did not seem to miss it.
+
+Inconvenience removed:
+    - MSH: no longer produces read error requestors when the bootblock of a
+      newly inserted disk cannot be read. The disk is silently ignored.
+
+Feature added:
+    - MSH: is now more polite to some DFx: that uses the same physical
+      drive.
+
+Misc:
+    - Reduced stack size of messydisk.device task (2K -> 1K) and of the
+      filesystem itself (4K -> 3K). Xoper shows that (most of the time)
+      no more than half of these stacks seems to be used.
+
+====05-May-1990=====About patch #2a-2c=========================================
+
+There have been many 'patch 2' versions. Therefore, I bumped the
+version number after I cleaned up the distribution, so that a consistent
+version number is possible.
+
+====11-Mar-1990=====From patch #1==============================================
+
+    This is patch #1 to MSH release #1. It consists of all binaries and
+documentation. There are replacement source files, and a patch file for the
+others.
+
+Bugs fixed:
+    - device: I/O could be done during CloseDevice(). Trackdisk does not
+      seem to do this, and was implemented incorrectly anyhow.
+    - handler: Examine() of the root directory got a . afther the 8th
+      character of the volume name
+
+Inconvenience removed:
+    - handler: The AmigaDOS 1.3 List and Dir commands thought that all
+      files were directories.
+
+Features added:
+    - handler: Now uses the Reserved entry in the Mountlist. You should
+      normally set this to 0.
+    - MSH::F+ and MSH::F-.
+    - messyfmt: You can now write just the bootblock. The disk must
+      already be formatted.
+    - device: you can now, with some care, format disks with less than 8
+      sectors per track.
+
+====11-Feb-1990=====From release #1============================================
+
+    This is the first really public release of the MessyFileSystem, or MSH
+for short. It has circulated among a small audience, and I entered it in a
+programming contest held by the German 'Amiga-Magazin'. They were too dumb
+to let me win or offer me a contract, so here goes their opportunity to
+make some money. Not mine, however, since I am going to try the sh*r*ware
+concept. So, if you like the program, feel free to send me some $$, or even
+$$$ if you feel like it.
+
+    What _is_ MSH ? Well, if you ever heard of CrossDos, it is about the
+same thing. Only better, since I wrote it :-) If you never heard of
+CrossDos: MSH is a (set of) programs that enable you to use IBM-PC
+diskettes in your Amiga, just as if they were regular Amiga disks.
+Something you probably thought or were told to be impossible!
+
+    There exist other programs that will copy files to and/or from messy
+disks, but they do just that: copy. You are not able to use any other
+program directly with files you have stored on a messy disk. But, with MSH,
+this is finally possible. It seems that several people at about the same
+time decided that it was time to write a program like MSH. Hence there is
+also CrossDos. The fundamental difference between MSH and CrossDos is that
+you immediately get a fully functional version of MSH, and you even get the
+source! (And I am a non-commercial hobbyist).
+
+    Of course, if you get the source, you won't get any warranty. The idea
+is that if it works, you send me some $$ (preferably in some stronger
+currency than the dollar, though); if it fails to work, you can fix it
+yourself.
+
+    Well, enough talk. Some technical information can be found in the files
+msh.man and dev.man. Fanmail and money will always reach me at the
+following address:
+
+Olaf Seibert
+Beek 5
+5815 CS  Merselo
+The Netherlands
+
+    Ordinary mail can also be addressed to the following address, which is
+valid from 15 june 1991:
+
+Olaf Seibert
+Vossendijk 123
+6534 TK  Nijmegen
+The Netherlands

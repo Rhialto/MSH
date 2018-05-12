@@ -1,0 +1,102 @@
+Article 7092 of comp.sys.amiga.tech:
+Path: estinc!mcdphx!asuvax!cs.utexas.edu!tut.cis.ohio-state.edu!giza.cis.ohio-state.edu!erd
+From: erd@giza.cis.ohio-state.edu (Ethan R Dicks)
+Newsgroups: comp.sys.amiga.tech
+Subject: How's this for an enhancement to MSH?
+Keywords: MSH messy-dos Manx digital VAX RX50
+Message-ID: <77558@tut.cis.ohio-state.edu>
+Date: 24 Feb 90 22:11:53 GMT
+Sender: news@tut.cis.ohio-state.edu
+Reply-To: Ethan R Dicks <erd@cis.ohio-state.edu>
+Distribution: na
+Organization: Ohio State University Computer and Information Science
+Lines: 86
+
+
+I have an "enhancement" to MSH, the messydisk.device in particular.  I
+have been trying to read DEC RX-50 5-1/4" floppies for a long time now.
+The drive I am using is a standard PC clone 5-1/4" drive attached to the
+small circuit board found in the A1010 3-1/2" drive.  It works fine with
+AmigaDOS, CrossDOS and MSH.  I want to read RX-50 floppies.  The chart
+I have from the DEC manual looks like this...
+
+"GAP 1"		GAP 1:		47  x  0x4E
+
+
+		SYNCH:		8   x  0x00
+		IDAM:		3   x  0xA1
+				1   x  0xFE
+		TRACK:		(physical track address)
+		SIDE:		(physical side number)
+		SECTR:		(physical sector number)
+[Repeat once	SIZE:		1   x  0x02  (512 bytes per sector)
+ per sector ]	2 CRC:		2      CRC bytes
+		GAP 2:		22  x  0x4E
+		SYNCH:		12  x  0x00
+		DAM:		3   x  0xA1
+				1   x  0xFB
+ 		DATA:		512 x  0xE5
+		2 CRC:		2      CRC bytes
+		GAP 3:		48  x  0x4E
+
+
+		GAP 4:		6250 minus sum of bytes up to GAP 4 x 0x4E
+
+
+The same chart lists PC floppies as follows...
+
+
+"GAP 1"		GAP 1A:		80  x  0x4E
+		SYNCH:		12  x  0x00
+		INDEX:		3   x  0xC2
+				1   x  0xFC
+		GAP1B:		50  x  0x4E
+
+
+
+		SYNCH:		12  x  0x00
+		IDAM:		3   x  0xA1
+				1   x  0xFE
+		TRACK:		(physical track address)
+		SIDE:		(physical side number)
+		SECTR:		(physical sector number)
+[Repeat once	SIZE:		1   x  0x02  (512 bytes per sector)
+ per sector ]	2 CRC:		2      CRC bytes
+		GAP 2:		22  x  0x4E
+		SYNCH:		12  x  0x00
+		DAM:		3   x  0xA1
+				1   x  0xFB
+ 		DATA:		512 x  0xE5
+		2 CRC:		2      CRC bytes
+		GAP 3:		64  x  0x4E
+
+
+		GAP 4:		6250 minus sum of bytes up to GAP 4 x 0x4E
+
+
+As you can see, the formats are extremely familiar.  I would perform the
+change myself, but I have Lattice, not Manx.  I would be very happy to see
+a messydisk.device which supports that track format, and a diskette head
+geometry of 10 sectors/track by 1 head by 80 tracks (400kb).  For someone
+with Manx, the change is utterly trivial, but for me, almost impossible.
+Once I can read the blocks on a diskette, I intend to write two new file
+systems for the Amiga: RT-11 format and ODS-1 or ODS-2 FILES-11 format, 
+so that I can directly read diskettes written on PDP-11s or VAXen.  The 
+other possibility is to write tar floppies, but I still need to be able to
+read the sectors.
+
+Thanks much.
+
+-ethan
+
+
+
+
+
+--
+Ethan R. Dicks       | ######  This signifies that the poster is a member in
+Software Results Corp|   ##    good sitting of Inertia House: Bodies at rest.
+940 Freeway Drive N. |   ##
+Columbus OH    43229 | ######  "You get it, you're closer."
+
+

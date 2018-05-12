@@ -1,0 +1,1372 @@
+head	1.56;
+access;
+symbols
+	SHAREWARE2:1.56
+	MAXON5:1.55
+	MAXON4:1.53
+	MAXON3:1.51
+	MAXON2:1.46
+	MAXON1:1.40
+	Patch3a:1.31
+	Patch3:1.30
+	Patch1:1.5
+	Rel1:1.4;
+locks;
+comment	@ * @;
+
+
+1.56
+date	96.12.22.00.22.33;	author Rhialto;	state Rel;
+branches;
+next	1.55;
+
+1.55
+date	93.12.30.23.02.45;	author Rhialto;	state Rel;
+branches;
+next	1.54;
+
+1.54
+date	93.06.24.05.12.49;	author Rhialto;	state Exp;
+branches;
+next	1.53;
+
+1.53
+date	92.10.25.02.25.46;	author Rhialto;	state Rel;
+branches;
+next	1.52;
+
+1.52
+date	92.09.06.00.19.31;	author Rhialto;	state Exp;
+branches;
+next	1.51;
+
+1.51
+date	92.04.17.15.36.35;	author Rhialto;	state Rel;
+branches;
+next	1.46;
+
+1.46
+date	91.10.06.18.27.36;	author Rhialto;	state Rel;
+branches;
+next	1.45;
+
+1.45
+date	91.10.03.23.36.47;	author Rhialto;	state Exp;
+branches;
+next	1.43;
+
+1.43
+date	91.09.28.01.40.24;	author Rhialto;	state Exp;
+branches;
+next	1.42;
+
+1.42
+date	91.06.13.23.50.21;	author Rhialto;	state Exp;
+branches;
+next	1.40;
+
+1.40
+date	91.03.03.17.46.39;	author Rhialto;	state Rel;
+branches;
+next	1.32;
+
+1.32
+date	90.11.23.23.54.07;	author Rhialto;	state Exp;
+branches;
+next	1.31;
+
+1.31
+date	90.11.10.02.46.35;	author Rhialto;	state Exp;
+branches;
+next	1.30;
+
+1.30
+date	90.06.04.23.16.50;	author Rhialto;	state Rel;
+branches;
+next	1.5;
+
+1.5
+date	90.03.11.17.42.29;	author Rhialto;	state Rel;
+branches;
+next	1.4;
+
+1.4
+date	90.01.27.20.13.00;	author Rhialto;	state Rel;
+branches;
+next	1.3;
+
+1.3
+date	89.12.17.21.29.51;	author Rhialto;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	89.12.17.21.24.47;	author Rhialto;	state Exp;
+branches;
+next	;
+
+
+desc
+@Main routines for the handler
+@
+
+
+1.56
+log
+@Add IEQUALIFIER_MULTIBROADCAST to disk inserted/removed events.
+@
+text
+@/*-
+ * $Id: hanmain.c,v 1.55 1993/12/30 23:02:45 Rhialto Rel $
+ * $Log: hanmain.c,v $
+ * Revision 1.55  1993/12/30  23:02:45	Rhialto
+ * New LONGNAMES filesystem, changes throughout the handler.
+ * Optional (compile-time) broadcast IECLASS_DISKINSERTED messages.
+ * Don't fail Info() if there is no disk in drive.
+ * Freeze for MAXON5.
+ *
+ * Revision 1.54  1993/06/24  05:12:49	Rhialto
+ * DICE 2.07.54R.
+ *
+ * Revision 1.53  92/10/25  02:25:46  Rhialto
+ * Expose private info if user asks nicely.
+ *
+ * Revision 1.52  92/09/06  00:19:31  Rhialto
+ * Include $VER in version string.
+ *
+ * Revision 1.51  92/04/17  15:36:35  Rhialto
+ * Freeze for MAXON. removed InitCacheList() from MSDiskInserted().
+ *
+ * Revision 1.46  91/10/06  18:27:36  Rhialto
+ *
+ * Freeze for MAXON
+ *
+ * Revision 1.45  91/10/03  23:36:47  Rhialto
+ * Implement conversions during Read()/Write()
+ *
+ * Revision 1.43  91/09/28  01:40:24  Rhialto
+ * Changed to newer syslog stuff.
+ *
+ * Revision 1.42  91/06/13  23:50:21  Rhialto
+ * DICE conversion
+ *
+ * Revision 1.40  91/03/03  17:46:39  Rhialto
+ * Freeze for MAXON
+ *
+ * Revision 1.32  90/11/23  23:54:07  Rhialto
+ * Prepare for syslog
+ *
+ * Revision 1.31  90/11/10  02:46:35  Rhialto
+ * Patch 3a. Changes location of disk volume date.
+ *
+ * Revision 1.30  90/06/04  23:16:50  Rhialto
+ * Release 1 Patch 3
+ *
+ *  HANMAIN.C
+ *
+ *  The code for the messydos file system handler.
+ *
+ *  Some start/stop stuff that is not really part of the
+ *  file system itself but that must be done anyway.
+ *
+ *  This code is (C) Copyright 1989-1994 by Olaf Seibert. All rights reserved.
+ *  May not be used or copied without a licence.
+-*/
+
+#include "han.h"
+#include "dos.h"
+#if CONVERSIONS
+#   include "hanconv.h"
+#endif
+#if INPUTDEV
+#include <devices/input.h>
+#include <devices/inputevent.h>
+#include <clib/intuition_protos.h>
+#endif
+
+#include <string.h>
+#if HDEBUG
+#   include "syslog.h"
+#else
+#   define	debug(x)
+#endif
+
+Prototype byte ToUpper(byte ch);
+Prototype long lmin(long a, long b);
+Prototype byte *ZapSpaces(byte *begin, byte *end);
+Prototype byte *ToMSName(byte *dest, byte *source);
+Prototype long MSDiskInfo(struct InfoData *infodata);
+Prototype void MSDiskInserted(struct LockList **locks, void *cookie);
+Prototype int MSDiskRemoved(struct LockList **locks);
+Prototype void InputDiskInserted(void);
+Prototype void InputDiskRemoved(void);
+Prototype void HanCloseDown(void);
+Prototype int HanOpenUp(void);
+Prototype long MSRelabel(byte *newname);
+Prototype struct PrivateInfo *PrivateInfo(void);
+
+struct Library *IntuitionBase;
+#if INPUTDEV
+struct IOStdReq *InputIOReq;
+#endif
+Local const char RCSId[] = "\0$\VER: Messydos filing system $Revision: 1.55 $ $Date: 1993/12/30 23:02:45 $, by Olaf Seibert";
+
+#define CONV_SEP    ';'
+
+byte
+ToUpper(ch)
+byte		ch;
+{
+    if (ch >= 'a' && ch <= 'z')
+	return ch + ('A' - 'a');
+    if (ch == '.')
+	return '!';
+    return ch & ~DIR_DELETED_MASK;
+}
+
+long
+lmin(a, b)
+long		a,
+		b;
+{
+    return (a < b) ? a : b;
+}
+
+byte	       *
+ZapSpaces(begin, end)
+byte	       *begin,
+	       *end;
+{
+    *end = '\0';                /* Make sure the string is 0-terminated */
+
+    while (end > begin && end[-1] == ' ')
+	*--end = '\0';
+
+    return end;
+}
+
+/*
+ * Map an arbitrary file name to MS-DOS conventions. The output format is
+ * 8+3 without dot, padded with spaces, suitable for direct comparison
+ * with directory entries. Return a pointer to the delimiter found ('\0'
+ * or '/'). [[Make sure that Examine/ExNext return a proper inverse of
+ * this...]]
+ */
+
+byte	       *
+ToMSName(dest, source)
+byte	       *dest;
+byte	       *source;
+{
+#if LONGNAMES == 0
+    byte	   *dotp;
+    byte	   *slashp;
+    int 	    i;
+#endif
+    int 	    len;
+
+    if (*source == '/') {       /* parentdir */
+	strncpy(dest, DotDot, L_8 + L_3);   /* ".." */
+	return source;
+    }
+#if LONGNAMES
+    /* Pad with nuls instead of spaces */
+    memset(dest, 0, L_8 + L_3);
+
+    for (len = 0;
+	    *source && *source != '/' && *source != CONV_SEP && len < L_8;
+	    len++)
+	*dest++ = *source++;
+
+    if (source[0] == CONV_SEP && source[1]) {
+	int		c;
+
+	source++;
+#if CONVERSIONS
+	c = source[0] & 31;
+	if (c >= ConvFence)
+	    c = ConvNone;
+	ConversionImbeddedInFileName = c;
+#endif /* CONVERSIONS */
+
+	while (*source && *source != '/')
+	    source++;
+    }
+    return source;
+#else
+    /*
+     * Remove any strictly leading dots. .info -> info, .indent.pro ->
+     * indent.pro, .profile -> profile, etc.
+     */
+    while (*source == '.')
+	source++;
+
+    /*
+     * Find dot and slash which are delimiters of name and extension.
+     */
+    {
+	byte	       *cp;
+
+	cp = source;
+	while (*cp) {
+	    if (*cp == '.' || *cp == '/' || *cp == CONV_SEP)
+		break;
+	    cp++;
+	}
+	dotp = cp;
+	while (*cp) {
+	    if (*cp == '/' || *cp == CONV_SEP)
+		break;
+	    cp++;
+	}
+	slashp = cp;
+    }
+
+    len = dotp - source;
+    if (len > L_8)
+	len = L_8;
+
+    for (i = 0; i < len; i++) {
+	*dest++ = ToUpper(*source++);
+    }
+    for (; i < L_8; i++) {
+	*dest++ = ' ';
+    }
+
+    source = dotp + 1;
+    len = slashp - source;	/* so will be -1 if no suffix */
+    if (len > 3)
+	len = 3;
+
+    for (i = 0; i < len; i++) {
+	*dest++ = ToUpper(*source++);
+    }
+    for (; i < 3; i++) {
+	*dest++ = ' ';
+    }
+
+    if (slashp[0] == CONV_SEP && slashp[1]) {
+	int		c;
+
+	slashp++;
+#if CONVERSIONS
+	c = slashp[0] & 31;
+	if (c >= ConvFence)
+	    c = ConvNone;
+	ConversionImbeddedInFileName = c;
+#endif /* CONVERSIONS */
+
+	while (*slashp && *slashp != '/')
+	    slashp++;
+    }
+    return slashp;
+#endif
+}
+
+/*
+ * Do the Info call.
+ */
+
+long
+MSDiskInfo(infodata)
+struct InfoData *infodata;
+{
+    setmem(infodata, sizeof(*infodata), 0);
+
+    infodata->id_DiskState = IDDiskState;
+    infodata->id_DiskType = IDDiskType;
+    infodata->id_UnitNumber = UnitNr;
+    debug(("DiskInfo: state %d, type %x\n", IDDiskState, IDDiskType));
+
+    infodata->id_VolumeNode = (BPTR) CTOB(VolNode);
+    infodata->id_InUse = LockList ? 1 : 0;
+
+    /*if (IDDiskType == ID_DOS_DISK)*/ {
+	infodata->id_NumBlocks = Disk.nsects;
+	infodata->id_NumBlocksUsed = Disk.nsects - Disk.freeclusts * Disk.spc;
+	infodata->id_BytesPerBlock = Disk.bps;
+    }
+
+    return DOSTRUE;
+}
+
+/*
+ * We (re-)establish our List of MSFileLocks after a disk has been
+ * (re-)inserted. If there are no known locks, we make the root lock from
+ * the volume label, if there is one.
+ *
+ * We get a special cookie to hand to a cleanup routine that we must call
+ * when finally all locks on the current disk are UnLock()ed. (this is
+ * actually the volume node, but we don't want to know that.)
+ *
+ * This must be called some time after IdentifyDisk().
+ */
+
+void
+MSDiskInserted(locks, cookie)
+struct LockList **locks;
+void	       *cookie;
+{
+    debug(("MSDiskInserted %08lx\n", cookie));
+
+    LockList = *locks;
+
+    if (LockList == NULL) {
+	LockList = NewLockList(cookie);
+	RootLock = MakeLock(NULL, &Disk.vollabel, SHARED_LOCK);
+    } else {
+	RootLock = MSDupLock(GetTail(&LockList->ll_List));
+    }
+}
+
+/*
+ * Remove the current disk. A place is offered to save the current
+ * LockList to restore later. We must unlock the root lock since it isn't
+ * a real reference to the disk, just a placeholder for dummies that hand
+ * us NULL locks.
+ */
+
+int
+MSDiskRemoved(locks)
+struct LockList **locks;
+{
+    debug(("MSDiskRemoved(), FatDirty=%d, CacheDirty=%d\n",
+	    FatDirty, CacheDirty));
+#if !READONLY
+    if (FatDirty || CacheDirty) {
+	MSUpdate(1);		/* Force a requester */
+    }
+#endif
+
+    FreeFat();
+    FreeCacheList();
+
+    IDDiskType = ID_NO_DISK_PRESENT;
+    IDDiskState = ID_WRITE_PROTECTED;
+    *locks = NULL;
+
+    if (RootLock == NULL) {
+	debug(("MSDiskRemoved with no RootLock\n"));
+	return 1;
+    }
+#if HDEBUG
+    if (RootLock != GetTail(&LockList->ll_List)) {
+	debug(("RootLock not at end of LockList!\n"));
+	/* Get the lock on the root dir at the tail of the List */
+	Remove((struct Node *)RootLock);
+	AddTail((struct List *)&LockList->ll_List, (struct Node *)RootLock);
+    }
+#endif
+
+    /*
+     * If there are no real locks on the disk, we need not keep any
+     * information about it.
+     */
+
+    MSUnLock(RootLock); 	/* may call FreeLockList and free VolNode
+				 * (!) */
+    RootLock = NULL;
+
+    if (LockList) {
+	*locks = LockList;	/* VolNode can't be gone now... */
+	LockList = NULL;
+	return 0;		/* not all references gone */
+    } else {
+	return 1;		/* all gone, even the VolNode */
+    }
+}
+
+#if INPUTDEV
+void
+InputDiskInserted(void)
+{
+    struct InputEvent ie;
+
+    memset(&ie, 0, sizeof(ie));
+    ie.ie_Class = IECLASS_DISKINSERTED;
+    ie.ie_Qualifier = IEQUALIFIER_MULTIBROADCAST;
+    /*
+     * Use Intuition to get the current time.
+     * If we were a 2.04+ only application, we could use
+     * timer.device/GetSysTime().
+     */
+    CurrentTime(&ie.ie_TimeStamp.tv_secs, &ie.ie_TimeStamp.tv_micro);
+
+    InputIOReq->io_Command = IND_WRITEEVENT;
+    InputIOReq->io_Data = &ie;
+    InputIOReq->io_Length = sizeof(ie);
+    DoIO((struct IORequest *)InputIOReq);
+    debug(("IECLASS_DISKINSERTED %d\n", InputIOReq->io_Error));
+}
+
+void
+InputDiskRemoved(void)
+{
+    struct InputEvent ie;
+
+    memset(&ie, 0, sizeof(ie));
+    ie.ie_Class = IECLASS_DISKREMOVED;
+    ie.ie_Qualifier = IEQUALIFIER_MULTIBROADCAST;
+    /* Use Intuition to get the current time */
+    CurrentTime(&ie.ie_TimeStamp.tv_secs, &ie.ie_TimeStamp.tv_micro);
+
+    InputIOReq->io_Command = IND_WRITEEVENT;
+    InputIOReq->io_Data = &ie;
+    InputIOReq->io_Length = sizeof(ie);
+    DoIO((struct IORequest *)InputIOReq);
+    debug(("IECLASS_DISKREMOVED %d\n", InputIOReq->io_Error));
+}
+#endif
+
+void
+HanCloseDown()
+{
+#if HDEBUG
+    struct MSFileLock *fl;
+
+    while (LockList && (fl = (struct MSFileLock *) GetHead(&LockList->ll_List))) {
+	debug(("UNLOCKING %08lx: ", fl));
+	PrintDirEntry((struct DirEntry *)&fl->msfl_Msd);
+	MSUnLock(fl);		/* Remove()s it from this List */
+    }
+#endif
+#if CONVERSIONS
+    ConvCleanUp();
+#endif
+#if INPUTDEV
+
+    if (InputIOReq) {
+	if (InputIOReq->io_Unit) {
+	    CloseDevice((struct IORequest *)InputIOReq);
+	}
+	DeleteExtIO((struct IORequest *)InputIOReq);
+	InputIOReq = NULL;
+    }
+#endif
+    if (DiskIOReq) {
+	if (DiskIOReq->iotd_Req.io_Unit) {
+	    MSUpdate(1);
+	    CloseDevice((struct IORequest *)DiskIOReq);
+	}
+	DeleteExtIO((struct IORequest *)DiskIOReq);
+	DiskIOReq = NULL;
+    }
+    if (TimeIOReq) {
+	if (TimeIOReq->tr_node.io_Unit) {
+	    WaitIO((struct IORequest *)TimeIOReq);
+	    CloseDevice((struct IORequest *)TimeIOReq);
+	}
+	DeleteExtIO((struct IORequest *)TimeIOReq);
+	TimeIOReq = NULL;
+    }
+    if (DiskReplyPort) {
+	DeletePort(DiskReplyPort);
+	DiskReplyPort = NULL;
+    }
+    if (IntuitionBase) {
+	CloseLibrary(IntuitionBase);
+	IntuitionBase = NULL;
+    }
+}
+
+int
+HanOpenUp()
+{
+    LockList = NULL;
+    RootLock = NULL;
+    Fat = NULL;
+    IDDiskType = ID_NO_DISK_PRESENT;
+    IDDiskState = ID_WRITE_PROTECTED;
+    DelayCount = 0;
+    Disk.bps = MS_BPS;
+    CheckBootBlock = CHECK_BOOTJMP | CHECK_SANITY | CHECK_SAN_DEFAULT;
+    InitCacheList();
+
+    TimeIOReq = NULL;
+
+#if HDEBUG
+    if (!(DiskReplyPort = CreatePort("MSH:disk.replyport", -1L)))
+	goto abort;
+#else
+    if (!(DiskReplyPort = CreatePort(NULL, 0L)))
+	goto abort;
+#endif
+
+    debug(("DiskReplyPort = 0x%08lx\n", DiskReplyPort));
+
+    if (!(DiskIOReq = (struct IOExtTD *)
+		      CreateExtIO(DiskReplyPort, (long) sizeof(*DiskIOReq)))) {
+	debug(("Failed to CreateExtIO\n"));
+	goto abort;
+    }
+    if (OpenDevice(DevName, UnitNr, (struct IORequest *)DiskIOReq,
+		   DevFlags | TDF_ALLOW_NON_3_5)) {
+	debug(("Failed to OpenDevice\n"));
+	goto abort;
+    }
+    TimeIOReq = (struct timerequest *) CreateExtIO(DiskReplyPort,
+					     (long) sizeof(*TimeIOReq));
+
+    if (TimeIOReq == NULL || OpenDevice(TIMERNAME, UNIT_VBLANK,
+					(struct IORequest *)TimeIOReq, 0L))
+	goto abort;
+    TimeIOReq->tr_node.io_Flags = IOF_QUICK;	/* For the first WaitIO() */
+
+#if INPUTDEV
+    if (!(InputIOReq = (struct IOStdReq *)CreateExtIO(DiskReplyPort, (long) sizeof(*InputIOReq)))) {
+	debug(("Failed to CreateExtIO for input.device\n"));
+	goto abort;
+    }
+    if (OpenDevice("input.device", 0, (struct IORequest *)InputIOReq, 0)) {
+	debug(("Failed to Open input.device\n"));
+	goto abort;
+    }
+#endif
+
+    IntuitionBase = OpenLibrary("intuition.library", 0L);
+    debug(("HanOpenUp() done.\n"));
+    return DOSTRUE;
+
+abort:
+    HanCloseDown();
+    return 0;
+}
+
+/*
+ * Relabel the disk. We create new labels if necessary.
+ */
+
+long
+MSRelabel(newname)
+byte	       *newname;
+{
+#if READONLY
+    return DOSFALSE;
+#else
+    /*
+     * A null or empty string means: remove the label, if any.
+     */
+    if (!newname || !*newname) {
+	if (RootLock->msfl_DirSector != (word)ROOT_SEC) {
+	    RootLock->msfl_Msd.msd_Name[0] = DIR_DELETED;
+	    RootLock->msfl_Msd.msd_Attributes = 0;
+	    WriteFileLock(RootLock);
+	    Disk.vollabel = FakeRootDirEntry;
+	    RootLock->msfl_Msd = Disk.vollabel.de_Msd;
+	    RootLock->msfl_DirSector = Disk.vollabel.de_Sector;
+	    RootLock->msfl_DirOffset = Disk.vollabel.de_Offset;
+	}
+	return DOSTRUE;
+    }
+
+    /*
+     * No label yet? Then we must create one, even if we need to move
+     * something else for it.
+     */
+
+    if (RootLock->msfl_DirSector == (word)ROOT_SEC) {
+	struct MSFileLock *new;
+
+	new = MSLock(RootLock, "OLAF-><>.\\*", EXCLUSIVE_LOCK ^ MODE_CREATEFILE);
+	if ((new == NULL) && (new = EmptyFileLock)) {
+	    struct DateStamp dateStamp;
+
+	    error = 0;
+
+	    DateStamp(&dateStamp);
+	    ToMSDate(&msd_CreationDate(Disk.vollabel.de_Msd),
+		     &msd_CreationTime(Disk.vollabel.de_Msd), &dateStamp);
+
+	    Disk.vollabel.de_Msd.msd_Date =
+		msd_CreationDate(Disk.vollabel.de_Msd);
+	    Disk.vollabel.de_Msd.msd_Time =
+		msd_CreationTime(Disk.vollabel.de_Msd);
+
+	    if (new->msfl_DirSector == Disk.rootdir) {
+		RootLock->msfl_DirSector = Disk.rootdir;
+		RootLock->msfl_DirOffset = new->msfl_DirOffset;
+	    } else {
+		/*
+		 * Move something out of the first directory block. Try
+		 * not to move system files or directories (. ..), but
+		 * we'll do it if we need to. Set the root dir date to
+		 * now.
+		 */
+		byte	       *fromsec;
+		byte	       *tosec;
+		struct MsDirEntry *dir;
+
+		fromsec = ReadSec(Disk.rootdir);
+		tosec = ReadSec(new->msfl_DirSector);
+
+		dir = (struct MsDirEntry *) fromsec;
+		while (dir->msd_Attributes & (ATTR_SYSTEM | ATTR_DIRECTORY)) {
+		    if ((byte *) ++dir >= fromsec + Disk.bps) {
+			--dir;	/* Back to last entry in the block */
+			break;	/* and move it no matter what */
+		    }
+		}
+		CopyMem((byte *)dir, tosec + new->msfl_DirOffset,
+			(long) sizeof(struct MsDirEntry));
+		MarkSecDirty(tosec);
+		RootLock->msfl_DirSector = Disk.rootdir;
+		RootLock->msfl_DirOffset = (byte *) dir - fromsec;
+
+		FreeSec(tosec);
+		FreeSec(fromsec);
+
+	    }
+	}
+	EmptyFileLock = NULL;
+	MSUnLock(new);
+    }
+    if (error == 0) {
+	/*
+	 * The easy part: Copy the name to Disk.vollabel and RootLock.
+	 */
+	{
+	    int 	    i;
+	    byte	   *s,
+			   *d;
+
+	    s = newname;
+	    d = Disk.vollabel.de_Msd.msd_Name;
+	    for (i = 0; i < L_8 + L_3; i++) {
+#if LONGNAMES
+		if (s[0])
+		    *d++ = *s++;
+		else
+		    *d++ = '\0';
+#else
+		if (s[0])
+		    *d++ = ToUpper(*s++);
+		else
+		    *d++ = ' ';
+#endif
+	    }
+	}
+	RootLock->msfl_Msd = Disk.vollabel.de_Msd;	/* Just for the name and
+							 * dates */
+	WriteFileLock(RootLock);
+
+	return DOSTRUE;
+    }
+    return DOSFALSE;
+#endif
+}
+
+struct PrivateInfo *
+PrivateInfo()
+{
+    static struct PrivateInfo info = {
+	PRIVATE_REVISION,
+	sizeof(struct PrivateInfo),
+	RCSId,
+	&CheckBootBlock,
+	&DefaultConversion,
+	&DiskIOReq
+#if CONVERSIONS
+	,2,	/* == ConvFence - 1 */
+	&Table_FromPC, &Table_ToPC,
+	&Table_FromST, &Table_ToST
+#endif
+    };
+
+    return &info;
+}
+
+#if HDEBUG
+
+_abort()
+{
+    HanCloseDown();
+    RemTask(NULL);
+}
+
+#endif				/* HDEBUG */
+@
+
+
+1.55
+log
+@New LONGNAMES filesystem, changes throughout the handler.
+Optional (compile-time) broadcast IECLASS_DISKINSERTED messages.
+Don't fail Info() if there is no disk in drive.
+Freeze for MAXON5.
+@
+text
+@d2 1
+a2 1
+ * $Id: hanmain.c,v 1.54 1993/06/24 05:12:49 Rhialto Exp $
+d4 6
+d54 2
+a55 2
+ *  This code is (C) Copyright 1989 by Olaf Seibert. All rights reserved. May
+ *  not be used or copied without a licence.
+d60 1
+a60 1
+#ifdef CONVERSIONS
+d63 1
+a63 1
+#ifdef INPUTDEV
+d66 1
+d70 1
+a70 1
+#ifdef HDEBUG
+d91 1
+a91 1
+#ifdef INPUTDEV
+d94 1
+a94 1
+Local const char RCSId[] = "\0$VER: Messydos filing system $Revision: 1.54 $ $Date: 1993/06/24 05:12:49 $, by Olaf Seibert";
+d122 2
+d167 1
+a167 1
+#ifdef CONVERSIONS
+d234 1
+a234 1
+#ifdef CONVERSIONS
+d256 1
+a256 1
+    setmem(infodata, sizeof (*infodata), 0);
+d315 6
+a320 3
+#ifndef READONLY
+    if (FatDirty || CacheDirty)
+	MSUpdate(1);            /* Force a requester */
+d334 1
+a334 1
+#ifdef HDEBUG
+d348 1
+a348 1
+    MSUnLock(RootLock);         /* may call FreeLockList and free VolNode
+d361 1
+a361 1
+#ifdef INPUTDEV
+d369 7
+d391 3
+d406 1
+a406 1
+#ifdef HDEBUG
+d412 1
+a412 1
+	MSUnLock(fl);           /* Remove()s it from this List */
+d415 1
+a415 1
+#ifdef CONVERSIONS
+d418 1
+a418 1
+#ifdef INPUTDEV
+d469 1
+a469 1
+#ifdef HDEBUG
+d479 2
+a480 1
+    if (!(DiskIOReq = CreateExtIO(DiskReplyPort, (long) sizeof (*DiskIOReq)))) {
+d490 1
+a490 1
+					     (long) sizeof (*TimeIOReq));
+d497 2
+a498 2
+#ifdef INPUTDEV
+    if (!(InputIOReq = CreateExtIO(DiskReplyPort, (long) sizeof (*InputIOReq)))) {
+d509 1
+d525 1
+a525 1
+#ifdef READONLY
+d592 1
+a592 1
+			(long) sizeof (struct MsDirEntry));
+d645 1
+a645 1
+	sizeof (struct PrivateInfo),
+d649 3
+a651 3
+	&DiskIOReq,
+#ifdef CONVERSIONS
+	2,	/* == ConvFence - 1 */
+d653 1
+a653 1
+	&Table_FromST, &Table_ToST,
+d660 1
+a660 1
+#ifdef HDEBUG
+@
+
+
+1.54
+log
+@DICE 2.07.54R.
+@
+text
+@d2 5
+a6 2
+ * $Id: hanmain.c,v 1.53 92/10/25 02:25:46 Rhialto Rel $
+ * $Log:	hanmain.c,v $
+d57 4
+d76 2
+d84 4
+a87 1
+Local const char RCSId[] = "\0$VER: Messydos filing system $Revision: 1.53 $ $Date: 92/10/25 02:25:46 $, by Olaf Seibert";
+d134 1
+d137 3
+a139 2
+    int 	    i,
+		    len;
+d142 1
+a142 1
+	strncpy(dest, DotDot, 8 + 3);   /* ".." */
+d145 25
+d199 2
+a200 2
+    if (len > 8)
+	len = 8;
+d205 1
+a205 1
+    for (; i < 8; i++) {
+d236 1
+d252 1
+d257 1
+a257 1
+    if (IDDiskType == ID_DOS_DISK) {
+d315 1
+d349 16
+d366 16
+d396 10
+d438 1
+a439 1
+    IDDiskType = ID_NO_DISK_PRESENT;
+d474 11
+d535 2
+a536 2
+	    ToMSDate(&Disk.vollabel.de_Msd.msd_CreationDate,
+		     &Disk.vollabel.de_Msd.msd_CreationTime, &dateStamp);
+d539 1
+a539 1
+		Disk.vollabel.de_Msd.msd_CreationDate;
+d541 1
+a541 1
+		Disk.vollabel.de_Msd.msd_CreationTime;
+d592 7
+a598 1
+	    for (i = 0; i < 8 + 3; i++) {
+d603 1
+@
+
+
+1.53
+log
+@Expose private info if user asks nicely.
+@
+text
+@d2 1
+a2 1
+ * $Id: hanmain.c,v 1.52 92/09/06 00:19:31 Rhialto Exp $
+d4 3
+a48 1
+#include <functions.h>
+d75 1
+a75 1
+Local const char RCSId[] = "\0$VER: Messydos filing system $Revision: 1.52 $ $Date: 92/09/06 00:19:31 $, by Olaf Seibert";
+d266 1
+a266 1
+    if (FatDirty || (DelayState & DELAY_DIRTY))
+d356 1
+a356 1
+    DelayState = DELAY_OFF;
+d462 2
+a463 2
+		fromsec = GetSec(Disk.rootdir);
+		tosec = GetSec(new->msfl_DirSector);
+@
+
+
+1.52
+log
+@Include $VER in version string.
+@
+text
+@d2 1
+a2 1
+ * $Id: hanmain.c,v 1.51 92/04/17 15:36:35 Rhialto Rel $
+d4 3
+a45 1
+#include <amiga.h>
+a46 1
+#include <string.h>
+d53 1
+d70 1
+d73 1
+a73 1
+Local const char RCSId[] = "\0$VER: Messydos filing system $Revision: 1.51 $ $Date: 92/04/17 15:36:35 $, by Olaf Seibert";
+d216 1
+a216 1
+	infodata->id_NumBlocksUsed = Disk.nsects - Disk.nsectsfree;
+d510 20
+@
+
+
+1.51
+log
+@Freeze for MAXON. removed InitCacheList() from MSDiskInserted().
+@
+text
+@d2 1
+a2 1
+ * $Id: hanmain.c,v 1.46 91/10/06 18:27:36 Rhialto Rel $
+d4 3
+d70 1
+a70 1
+Local const char RCSId[] = "Messydos filing system $Revision: 1.46 $ $Date: 91/10/06 18:27:36 $, by Olaf Seibert";
+@
+
+
+1.46
+log
+@
+Freeze for MAXON
+@
+text
+@d2 1
+a2 1
+ * $Id: hanmain.c,v 1.45 91/10/03 23:36:47 Rhialto Exp $
+d4 4
+d10 1
+a10 1
+ * 
+d55 10
+a64 1
+#define CONV_SEP    ';'
+a65 2
+extern int	CheckBootBlock;
+extern char	DotDot[1 + 8 + 3];
+d67 1
+a67 1
+static char RCSId[] = "Messydos filing system $Revision: 1.45 $ $Date: 91/10/03 23:36:47 $, by Olaf Seibert";
+d69 2
+a198 2
+    extern DEVLIST *VolNode;
+
+d213 1
+a243 2
+
+    InitCacheList();
+@
+
+
+1.45
+log
+@Implement conversions during Read()/Write()
+@
+text
+@d2 1
+a2 1
+ * $Id: hanmain.c,v 1.43 91/09/28 01:40:24 Rhialto Exp $
+d4 3
+d56 1
+a56 1
+static char RCSId[] = "Messydos filing system $Revision: 1.43 $ $Date: 91/09/28 01:40:24 $, by Olaf Seibert";
+@
+
+
+1.43
+log
+@Changed to newer syslog stuff.
+@
+text
+@d2 1
+a2 1
+ * $Id: hanmain.c,v 1.42 91/06/13 23:50:21 Rhialto Exp $
+d4 3
+d38 3
+d48 2
+d53 1
+a53 1
+static char RCSId[] = "Messydos filing system $Revision: 1.42 $ $Date: 91/06/13 23:50:21 $, by Olaf Seibert";
+d57 1
+a57 1
+register byte	ch;
+d76 1
+a76 1
+register byte  *begin,
+d96 1
+a96 1
+register byte  *source;
+d100 1
+a100 1
+    register int    i,
+d118 1
+a118 1
+	register byte  *cp;
+d122 1
+a122 1
+	    if (*cp == '.' || *cp == '/')
+d128 1
+a128 1
+	    if (*cp == '/')
+d158 14
+d216 1
+a216 1
+register struct LockList **locks;
+d242 1
+a242 1
+register struct LockList **locks;
+d290 1
+a290 1
+    register struct MSFileLock *fl;
+d298 3
+d346 1
+a346 1
+    if (!(DiskReplyPort = CreatePort(NULL, -1L)))
+d439 1
+a439 1
+		register struct MsDirEntry *dir;
+d470 2
+a471 2
+	    register int    i;
+	    register byte  *s,
+@
+
+
+1.42
+log
+@DICE conversion
+@
+text
+@d2 1
+a2 1
+ * $Id: hanmain.c,v 1.40 91/03/03 17:46:39 Rhialto Rel $
+d4 3
+d37 1
+a37 4
+#   define	debug(x)  syslog x
+    void initsyslog(void);
+    void syslog(char *, ...);
+    void uninitsyslog(void);
+d45 1
+a45 1
+static char RCSId[] = "Messydos filing system $Revision: 1.40 $ $Date: 91/03/03 17:46:39 $, by Olaf Seibert";
+@
+
+
+1.40
+log
+@Freeze for MAXON
+@
+text
+@d2 1
+a2 1
+ * $Id: hanmain.c,v 1.32 90/11/23 23:54:07 Rhialto Exp $
+d4 3
+d9 1
+a9 1
+ * 
+d27 4
+a31 1
+#include "han.h"
+d35 3
+d45 1
+a45 1
+static char RCSId[] = "Messydos filing system $Revision: 1.32 $ $Date: 90/11/23 23:54:07 $, by Olaf Seibert";
+d241 2
+a242 2
+	Remove(RootLock);
+	AddTail(&LockList->ll_List, RootLock);
+d272 1
+a272 1
+	PrintDirEntry(&fl->msfl_Msd);
+d279 1
+a279 1
+	    CloseDevice(DiskIOReq);
+d281 1
+a281 1
+	DeleteExtIO(DiskIOReq);
+d286 2
+a287 2
+	    WaitIO(TimeIOReq);
+	    CloseDevice(TimeIOReq);
+d289 1
+a289 1
+	DeleteExtIO(TimeIOReq);
+d312 1
+a312 1
+    CheckBootBlock = 1;
+d331 2
+a332 1
+    if (OpenDevice(DevName, UnitNr, DiskIOReq, DevFlags | TDF_ALLOW_NON_3_5)) {
+d339 2
+a340 1
+    if (TimeIOReq == NULL || OpenDevice(TIMERNAME, UNIT_VBLANK, TimeIOReq, 0L))
+d367 1
+a367 1
+	if ((int) RootLock->msfl_DirSector >= (int) Disk.rootdir) {
+d384 1
+a384 1
+    if ((int) RootLock->msfl_DirSector < 0) {
+d426 1
+a426 1
+		CopyMem(dir, tosec + new->msfl_DirOffset,
+d440 1
+a440 1
+    if ((int) RootLock->msfl_DirSector >= Disk.rootdir) {
+@
+
+
+1.32
+log
+@Prepare for syslog
+@
+text
+@d2 1
+a2 1
+ * $Id: hanmain.c,v 1.31 90/11/10 02:46:35 Rhialto Exp $
+d4 3
+d36 1
+a36 1
+static char RCSId[] = "Messydos filing system $Revision: 1.31 $ $Date: 90/11/10 02:46:35 $, by Olaf Seibert";
+@
+
+
+1.31
+log
+@Patch 3a. Changes location of disk volume date.
+@
+text
+@d2 1
+a2 1
+ * $Id: hanmain.c,v 1.30a $
+d4 3
+d25 1
+a25 1
+#   define	debug(x)  dbprintf x
+d33 1
+a33 1
+static char RCSId[] = "Messydos filing system $Revision: 1.30a $ $Date$, by Olaf Seibert";
+@
+
+
+1.30
+log
+@Release 1 Patch 3
+@
+text
+@d2 5
+a6 2
+ * $Id: hanmain.c,v 1.5 90/03/11 17:42:29 Rhialto Rel $
+ * $Log$
+d30 1
+a30 1
+static char RCSId[] = "Messydos filing system $Revision$ $Date$, by Olaf Seibert";
+a353 2
+	    RootLock->msfl_Msd = FakeRootDirEntry.de_Msd;
+	    RootLock->msfl_DirSector = -1;
+d355 3
+d361 1
+d370 1
+a370 1
+	new = MSLock(RootLock, "><>.\\", EXCLUSIVE_LOCK ^ MODE_CREATEFILE);
+d372 2
+d375 10
+a423 2
+	struct DateStamp dateStamp;
+
+a440 3
+	DateStamp(&dateStamp);
+	ToMSDate(&Disk.vollabel.de_Msd.msd_Date,
+		 &Disk.vollabel.de_Msd.msd_Time, &dateStamp);
+d442 1
+a442 1
+							 * date */
+@
+
+
+1.5
+log
+@Patch1
+@
+text
+@d2 2
+a3 5
+ * $Id: hanmain.c,v 1.4 90/01/27 20:13:00 Rhialto Rel $
+ * $Log:	hanmain.c,v $
+ * Revision 1.4  90/01/27  20:13:00  Rhialto
+ * Revision 1.1  89/12/17  20:02:31  Rhialto
+ *
+d24 1
+d27 1
+a27 1
+static char RCSId[] = "Messydos filing system $Revision: 1.4 $ $Date: 90/01/27 20:13:00 $, by Olaf Seibert";
+d294 1
+@
+
+
+1.4
+log
+@*** empty log message ***
+@
+text
+@d2 1
+a2 1
+ * $Id: hanmain.c,v 1.3 89/12/17 21:29:51 Rhialto Exp Locker: Rhialto $
+d4 1
+a4 3
+ * Revision 1.3  89/12/17  21:29:51  Rhialto
+ * *** empty log message ***
+ *
+a5 2
+ * Initial revision
+ *
+d18 1
+a19 1
+#include "dos.h"
+d21 1
+a21 1
+#ifdef DEBUG
+d29 1
+a29 1
+static char RCSId[] = "Messydos filing system $Revision: 1.3 $ $Date: 89/12/17 21:29:51 $, by Olaf Seibert";
+d221 1
+a221 1
+#ifdef DEBUG
+d251 1
+a251 1
+#ifdef DEBUG
+d300 1
+a300 1
+#ifdef DEBUG
+d440 1
+a440 1
+#ifdef DEBUG
+d448 1
+a448 1
+#endif				/* DEBUG */
+@
+
+
+1.3
+log
+@*** empty log message ***
+@
+text
+@d2 1
+a2 1
+ * $Id: hanmain.c,v 1.2 89/12/17 21:24:47 Rhialto Exp Locker: Rhialto $
+d4 3
+d33 1
+a33 1
+static char RCSId = "Messydos filing system $Revision$ $Date$, by Olaf Seibert";
+@
+
+
+1.2
+log
+@*** empty log message ***
+@
+text
+@d2 1
+a2 1
+ * $Id: hanmain.c,v 1.1 89/12/17 20:02:31 Rhialto Exp Locker: Rhialto $
+d30 1
+a30 1
+static char RCSId = "$Id";
+@

@@ -1,0 +1,975 @@
+head	1.56;
+access;
+symbols
+	SHAREWARE2:1.56
+	MAXON5:1.55
+	MAXON4:1.53
+	MAXON3:1.51
+	MAXON2:1.46;
+locks;
+comment	@ * @;
+
+
+1.56
+date	96.12.21.23.34.35;	author Rhialto;	state Rel;
+branches;
+next	1.55;
+
+1.55
+date	93.12.30.22.45.10;	author Rhialto;	state Rel;
+branches;
+next	1.54;
+
+1.54
+date	93.06.24.04.56.00;	author Rhialto;	state Exp;
+branches;
+next	1.53;
+
+1.53
+date	92.10.25.02.10.25;	author Rhialto;	state Rel;
+branches;
+next	1.52;
+
+1.52
+date	92.09.06.00.04.07;	author Rhialto;	state Exp;
+branches;
+next	1.51;
+
+1.51
+date	92.04.17.15.41.55;	author Rhialto;	state Rel;
+branches;
+next	1.46;
+
+1.46
+date	91.10.06.18.22.08;	author Rhialto;	state Rel;
+branches;
+next	1.42;
+
+1.42
+date	91.06.13.23.45.09;	author Rhialto;	state Exp;
+branches;
+next	;
+
+
+desc
+@Device independent C source - created from device.c
+@
+
+
+1.56
+log
+@Remove "register" from declarations,
+correct const funcTable.
+@
+text
+@/*-
+ * $Id: device2.c,v 1.55 1993/12/30 22:45:10 Rhialto Rel $
+ * $Log: device2.c,v $
+ * Revision 1.55  1993/12/30  22:45:10	Rhialto
+ * Remove InitTable.
+ * Do units 4..11.
+ * UnitCloseDown no longer gets the IO request.
+ *
+ * Revision 1.54  1993/06/24  04:56:00	Rhialto
+ * Switch to RTF_AUTOINIT, saves a few bytes. DICE 2.07.54R.
+ *
+ * Revision 1.53  92/10/25  02:10:25  Rhialto
+ * Add TD_Getgeometry, TD_Eject.
+ *
+ * Revision 1.52  92/09/06  00:04:07  Rhialto
+ * Include $VER in version string.
+ *
+ * Revision 1.51  92/04/17  15:41:55  Rhialto
+ * Freeze for MAXON3. Change cyl+side units to track units.
+ *
+ * Revision 1.46  91/10/06  18:22:08  Rhialto
+ * Freeze for MAXON; new syslog stuff
+ *
+ * Revision 1.42  91/06/13  23:45:09  Rhialto
+ * DICE conversion
+ *
+ * Revision 1.40  91/03/03  17:55:48  Rhialto
+ * Freeze for MAXON
+ *
+ * Revision 1.32  90/11/23  23:54:36  Rhialto
+ * Prepare for syslog
+ *
+ * Revision 1.30  90/06/04  23:18:39  Rhialto
+ * Release 1 Patch 3
+ *
+ * DEVICE.C
+ *
+ * The messydisk.device code that makes it a real Exec .device.
+ * Mostly based on the 1.1 RKM example and Matt Dillon's library code.
+ *
+ * This code is (C) Copyright 1989-1993 by Olaf Seibert. All rights reserved.
+ * May not be used or copied without a licence.
+-*/
+
+#include <exec/initializers.h>
+#include "device.h"
+
+/*#undef DEBUG			*/
+#ifdef DEBUG
+#   include "syslog.h"
+#else
+#   define	debug(x)
+#endif
+/* INDENT ON */
+
+Prototype __geta4 DEV *Init(__A0 long segment, __D0 struct MessyDevice *dev, __A6 struct ExecBase *execbase);
+Prototype __geta4 void DevOpen(__D0 ulong unitno, __D1 ulong flags, __A1 struct IOStdReq *ioreq, __A6 DEV *dev);
+Prototype __geta4 long DevClose(__A1 struct IOStdReq *ioreq, __A6 DEV *dev);
+Prototype __geta4 long DevExpunge(__A6 DEV *dev);
+Prototype __geta4 void DevBeginIO(__A1 struct IOStdReq *ioreq, __A6 DEV *dev);
+Prototype __geta4 long DevAbortIO(__A1 struct IOStdReq *ioreq, __A6 DEV *dev);
+
+Prototype void TermIO(struct IOStdReq *ioreq);
+Prototype void WakePort(struct MsgPort *port);
+Prototype __geta4 void UnitTask(void);
+Prototype void CMD_Invalid(struct IOStdReq *ioreq, UNIT *unit);
+Prototype void CMD_Stop(struct IOStdReq *ioreq, UNIT *unit);
+Prototype void CMD_Start(struct IOStdReq *ioreq, UNIT *unit);
+Prototype void CMD_Flush(struct IOStdReq *ioreq, UNIT *unit);
+Prototype void TrackdiskGateway(struct IOStdReq *ioreq, UNIT *unit);
+
+Prototype const char DevName[];
+Prototype const char idString[];
+
+const char	DevName[] = "messydisk.device";
+const char	idString[] = "$VER: messydisk.device $Revision: 1.55 $ $Date: 1993/12/30 22:45:10 $\r\n";
+
+/*
+ * Device commands:
+ */
+
+void	       (*const funcTable[]) (struct IOStdReq *, UNIT *) = {
+    CMD_Invalid, CMD_Reset, CMD_Read, CMD_Write, CMD_Update, CMD_Clear,
+    CMD_Stop, CMD_Start, CMD_Flush, TD_Motor, TD_Seek, TD_Format,
+    TD_Remove, TD_Changenum, TD_Changestate, TD_Protstatus, TD_Rawread,
+    TD_Rawwrite, TD_Getdrivetype, TD_Getnumtracks, TD_Addchangeint,
+    TD_Remchangeint, TD_Getgeometry, TD_Eject,
+};
+
+#define LAST_TD_COMM	    TD_EJECT
+
+long		SysBase;	/* Argh! A global variable! */
+
+/*
+ * The Initialization routine is given a seglist pointer, the device
+ * base pointer, and the Exec base pointer. We are being called from
+ * InitResident. Exec has Forbid() for us during the call.
+ */
+
+
+__geta4 DEV    *
+Init(segment, dev, execbase)
+__A0 long	segment;
+__D0 DEV       *dev;
+__A6 struct ExecBase *execbase;
+{
+    SysBase = *(long *) 4;
+#ifdef DEBUG
+    initsyslog();
+    debug(("seg %lx, dev %lx, sys %lx\n", segment, dev, execbase));
+#endif
+    if (DevInit(dev)) {
+	dev->md_Seglist = segment;
+	debug(("init done.\n"));
+	return dev;
+    }
+    FreeMem((char *) dev - dev->dev_NegSize, dev->dev_NegSize + dev->dev_PosSize);
+    return NULL;
+}
+
+/*
+ * Open is given the device pointer, unitno and flags.	Either return the
+ * device pointer or NULL.  Remove the DELAYED-EXPUNGE flag. Exec has
+ * Forbid() for us during the call.
+ */
+
+__geta4 void
+DevOpen(unitno, flags, ioreq, dev)
+__D0 ulong	unitno;
+__D1 ulong	flags;
+__A1 struct IOStdReq *ioreq;
+__A6 DEV       *dev;
+{
+    UNIT	   *unit;
+    int 	    nrflags;
+
+    debug(("OpenDevice unit %ld, flags %lx\n", unitno, flags));
+    ++dev->dev_OpenCnt;
+
+    if (nrflags = unitno / MD_NUMUNITS) {
+	/* Units 4..7 are fixed 40-tracks */
+	/* Units 8..11 are fixed non-40-tracks */
+	switch (nrflags) {
+	case 1:
+	    flags |= IOMDF_40TRACKS | IOMDF_FIXFLAGS;
+	    unitno -= MD_NUMUNITS;
+	    break;
+	case 2:
+	    flags &= ~IOMDF_40TRACKS;
+	    flags |= IOMDF_FIXFLAGS;
+	    unitno -= 2 * MD_NUMUNITS;
+	    break;
+	}
+    }
+    if (unitno >= MD_NUMUNITS)
+	goto error;
+
+    if ((unit = dev->md_Unit[unitno]) == NULL) {
+	if ((unit = UnitInit(dev, unitno, flags)) == NULL)
+	    goto error;
+	dev->md_Unit[unitno] = unit;
+    }
+    ioreq->io_Unit = (struct Unit *) unit;
+
+    ++unit->mu_OpenCnt;
+    dev->dev_Flags &= ~LIBF_DELEXP;
+    ioreq->io_Error = 0;
+    ioreq->io_Flags = flags;
+
+    return;
+
+error:
+    --dev->dev_OpenCnt;
+    ioreq->io_Error = IOERR_OPENFAIL;
+}
+
+/*
+ * Close is given the device pointer and the io request.  Be sure not to
+ * decrement the open count if already zero.	If the open count is or
+ * becomes zero AND there is a LIBF_DELEXP, we expunge the device and
+ * return the seglist.	Otherwise we return NULL.
+ *
+ * Note that this routine never sets LIBF_DELEXP on its own.
+ *
+ * Exec has Forbid() for us during the call.
+ */
+
+__geta4 long
+DevClose(ioreq, dev)
+__A1 struct IOStdReq *ioreq;
+__A6 DEV       *dev;
+{
+    UNIT	   *unit;
+
+    unit = (UNIT *) ioreq->io_Unit;
+    debug(("CloseDevice io %08lx unit %08lx\n", ioreq, unit));
+
+    /*
+     * See if the unit is still in use. If not, close it down. This may
+     * need to do an update, which requires the ioreq.
+     */
+
+    if (unit->mu_OpenCnt && --unit->mu_OpenCnt == 0) {
+	dev->md_Unit[unit->mu_UnitNr] = NULL;
+	UnitCloseDown(dev, unit);
+    }
+    /*
+     * Make sure the ioreq is not used again.
+     */
+    ioreq->io_Unit = (void *) -1;
+    ioreq->io_Device = (void *) -1;
+
+    if (dev->dev_OpenCnt && --dev->dev_OpenCnt)
+	return NULL;
+    if (dev->dev_Flags & LIBF_DELEXP)
+	return DevExpunge(dev);
+    return NULL;
+}
+
+/*
+ * We expunge the device and return the Seglist ONLY if the open count is
+ * zero. If the open count is not zero we set the DELAYED-EXPUNGE
+ * flag and return NULL.
+ *
+ * Exec has Forbid() for us during the call.  NOTE ALSO that Expunge might be
+ * called from the memory allocator and thus we CANNOT DO A Wait() or
+ * otherwise take a long time to complete (straight from RKM).
+ *
+ * Apparently RemLibrary(lib) calls our expunge routine and would therefore
+ * freeze if we called it ourselves.  As far as I can tell from RKM,
+ * DevExpunge(lib) must remove the device itself as shown below.
+ */
+
+__geta4 long
+DevExpunge(dev)
+__A6 DEV       *dev;
+{
+    long	    Seglist;
+
+    if (dev->dev_OpenCnt) {
+	dev->dev_Flags |= LIBF_DELEXP;
+	return NULL;
+    }
+    Remove(&dev->dev_Node);
+    DevCloseDown(dev);          /* Should be quick! */
+#ifdef DEBUG
+    uninitsyslog();
+#endif
+    Seglist = dev->md_Seglist;
+    FreeMem((char *) dev - dev->dev_NegSize,
+	    (long) dev->dev_NegSize + dev->dev_PosSize);
+    return Seglist;
+}
+
+/*
+ * BeginIO entry point. We don't handle any QUICK requests, we just send
+ * the request to the proper unit to handle.
+ */
+
+__geta4 void
+DevBeginIO(ioreq, dev)
+__A1 struct IOStdReq *ioreq;
+__A6 DEV       *dev;
+{
+    UNIT	   *unit;
+
+    /*
+     * Bookkeeping.
+     */
+    unit = (UNIT *) ioreq->io_Unit;
+    debug(("BeginIO: io %08lx dev %08lx u %08lx cmd %x\n", ioreq, dev, unit, ioreq->io_Command));
+
+    /*
+     * See if the io command is within range.
+     */
+    if (STRIP(ioreq->io_Command) > LAST_TD_COMM)
+	goto NoCmd;
+
+#ifdef HANDLE_IO_QUICK
+    Forbid();                   /* Disable(); is a bit too strong for us. */
+#endif
+
+    /*
+     * Process all immediate commands no matter what. Don't even require
+     * an exclusive lock on the unit.
+     */
+    if (IMMEDIATE & (1L << STRIP(ioreq->io_Command)))
+	goto Immediate;
+
+    /*
+     * We don't handle any QUICK I/O since that only gives trouble with
+     * message ports and so. Other devices normally would include the code
+     * below.
+     */
+#ifdef HANDLE_IO_QUICK
+    /*
+     * See if the user does not request QUICK IO. If not, it is likely to
+     * be async and therefore we don't do it sync.
+     */
+    if (!(ioreq->io_Flags & IOF_QUICK))
+	goto NoQuickRequested;
+
+    /*
+     * See if the unit is STOPPED. If so, queue the msg.
+     */
+    if (unit->mu_Flags & UNITF_STOPPED)
+	goto QueueMsg;
+
+    /*
+     * This is not an immediate command. See if the device is busy. If
+     * not, process the action in this (the caller's) context.
+     */
+    if (!BSET_ACTIVE(&unit->mu_Flags))
+	goto Immediate;
+#endif
+
+    /*
+     * We need to queue the device. Clear the QUICK flag.
+     */
+QueueMsg:
+    ioreq->io_Flags &= ~IOF_QUICK;
+NoQuickRequested:
+#ifdef HANDLE_IO_QUICK
+    Permit();                   /* Enable(); is a bit too strong for us. */
+#endif
+    PutMsg(&unit->mu_Port, &ioreq->io_Message);
+
+    return;
+
+Immediate:
+#ifdef HANDLE_IO_QUICK
+    Permit();                   /* Enable(); is a bit too strong for us. */
+#endif
+    debug(("BeginIO: Immediate\n"));
+    ioreq->io_Error = TDERR_NoError;
+    PerformIO(ioreq, unit);
+    return;
+
+NoCmd:
+    ioreq->io_Error = IOERR_NOCMD;
+    TermIO(ioreq);
+    return;
+
+}
+
+/*
+ * Terminate an io request. Called (normally) for every BeginIO. 'Funny'
+ * commands that don't call TermIO, or call it multiple times, may not be
+ * properly handled unless you are careful. TD_ADDCHANGEINT and
+ * TD_REMCHANGEINT are obvious examples.
+ */
+
+void
+TermIO(ioreq)
+struct IOStdReq *ioreq;
+{
+    UNIT  *unit;
+
+    unit = (UNIT *) ioreq->io_Unit;
+    debug(("TermIO: io %08lx u %08lx %ld %ld\n", ioreq, unit,
+	   ioreq->io_Actual, (long)ioreq->io_Error));
+
+#ifdef HANDLE_IO_QUICK
+    /*
+     * Since immediate commands don't even require an exclusive lock on
+     * the unit, don't unlock it.
+     */
+    if (IMMEDIATE & (1L << STRIP(ioreq->io_Command)))
+	goto Immediate;
+
+    /*
+     * We may need to turn the active (lock) bit off, but not if we are
+     * within the task.
+     */
+    if (unit->mu_Flags & UNITF_INTASK)
+	goto Immediate;
+
+    unit->mu_Flags &= ~UNITF_ACTIVE;
+
+    /*
+     * The task may have work to do that came in while we were processing
+     * in the caller's context.
+     */
+    if (unit->mu_Flags & UNITF_WAKETASK) {
+	unit->mu_Flags &= ~UNITF_WAKETASK;
+	WakePort(&unit->mu_Port);
+    }
+#endif
+
+Immediate:
+    /*
+     * If the quick bit is still set then wen don't need to reply the msg
+     * -- just return to the user.
+     */
+
+    if (!(ioreq->io_Flags & IOF_QUICK))
+	ReplyMsg(&ioreq->io_Message);
+
+    return;
+}
+
+/*
+ * AbortIO entry point. We try to abort IO here.
+ */
+
+__geta4 long
+DevAbortIO(ioreq, dev)
+__A1 struct IOStdReq *ioreq;
+__A6 DEV       *dev;
+{
+    Forbid();
+    if (ioreq->io_Flags & IOF_QUICK ||
+	IMMEDIATE & (1L << STRIP(ioreq->io_Command))) {
+	Permit();
+	return 1;
+    } else {
+	Remove(&ioreq->io_Message.mn_Node);
+	Permit();
+	ioreq->io_Error = IOERR_ABORTED;
+	ReplyMsg(&ioreq->io_Message);
+
+	return 0;
+    }
+}
+
+void
+WakePort(port)
+struct MsgPort *port;
+{
+    Signal(port->mp_SigTask, 1L << port->mp_SigBit);
+}
+
+/*
+ * This is the main loop of the Unit tasks. It must be very careful with
+ * global data.
+ */
+
+__geta4 void
+UnitTask()
+{
+    /* DEV *dev; */
+    UNIT	   *unit;
+    long	    waitmask;
+    struct IOExtTD *ioreq;
+
+    {
+	struct Task    *task;
+
+	task = FindTask(NULL);
+	unit = (UNIT *) task->tc_UserData;
+	/* dev = unit->mu_Dev; */
+	task->tc_UserData = NULL;
+    }
+
+    /*
+     * Now finish initializing the message ports and other signal things
+     */
+
+    {
+	byte		sigbit;
+
+	unit->mu_DiskReplyPort.mp_SigBit = AllocSignal(-1L);
+	unit->mu_DiskReplyPort.mp_Flags = PA_SIGNAL;
+
+	sigbit = AllocSignal(-1L);
+	unit->mu_Port.mp_SigBit = sigbit;
+	unit->mu_Port.mp_Flags = PA_SIGNAL;
+	waitmask = 1L << sigbit;
+
+	unit->mu_DmaSignal = AllocSignal(-1L);
+    }
+
+    for (;;) {
+	debug(("Task: Waiting...\n"));
+	Wait(waitmask);
+
+	/*
+	 * See if we are stopped.
+	 */
+	if (unit->mu_Flags & UNITF_STOPPED)
+	    continue;
+
+#ifdef HANDLE_IO_QUICK
+	/*
+	 * Lock the device. If it fails, we have set a flag such that the
+	 * TermIO wakes us again.
+	 */
+	unit->mu_Flags |= UNITF_WAKETASK;
+	if (BSET_ACTIVE(&unit->mu_Flags))
+	    continue;
+
+	unit->mu_Flags |= UNITF_INTASK;
+#endif
+
+	while (ioreq = (struct IOExtTD *) GetMsg(&unit->mu_Port)) {
+	    debug(("Task: io %08lx %lx\n", ioreq, (long)ioreq->iotd_Req.io_Command));
+	    ioreq->iotd_Req.io_Error = 0;
+	    PerformIO((&ioreq->iotd_Req), unit);
+	}
+
+#ifdef HANDLE_IO_QUICK
+	unit->mu_Flags &= ~(UNITF_ACTIVE | UNITF_INTASK | UNITF_WAKETASK);
+#endif
+    }
+}
+
+void
+CMD_Invalid(ioreq, unit)
+struct IOStdReq *ioreq;
+UNIT	       *unit;
+{
+    ioreq->io_Error = IOERR_NOCMD;
+    TermIO(ioreq);
+}
+
+void
+CMD_Stop(ioreq, unit)
+struct IOStdReq *ioreq;
+UNIT	       *unit;
+{
+    unit->mu_Flags |= UNITF_STOPPED;
+    TermIO(ioreq);
+}
+
+void
+CMD_Start(ioreq, unit)
+struct IOStdReq *ioreq;
+UNIT	       *unit;
+{
+    unit->mu_Flags &= ~UNITF_STOPPED;
+    WakePort(&unit->mu_Port);
+    TermIO(ioreq);
+}
+
+void
+CMD_Flush(ioreq, unit)
+struct IOStdReq *ioreq;
+UNIT	       *unit;
+{
+    struct IOStdReq *req;
+
+    /* Flush our own command queue */
+    Forbid();
+    while (req = (struct IOStdReq *) GetMsg(&unit->mu_Port)) {
+	req->io_Error = IOERR_ABORTED;
+	ReplyMsg(&req->io_Message);
+    }
+    Permit();
+
+    WakePort(&unit->mu_Port);
+    TermIO(ioreq);
+}
+
+void
+TrackdiskGateway(ioreq, unit)
+struct IOStdReq *ioreq;
+UNIT	       *unit;
+{
+    struct IOExtTD *tdioreq;
+
+    debug(("Trackdisk: %lx ", (long)ioreq->io_Command));
+    tdioreq = unit->mu_DiskIOReq;
+
+    /*
+     * Clone almost the entire io request to relay to the
+     * trackdisk.device.
+     */
+
+    tdioreq->iotd_Req.io_Command = ioreq->io_Command;
+    tdioreq->iotd_Req.io_Flags = ioreq->io_Flags | IOF_QUICK;
+    tdioreq->iotd_Req.io_Length = ioreq->io_Length;
+    tdioreq->iotd_Req.io_Data = ioreq->io_Data;
+    tdioreq->iotd_Req.io_Offset = ioreq->io_Offset;
+    if (ioreq->io_Command & TDF_EXTCOM) {
+	tdioreq->iotd_Count = ((struct IOExtTD *)ioreq)->iotd_Count;
+	tdioreq->iotd_SecLabel = ((struct IOExtTD *)ioreq)->iotd_SecLabel;
+    }
+    BeginIO((struct IORequest *)tdioreq);
+    WaitIO((struct IORequest *)tdioreq);
+
+    ioreq->io_Error = tdioreq->iotd_Req.io_Error;
+    ioreq->io_Actual = tdioreq->iotd_Req.io_Actual;
+
+    TermIO(ioreq);
+}
+@
+
+
+1.55
+log
+@Remove InitTable.
+Do units 4..11.
+UnitCloseDown no longer gets the IO request.
+@
+text
+@d2 1
+a2 1
+ * $Id: device2.c,v 1.54 1993/06/24 04:56:00 Rhialto Exp $
+d4 5
+d76 1
+a76 1
+const char	idString[] = "$VER: messydisk.device $Revision: 1.54 $ $Date: 1993/06/24 04:56:00 $\r\n";
+d82 1
+a82 1
+const void	(*funcTable[]) (struct IOStdReq *, UNIT *) = {
+d271 1
+a271 1
+    debug(("BeginIO: io %08lx dev %08lx u %08lx\n", ioreq, dev, unit));
+d355 1
+a355 1
+register struct IOStdReq *ioreq;
+d357 1
+a357 1
+    register UNIT  *unit;
+d428 1
+a428 1
+register struct MsgPort *port;
+d540 1
+a540 1
+    register struct IOStdReq *req;
+d556 1
+a556 1
+register struct IOStdReq *ioreq;
+d559 1
+a559 1
+    register struct IOExtTD *tdioreq;
+@
+
+
+1.54
+log
+@Switch to RTF_AUTOINIT, saves a few bytes. DICE 2.07.54R.
+@
+text
+@d2 5
+a6 2
+ * $Id: device2.c,v 1.53 92/10/25 02:10:25 Rhialto Rel $
+ * $Log:	device2.c,v $
+d71 1
+a71 1
+const char	idString[] = "$VER: messydisk.device $Revision: 1.53 $ $Date: 92/10/25 02:10:25 $\r\n";
+a73 13
+ * Data initialisation:
+ */
+/*
+const UWORD	InitTable[] = {
+    INITBYTE(OFFSET(MessyDevice, dev_Node.ln_Type), NT_DEVICE),
+    INITLONG(OFFSET(MessyDevice, dev_Node.ln_Name), (long)DevName),
+    INITBYTE(OFFSET(MessyDevice, dev_Flags), LIBF_CHANGED | LIBF_SUMUSED),
+    INITBYTE(OFFSET(MessyDevice, dev_Version), VERSION),
+    INITBYTE(OFFSET(MessyDevice, dev_Revision), REVISION),
+    INITLONG(OFFSET(MessyDevice, dev_IdString), (long)idString)
+};
+*/
+/*
+d130 1
+d133 17
+d154 1
+a154 1
+	if ((unit = UnitInit(dev, unitno)) == NULL)
+a160 1
+    ++dev->dev_OpenCnt;
+d162 2
+d168 1
+d200 1
+a200 1
+	UnitCloseDown(ioreq, dev, unit);
+@
+
+
+1.53
+log
+@Add TD_Getgeometry, TD_Eject.
+@
+text
+@d2 1
+a2 1
+ * $Id: device2.c,v 1.52 92/09/06 00:04:07 Rhialto Exp $
+d4 3
+d33 1
+a33 1
+ * This code is (C) Copyright 1989-1992 by Olaf Seibert. All rights reserved.
+d37 1
+a38 1
+#include <functions.h>
+d40 1
+a40 1
+/*#undef DEBUG			/**/
+d48 1
+a48 5
+/* Prototypes for assembler glue routines: */
+Prototype void _Init(), _DevOpen(), _DevClose(), _DevExpunge(), _LibNull();
+Prototype void _DevBeginIO(), _DevAbortIO();
+
+Prototype __geta4 DEV *Init(__A0 long segment);
+d68 1
+a68 1
+const char	idString[] = "\0$VER: messydisk.device $Revision: 1.52 $ $Date: 92/09/06 00:04:07 $\r\n";
+d71 1
+a71 1
+ * -30-6*X  Library vectors:
+d73 8
+a80 8
+
+const void	(*LibVectors[]) () =
+{
+    DevOpen, DevClose, DevExpunge, _LibNull,
+
+    DevBeginIO,
+    DevAbortIO,
+    (void (*) ()) -1
+d82 1
+a82 1
+
+d100 3
+a102 7
+ * The Initialization routine is given only a seglist pointer.	Since we
+ * are NOT AUTOINIT we must construct and add the device ourselves and
+ * return either NULL or the device pointer.  Exec has Forbid() for us
+ * during the call.
+ *
+ * If you have an extended device structure you must specify the size of the
+ * extended structure in MakeLibrary().
+d107 1
+a107 1
+Init(segment)
+d109 2
+a111 2
+    DEV 	   *dev;
+
+d115 1
+a116 1
+    dev = MakeLibrary(LibVectors, NULL, NULL, (long) sizeof (DEV), NULL);
+a117 6
+	dev->dev_Node.ln_Type = NT_DEVICE;
+	dev->dev_Node.ln_Name = DevName;
+	dev->dev_Flags = LIBF_CHANGED | LIBF_SUMUSED;
+	dev->dev_Version = VERSION;
+	dev->dev_Revision = REVISION;
+	dev->dev_IdString = (APTR) idString;
+d119 1
+a119 1
+	AddDevice(&dev->md_Dev);
+@
+
+
+1.52
+log
+@Include $VER in version string.
+Fix off-by-one bug checking valid command number.
+@
+text
+@d2 1
+a2 1
+ * $Id: device2.c,v 1.51 92/04/17 15:41:55 Rhialto Rel $
+d4 3
+d34 1
+a34 1
+#include <amiga.h>
+a35 2
+#include "dev.h"
+#include "device.h"
+d69 1
+a69 1
+const char	idString[] = "\0$VER: messydisk.device $Revision: 1.51 $ $Date: 92/04/17 15:41:55 $\r\n";
+d93 1
+a93 1
+    TD_Remchangeint,
+d96 1
+a96 1
+#define LAST_TD_COMM	    TD_REMCHANGEINT
+@
+
+
+1.51
+log
+@Freeze for MAXON3. Change cyl+side units to track units.
+@
+text
+@d2 1
+a2 1
+ * $Id: device2.c,v 1.46 91/10/06 18:22:08 Rhialto Rel $
+d4 3
+d68 1
+a68 1
+const char	idString[] = "messydisk.device $Revision: 1.46 $ $Date: 91/10/06 18:22:08 $\r\n";
+d95 1
+d271 1
+a271 1
+    if (STRIP(ioreq->io_Command) > TD_LASTCOMM)
+@
+
+
+1.46
+log
+@Freeze for MAXON; new syslog stuff
+@
+text
+@d2 1
+a2 1
+ * $Id: device2.c,v 1.42 91/06/13 23:45:09 Rhialto Exp $
+d4 3
+d24 2
+a25 2
+ * This code is (C) Copyright 1989 by Olaf Seibert. All rights reserved. May
+ * not be used or copied without a licence.
+d41 22
+d64 2
+a65 2
+char		DevName[] = "messydisk.device";
+char		idString[] = "messydisk.device $Revision: 1.42 $ $Date: 91/06/13 23:45:09 $\r\n";
+d71 1
+a71 1
+void		(*LibVectors[]) () =
+d73 1
+a73 1
+    _DevOpen, _DevClose, _DevExpunge, _LibNull,
+d75 2
+a76 2
+    _DevBeginIO,
+    _DevAbortIO,
+d84 1
+a84 1
+void		(*funcTable[]) (struct IOStdReq *, UNIT *) = {
+d106 3
+a108 5
+__stkargs __geta4 DEV		 *
+CInit(D2, D3, segment)
+ulong		D2,
+		D3;
+long		segment;
+d138 6
+a143 8
+__stkargs __geta4 void
+DevOpen(unitno, flags, D2, D3, ioreq, dev)
+ulong		unitno;
+ulong		flags;
+ulong		D2,
+		D3;
+struct IOStdReq *ioreq;
+DEV	       *dev;
+d179 4
+a182 6
+__stkargs __geta4 long
+DevClose(D2, D3, ioreq, dev)
+ulong		D2,
+		D3;
+struct IOStdReq *ioreq;
+DEV	       *dev;
+d205 1
+a205 1
+	return (NULL);
+d207 2
+a208 2
+	return (DevExpunge(D2, D3, dev));
+    return (NULL);
+d225 3
+a227 5
+__stkargs __geta4 long
+DevExpunge(D2, D3, dev)
+ulong		D2,
+		D3;
+DEV	       *dev;
+d233 1
+a233 1
+	return (NULL);
+d243 1
+a243 1
+    return (Seglist);
+d251 4
+a254 6
+__stkargs __geta4 void
+DevBeginIO(D2, D3, ioreq, dev)
+ulong		D2,
+		D3;
+struct IOStdReq *ioreq;
+DEV	       *dev;
+d397 4
+a400 6
+__stkargs __geta4 long
+DevAbortIO(D2, D3, ioreq, dev)
+ulong		D2,
+		D3;
+struct IOStdReq *ioreq;
+DEV	       *dev;
+d402 1
+d405 1
+a407 1
+	Forbid();
+@
+
+
+1.42
+log
+@DICE conversion
+@
+text
+@d2 5
+a6 2
+ * $Id: device.c,v 1.40 91/03/03 17:55:48 Rhialto Rel $
+ * $Log:	device.c,v $
+d32 1
+a32 4
+#   define	debug(x)  syslog x
+    void initsyslog(void);
+    void syslog(char *, ...);
+    void uninitsyslog(void);
+d40 1
+a40 1
+char		idString[] = "messydisk.device $Revision: 1.40 $ $Date: 91/03/03 17:55:48 $\r\n";
+@
